@@ -8,7 +8,7 @@ import type { Snapshot } from '@thingblock/thingblock-sim'
 import type { RuleResult } from '@thingblock/thingblock-sim/checker'
 import { createBlocks } from './blocks'
 import { LESSONS, type Lesson } from './lessons'
-import type { FlowKind, Grader } from './lessons/types'
+import type { FlowKind, Grader, Part } from './lessons/types'
 import { createScene, type TraceName } from './scene'
 import type { Bus, Command, Message } from './sim-worker'
 import SimWorker from './sim-worker?worker'
@@ -31,6 +31,8 @@ const IDLE_BUS: Bus = { reads: {}, writes: {}, zeros: {}, ons: {}, loops: 0 }
 interface LessonSave {
   workspace?: object
   card?: number
+  /** Bài khám phá: bộ phận đã tìm thấy. */
+  found?: string[]
 }
 interface Saved {
   done: string[]
@@ -95,6 +97,7 @@ const renderPicker = () => {
 const FLOWS: Record<FlowKind, string[]> = {
   button: ['Nút SW', 'Não', 'Chip PCA', 'Đèn L1'],
   blink: ['Não', 'Chip PCA', 'Đèn L1'],
+  explore: [],
 }
 const flowEl = $('#flow')
 const buildFlow = (kind: FlowKind) => {
@@ -113,6 +116,14 @@ const setFlow = (id: string, value: string, tech: string, state: string, label?:
 
 // --- bài học từng bước --------------------------------------------------------------------
 const dots = $('#dots')
+/** Câu đố: câu trả lời em chọn gần nhất cho mỗi câu. */
+let answered: Record<string, string> = {}
+$('#step-body').addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-answer]')
+  if (!b) return
+  answered[b.dataset.answer!.split(':')[0]] = b.dataset.answer!
+  grader.event?.('answer', b.dataset.answer!)
+})
 const renderCard = () => {
   const c = lesson.cards[card]
   $('#step-no').textContent = `Bước ${card + 1}/${lesson.cards.length}${c.optional ? ' · không bắt buộc' : ''}`
@@ -131,6 +142,10 @@ const renderCard = () => {
   const next = $('#next') as HTMLButtonElement
   next.disabled = card === lesson.cards.length - 1
   next.classList.toggle('ready', ok || !c.check)
+  for (const b of document.querySelectorAll<HTMLButtonElement>('#step-body [data-answer]')) {
+    const [q] = b.dataset.answer!.split(':')
+    if (answered[q] === b.dataset.answer) b.classList.add(passed.has(q) ? 'right' : 'wrong')
+  }
   scene.highlight(c.look ?? [])
   mine().card = card
   store.set(saved)
@@ -214,8 +229,12 @@ const loadBlocks = (state: object) => {
 }
 $('#example').addEventListener('click', () => loadBlocks(lesson.example))
 $('#restart').addEventListener('click', () => {
-  loadBlocks(lesson.starter)
+  if (lesson.flow !== 'explore') loadBlocks(lesson.starter)
+  mine().found = []
+  answered = {}
+  selected = null
   grader.clear()
+  if (lesson.flow === 'explore') renderExplore()
   card = 0
   renderCard()
 })
@@ -467,10 +486,78 @@ function drawRhythm(tNow: number | null) {
   $('#rhythm-label').textContent = `Nhịp đèn ${activeLed}`
 }
 
+// --- bài 1: khám phá mạch -------------------------------------------------------------------
+let selected: Part | null = null
+let seeing = false
+const hotspots = new Map<string, HTMLElement[]>()
+const foundSet = () => new Set(mine().found ?? [])
+
+function pick(part: Part, at = part.at[0]) {
+  const found = foundSet()
+  if (!found.has(part.id)) {
+    mine().found = [...found, part.id]
+    store.set(saved)
+  }
+  selected = part
+  scene.mark([at.px, at.py])
+  grader.event?.('pick', part.id)
+  renderExplore()
+}
+
+function renderExplore() {
+  const parts = lesson.parts ?? []
+  const found = foundSet()
+  $('#explore-count').textContent = `Đã tìm ${parts.filter((p) => found.has(p.id)).length}/${parts.length}`
+  const info = $('#explore-info')
+  info.innerHTML = selected
+    ? `<h4>${selected.name}</h4><p>${selected.info}</p>${selected.block ? `<p class="explore-block">Điều khiển bằng: ${selected.block}</p>` : '<p class="explore-block muted">Không có khối lệnh.</p>'}`
+    : '<p class="muted">Bấm một chấm cam trên mạch để xem bộ phận đó.</p>'
+  $('#explore-list').replaceChildren(
+    ...parts.map((p, i) => {
+      const li = document.createElement('li')
+      const b = document.createElement('button')
+      b.type = 'button'
+      const ok = found.has(p.id)
+      b.className = `${ok ? 'found' : ''}${p === selected ? ' sel' : ''}${p.under ? ' under' : ''}`
+      b.innerHTML = `<i>${i + 1}</i>${ok ? p.name.split(' — ')[0] : p.under ? '? (dưới Core)' : '?'}`
+      b.disabled = !ok
+      b.addEventListener('click', () => pick(p))
+      li.append(b)
+      return li
+    }),
+  )
+  for (const [id, els] of hotspots)
+    for (const el of els) {
+      el.classList.toggle('found', found.has(id))
+      el.classList.toggle('sel', selected?.id === id)
+    }
+}
+
+scene.onPick((px, py) => {
+  if (lesson.flow !== 'explore') return
+  let best: { part: Part; at: Part['at'][number]; d: number } | null = null
+  for (const part of lesson.parts ?? []) {
+    if (part.under && !seeing) continue
+    for (const at of part.at) {
+      // Khi nhìn xuyên Core, ưu tiên linh kiện bên dưới.
+      const d = Math.hypot(at.px - px, at.py - py) * (seeing && part.under ? 0.6 : 1)
+      if (d < 70 && (!best || d < best.d)) best = { part, at, d }
+    }
+  }
+  if (best) pick(best.part, best.at)
+})
+
 // --- mở bài -----------------------------------------------------------------------------------
-/** Nhãn số trên mạch theo ô của dải dòng chảy; ở bài 2, nhãn đèn đi theo đèn đang được ra lệnh. */
+/** Nhãn số trên mạch theo ô của dải dòng chảy; ở bài 2, nhãn đèn đi theo đèn đang được ra lệnh. Bài 1: điểm bấm. */
 function placeBadges() {
   scene.clearBadges()
+  hotspots.clear()
+  ;(lesson.parts ?? []).forEach((part, i) => {
+    hotspots.set(
+      part.id,
+      part.at.map((at) => scene.addHotspot(at.px, at.py, at.label ?? `${i + 1}`, () => pick(part, at), part.under)),
+    )
+  })
   lesson.badges.forEach((p, i) => scene.addBadge(p === 'l1' && activeLed === 'L2' ? 'l2' : p, `${i + 1}`))
 }
 
@@ -484,8 +571,19 @@ function openLesson(next: Lesson) {
   usedL2 = false
   activeLed = 'L1'
   grader = next.createGrader(onGrade)
-  blocks.setToolbox(next.toolbox)
-  blocks.load(mine().workspace ?? next.starter)
+  const explore = next.flow === 'explore'
+  document.body.classList.toggle('mode-explore', explore)
+  $('#blocks').hidden = explore
+  $('#explore').hidden = !explore
+  selected = null
+  answered = {}
+  scene.mark(null)
+  scene.showWires(!explore)
+  if (!explore) {
+    blocks.setToolbox(next.toolbox)
+    blocks.load(mine().workspace ?? next.starter)
+    blocks.resize()
+  }
   card = Math.min(mine().card ?? 0, next.cards.length - 1)
   dots.replaceChildren(...next.cards.map(() => document.createElement('span')))
   placeBadges()
@@ -496,7 +594,11 @@ function openLesson(next: Lesson) {
   $('#hint').hidden = true
   renderPicker()
   renderCard()
-  render(null, IDLE_BUS)
+  if (explore) {
+    // Bộ phận đã tìm ở lần trước: chấm lại cho ✓ đúng.
+    for (const id of mine().found ?? []) grader.event?.('pick', id)
+    renderExplore()
+  } else render(null, IDLE_BUS)
 }
 openLesson(LESSONS.find((l) => l.id === saved.current) ?? LESSONS[0])
 
@@ -504,6 +606,7 @@ const see = $('#see')
 see.addEventListener('click', () => {
   const on = see.getAttribute('aria-pressed') !== 'true'
   see.setAttribute('aria-pressed', String(on))
+  seeing = on
   scene.setSeeThrough(on)
 })
 

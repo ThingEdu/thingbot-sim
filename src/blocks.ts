@@ -15,6 +15,8 @@ export interface BlocksApi {
   simCode(): { code: string; error?: string }
   arduinoCode(): string
   load(state: object): void
+  /** Vẽ lại cho vừa khung (sau khi vùng khối bị ẩn rồi hiện lại). */
+  resize(): void
   /** Đổi hộp công cụ khi đổi bài. */
   setToolbox(toolbox: object): void
   /** Khối đang chạy, kể cho trẻ bằng đúng chữ trên khối: "set led 1 100", "đợi 0.5 giây"… */
@@ -83,8 +85,14 @@ export function createBlocks(container: HTMLElement, toolbox: object): BlocksApi
       }
       workspace.scroll(0, 0)
     },
+    resize() {
+      ScratchBlocks.svgResize(workspace)
+    },
     setToolbox(next) {
       workspace.updateToolbox(next as never)
+      // Hộp công cụ của scratch-blocks không tự vẽ lại khi đổi nội dung (refreshSelection cố ý
+      // không làm gì); ThingBlock GUI cũng phải gọi forceRerender sau updateToolbox.
+      ;(workspace.getToolbox() as unknown as { forceRerender(): void }).forceRerender()
     },
     describe(id) {
       const block = id ? workspace.getBlockById(id) : null

@@ -21,8 +21,18 @@ export interface SceneApi {
   setTrace(trace: TraceName, color: string | null): void
   highlight(parts: PartName[]): void
   addBadge(part: PartName, html: string): HTMLElement
-  /** Gỡ mọi nhãn số (khi đổi bài). */
+  /** Gỡ mọi nhãn số và điểm bấm (khi đổi bài). */
   clearBadges(): void
+  /**
+   * Điểm bấm trên linh kiện (px ảnh). `under`: linh kiện nằm dưới Core, chỉ hiện khi nhìn xuyên Core.
+   */
+  addHotspot(px: number, py: number, html: string, onClick: () => void, under?: boolean): HTMLElement
+  /** Hiện/ẩn lớp dây dữ liệu (bài khám phá không cần). */
+  showWires(on: boolean): void
+  /** Vòng chú ý ở một điểm (px ảnh), hoặc tắt. */
+  mark(at: [number, number] | null): void
+  /** Bấm lên mặt mạch (ngoài nút SW): báo toạ độ px ảnh. */
+  onPick(cb: (px: number, py: number) => void): void
   /** Làm Core trong suốt để thấy linh kiện trên Shield bên dưới. */
   setSeeThrough(on: boolean): void
   onSwitch(cb: (pressed: boolean) => void): void
@@ -420,7 +430,11 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
       const [x, z] = W(px, py)
       rings[name].position.set(x, heightAt(px, py) + 0.1, z)
     }
-    for (const b of badges) b.at.y = heightAt(b.px, b.py) + 1
+    for (const b of badges) {
+      b.at.y = heightAt(b.px, b.py) + 1
+      if (b.under) b.el.hidden = !seeThrough
+    }
+    placeFocus()
   }
   const rings = {} as Record<PartName, THREE.Mesh>
   for (const name of Object.keys(RING) as PartName[]) {
@@ -436,7 +450,21 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
     rings[name] = ring
   }
 
-  const badges: { el: HTMLElement; at: THREE.Vector3; px: number; py: number }[] = []
+  const focusRing = overlay(
+    new THREE.Mesh(new THREE.RingGeometry(3.6, 4.5, 40), new THREE.MeshBasicMaterial({ color: 0xf08a24, opacity: 0 })),
+  )
+  focusRing.rotation.x = -Math.PI / 2
+  focusRing.visible = false
+  board.add(focusRing)
+  let focusAt: [number, number] | null = null
+  const placeFocus = () => {
+    focusRing.visible = focusAt !== null
+    if (!focusAt) return
+    const [x, z] = W(...focusAt)
+    focusRing.position.set(x, heightAt(...focusAt) + 0.1, z)
+  }
+
+  const badges: { el: HTMLElement; at: THREE.Vector3; px: number; py: number; under?: boolean }[] = []
   buildWires()
 
   // --- tương tác ---------------------------------------------------------------------------
@@ -451,8 +479,26 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
     raycaster.setFromCamera(pointer, camera)
     return raycaster.intersectObject(swHit, false).length > 0
   }
+  let pickCb: ((px: number, py: number) => void) | null = null
+  const local = new THREE.Vector3()
   canvas.addEventListener('pointerdown', (e) => {
-    if (!hitsSwitch(e)) return
+    if (!hitsSwitch(e)) {
+      if (!pickCb) return
+      // Mặt mạch thật, không tính lớp vẽ đè (dây, vòng) và khối bấm vô hình của nút SW.
+      const hit = raycaster
+        .intersectObjects(board.children, true)
+        .find((h) => {
+          const mat = (h.object as THREE.Mesh).material as THREE.Material
+          // Khi nhìn xuyên Core, bỏ qua tấm Core trong suốt để chọn được chip bên dưới.
+          return h.object.renderOrder !== 10 && mat.visible && !(seeThrough && mat.opacity < 0.5)
+        })
+      const point = hit?.point ?? raycaster.ray.intersectPlane(new THREE.Plane(UP, 0), local)
+      if (point) {
+        board.worldToLocal(local.copy(point))
+        pickCb(local.x / S + CX, local.z / S + CY)
+      }
+      return
+    }
     holding = true
     canvas.setPointerCapture(e.pointerId)
     switchCb(true)
@@ -527,7 +573,7 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
       p.mesh.position.copy(tracePaths[p.trace].getPointAt(p.t))
     }
     const beat = 0.5 + 0.5 * Math.sin(now / 260)
-    for (const ring of Object.values(rings)) {
+    for (const ring of [...Object.values(rings), focusRing]) {
       if (!ring.visible) continue
       ;(ring.material as THREE.MeshBasicMaterial).opacity = 0.35 + 0.6 * beat
       ring.scale.setScalar(1 + 0.15 * beat)
@@ -592,6 +638,28 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
     clearBadges() {
       for (const b of badges) b.el.remove()
       badges.length = 0
+    },
+    addHotspot(px, py, html, onClick, under) {
+      const el = document.createElement('button')
+      el.type = 'button'
+      el.className = 'badge hot'
+      el.innerHTML = html
+      el.addEventListener('click', onClick)
+      badgeLayer.appendChild(el)
+      const [x, z] = W(px, py)
+      badges.push({ el, at: new THREE.Vector3(x, heightAt(px, py) + 1, z), px, py, under })
+      if (under) el.hidden = !seeThrough
+      return el
+    },
+    showWires(on) {
+      wireLayer.visible = on
+    },
+    mark(at) {
+      focusAt = at
+      placeFocus()
+    },
+    onPick(cb) {
+      pickCb = cb
     },
     onSwitch(cb) {
       switchCb = cb

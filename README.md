@@ -1,7 +1,8 @@
-# ThingBot Sim — bài 2 (Đèn nhấp nháy) + bài 3 (Nút bấm)
+# ThingBot Sim — bài 1 (Làm quen) + bài 2 (Đèn nhấp nháy) + bài 3 (Nút bấm)
 
 Web mô phỏng mạch ThingBot theo bài học, kiểu Learn Arduino nhưng dùng **khối ThingBlock thật**. Bản này là spike S0 của spec `ThingBot-Sim-Web-Sample.md` v0.2, để kiểm câu hỏi "trẻ có nhìn ra dòng chảy dữ liệu từ khối hay không". Có hai bài, chọn trên thanh trên:
 
+- **Bài 1 — Làm quen ThingBot:** không ghép khối. Bấm 13 bộ phận trên mạch (theo trang "Làm quen ThingBot" của khóa ThingBlock) để xem tên, việc và khối điều khiển; nhìn xuyên Core tìm PCA9685 và còi; 2 câu đố.
 - **Bài 2 — Đèn nhấp nháy:** vòng lặp Arduino + `set led` + `đợi`. Chấm bằng đúng luật `kiểm: L1 nhấp nháy, chu kỳ …` của ThingBlock (chạy trong worker), có thêm dải *Nhịp đèn* (đèn sáng/tắt theo thời gian) và ô *Não* đếm số vòng.
 - **Bài 3 — Nút bấm điều khiển đèn:** nút SW → IO3 → não → I2C → PCA9685 → L1.
 

@@ -179,7 +179,7 @@ export const BAI_2: Lesson = {
   id: 'bai-2',
   no: 2,
   title: 'Đèn nhấp nháy',
-  toolbox: toolbox([B.wait, B.forever], [B.init, B.setLed(100), B.setLed(0)]),
+  toolbox: toolbox([B.wait], [B.init, B.setLed(100), B.setLed(0)]),
   starter: STARTER,
   example: program(
     hat('event_whenarduinobegin', 30, 30, { type: 'thingBotC3_init' }),

@@ -44,9 +44,11 @@ export interface Grader {
   /** Học lại từ đầu: xoá mọi ✓. */
   clear(): void
   observe(o: Observation): void
+  /** Việc trẻ làm ngoài bộ mô phỏng (bài 1): `pick` một linh kiện, `answer` một câu đố. */
+  event?(type: 'pick' | 'answer', value: string): void
 }
 
-export type FlowKind = 'button' | 'blink'
+export type FlowKind = 'button' | 'blink' | 'explore'
 
 export interface Lesson {
   id: string
@@ -58,11 +60,26 @@ export interface Lesson {
   cards: Card[]
   /** Luật `kiểm:` đúng cú pháp ThingBlock, chấm trong worker. */
   rules?: string[]
-  /** Kiểu dải dòng chảy dưới mạch. */
+  /** Bài khám phá (không ghép khối): các linh kiện bấm được trên mạch. */
+  parts?: Part[]
+  /** Kiểu dải dòng chảy dưới mạch; `explore` là bài không code. */
   flow: FlowKind
   /** Nhãn số trên mạch, theo thứ tự ô của dải dòng chảy. */
   badges: PartName[]
   /** Bài coi là xong khi đạt các việc này. */
   done: string[]
   createGrader(onChange: GraderChange): Grader
+}
+
+export interface Part {
+  id: string
+  name: string
+  /** Một hay nhiều chỗ trên mạch (px ảnh), kèm nhãn riêng nếu có (ví dụ "M3"). */
+  at: { px: number; py: number; label?: string }[]
+  /** Nằm dưới Core: chỉ bấm được khi nhìn xuyên Core. */
+  under?: boolean
+  /** Làm gì, nói cho trẻ (HTML). */
+  info: string
+  /** Khối ThingBlock điều khiển nó, nếu có (HTML chip). */
+  block?: string
 }
