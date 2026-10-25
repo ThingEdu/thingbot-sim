@@ -126,7 +126,12 @@ export function createBlocks(container: HTMLElement): BlocksApi {
 
   const workspace = ScratchBlocks.inject(container, {
     toolbox: TOOLBOX,
-    theme: new ScratchBlocks.Theme('default', blockColors as never),
+    theme: new ScratchBlocks.Theme('default', blockColors as never, undefined, {
+      workspaceBackgroundColour: '#ffffff',
+      flyoutBackgroundColour: '#f4f2ee',
+      flyoutOpacity: 1,
+      toolboxBackgroundColour: '#ffffff',
+    }),
     media: 'media/',
     zoom: { controls: true, wheel: false, startScale: 0.675 },
     grid: { spacing: 40, length: 2, colour: '#ddd' },

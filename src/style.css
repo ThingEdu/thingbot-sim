@@ -1,4 +1,5 @@
 :root {
+  color-scheme: only light;
   --paper: #f6f1e6;
   --paper-2: #fbf8f1;
   --grid: rgba(120, 100, 70, 0.07);
@@ -287,8 +288,9 @@ kbd {
 }
 .board-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px 8px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--line);
   background: var(--paper-2);
@@ -297,7 +299,7 @@ kbd {
   background: var(--teal);
   border-color: var(--teal);
   color: #fff;
-  min-width: 100px;
+  min-width: 92px;
 }
 .btn-run:hover {
   background: var(--teal-2);
@@ -309,6 +311,10 @@ kbd {
 .btn-hold {
   user-select: none;
   touch-action: none;
+}
+.btn-see[aria-pressed='true'] {
+  background: #fff6e8;
+  border-color: var(--orange);
 }
 .btn-hold[aria-pressed='true'] {
   background: #eef3fd;
@@ -571,4 +577,15 @@ kbd {
   .status {
     display: none;
   }
+}
+
+/* Vùng ghép khối: nền trắng tường minh, không phụ thuộc biến màu của theme hay chế độ tối */
+.blocks .blocklySvg,
+.blocks .blocklyMainBackground {
+  background-color: #ffffff !important;
+  fill: #ffffff !important;
+}
+.blocks .blocklyFlyoutBackground {
+  fill: #f4f2ee !important;
+  fill-opacity: 1 !important;
 }

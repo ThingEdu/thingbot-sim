@@ -1,11 +1,12 @@
 /**
- * Cảnh 3D mạch ThingBot, dựng bằng code theo đúng bố cục mạch phẳng của bảng Simulator trong ThingBlock
- * (`scratch-gui/src/components/sim-panel/thingbot-board.jsx`, toạ độ 210 × 240): Shield xanh lá, Core ở
- * giữa (ESP32-C3 và PCA9685 nằm trên Core), M3 · jack · ON/OFF · M4 ở mép trên, cột chân servo S1–S5 bên
- * trái, PS2 · I2C · nút SW bên phải, M2 · IO0 · IO4 · M1 ở mép dưới, L1 góc dưới phải, L2 dưới S1.
+ * Cảnh 3D mạch ThingBot dựng từ ẢNH THẬT của mạch đã lắp (khóa ThingBot trên robot.edu.vn, chụp thẳng
+ * từ trên xuống, 1600 × 1265 px): mặt Shield và mặt trên của từng linh kiện nổi đều lấy từ ảnh đó, nên
+ * bố cục, chữ in và màu khớp kit thật. Core cắm úp trên hai hàng header, cao hơn Shield ~9 mm; ESP32-C3
+ * nằm ở mặt dưới Core, còn PCA9685, còi, đèn L1/L2 nằm trên Shield bên dưới Core. Lớp "dưới Core" lấy từ
+ * ảnh Shield chưa lắp Core, xoay 180° và ghép theo 4 lỗ vít — bật "nhìn dưới Core" để thấy.
  *
- * Chữ in trên mạch vẽ vào texture; linh kiện nổi là khối hộp có viền. Đường "dây dữ liệu" nối
- * SW → ESP32-C3 → PCA9685 → L1 là phần dạy học, không phải đường mạch thật.
+ * Toạ độ trong file này là toạ độ điểm ảnh của ảnh mạch đã lắp. Chưa có file STEP/PCB của bản 2027:
+ * khi có, chỉ cần thay ảnh và bảng toạ độ bên dưới.
  */
 import * as THREE from 'three'
 
@@ -18,177 +19,153 @@ export interface SceneApi {
   setLed(name: 'L1' | 'L2', level: number): void
   pulse(trace: TraceName, color: string): void
   setTrace(trace: TraceName, color: string | null): void
-  /** Vòng sáng nhấp nháy quanh những linh kiện cần chú ý. */
   highlight(parts: PartName[]): void
-  /** Gắn một phần tử HTML vào một linh kiện; trả về phần tử đó. */
   addBadge(part: PartName, html: string): HTMLElement
+  /** Làm Core trong suốt để thấy linh kiện trên Shield bên dưới. */
+  setSeeThrough(on: boolean): void
   onSwitch(cb: (pressed: boolean) => void): void
   zoom(factor: number): void
   reset(): void
 }
 
-/** Toạ độ mạch phẳng của ThingBlock (đơn vị SVG) → cảnh. */
-const K = 0.3
-const P = (sx: number, sy: number): [number, number] => [(sx - 105) * K, (sy - 120) * K]
-const BOARD_W = 210
-const BOARD_H = 240
-const CORE_TOP = 2
+/** Vùng của ảnh `board/top.webp` trong ảnh gốc (px). */
+const TX0 = 390
+const TY0 = 130
+const TW = 805
+const TH = 885
+/** Tâm mạch trong ảnh gốc và tỉ lệ px → đơn vị cảnh (≈ mm). */
+const CX = 778.5
+const CY = 585
+const S = 0.09
+const W = (px: number, py: number): [number, number] => [(px - CX) * S, (py - CY) * S]
 
-const C = {
-  pcbEdge: 0x0f5b31,
-  coreEdge: 0x147a42,
-  socket: 0xf3f2ec,
-  socketDark: 0x2a2d31,
-  jack: 0x26292d,
-  metal: 0xcfd4da,
-  chip: 0x1d1f23,
-  pin: 0xc9a447,
-  outline: 0x16241b,
-  wire: 0x9fb8a6,
+const CORE = { x0: 475, y0: 285, x1: 1075, y1: 885 }
+const CORE_BASE = 8.8
+const CORE_T = 1.6
+const OVER = CORE_BASE + CORE_T + 0.3 // độ cao lớp vẽ dây dữ liệu (trên mặt Core)
+
+const COLOR = {
+  pcbEdge: 0x15683a,
+  coreEdge: 0x1f7a45,
+  white: 0xe9e8e2,
+  black: 0x1b1c1f,
+  metal: 0xb9bec4,
+  wire: 0xffffff,
 }
 
-function part(geometry: THREE.BufferGeometry, material: THREE.Material | THREE.Material[], outline = true) {
+/** Mảnh phẳng phủ ảnh, nằm ngang ở độ cao `y`, ứng với hình chữ nhật (px) trong ảnh. */
+function photoPlane(map: THREE.Texture, px0: number, py0: number, px1: number, py1: number, y: number) {
+  const [x0, z0] = W(px0, py0)
+  const [x1, z1] = W(px1, py1)
+  const geo = new THREE.PlaneGeometry(x1 - x0, z1 - z0)
+  const u0 = (px0 - TX0) / TW
+  const u1 = (px1 - TX0) / TW
+  const vt = 1 - (py0 - TY0) / TH
+  const vb = 1 - (py1 - TY0) / TH
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute([u0, vt, u1, vt, u0, vb, u1, vb], 2))
+  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map }))
+  mesh.rotation.x = -Math.PI / 2
+  mesh.position.set((x0 + x1) / 2, y, (z0 + z1) / 2)
+  return mesh
+}
+
+/** Khối nổi: thân màu `side`, mặt trên là đúng phần ảnh của nó. */
+function photoBox(
+  map: THREE.Texture,
+  px0: number,
+  py0: number,
+  px1: number,
+  py1: number,
+  height: number,
+  side: number,
+  base = 0,
+) {
   const g = new THREE.Group()
-  g.add(new THREE.Mesh(geometry, material))
-  if (outline) {
-    g.add(
-      new THREE.LineSegments(
-        new THREE.EdgesGeometry(geometry, 30),
-        new THREE.LineBasicMaterial({ color: C.outline, transparent: true, opacity: 0.7 }),
-      ),
-    )
-  }
+  const [x0, z0] = W(px0, py0)
+  const [x1, z1] = W(px1, py1)
+  const geo = new THREE.BoxGeometry(x1 - x0, height, z1 - z0)
+  const body = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: side }))
+  body.position.set((x0 + x1) / 2, base + height / 2, (z0 + z1) / 2)
+  g.add(body)
+  const edges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(geo),
+    new THREE.LineBasicMaterial({ color: 0x0d1410, transparent: true, opacity: 0.45 }),
+  )
+  edges.position.copy(body.position)
+  g.add(edges)
+  g.add(photoPlane(map, px0, py0, px1, py1, base + height + 0.02))
   return g
 }
 
-/** Hộp đặt theo hình chữ nhật (x, y, w, h) của mạch phẳng, đáy ở độ cao `base`. */
-function slab(x: number, y: number, w: number, h: number, height: number, color: number, base = 0, outline = true) {
-  const [cx, cz] = P(x + w / 2, y + h / 2)
-  const g = part(new THREE.BoxGeometry(w * K, height, h * K), new THREE.MeshLambertMaterial({ color }), outline)
-  g.position.set(cx, base + height / 2, cz)
-  return g
+/** Hình chữ nhật bo góc (px) → Shape trong mặt phẳng cảnh (x, -z). */
+function roundedShape(px0: number, py0: number, px1: number, py1: number, rpx: number) {
+  const [x0, z0] = W(px0, py0)
+  const [x1, z1] = W(px1, py1)
+  const r = rpx * S
+  const s = new THREE.Shape()
+  // Shape dùng (x, y) với y = -z, để sau khi xoay -90° quanh X thì nằm đúng chỗ.
+  const Y0 = -z0
+  const Y1 = -z1
+  s.moveTo(x0 + r, Y0)
+  s.lineTo(x1 - r, Y0)
+  s.quadraticCurveTo(x1, Y0, x1, Y0 - r)
+  s.lineTo(x1, Y1 + r)
+  s.quadraticCurveTo(x1, Y1, x1 - r, Y1)
+  s.lineTo(x0 + r, Y1)
+  s.quadraticCurveTo(x0, Y1, x0, Y1 + r)
+  s.lineTo(x0, Y0 - r)
+  s.quadraticCurveTo(x0, Y0, x0 + r, Y0)
+  return s
 }
 
-const FONT = '"Be Vietnam Pro", system-ui, sans-serif'
-
-/** Mặt in của Shield, vẽ như ThingBlock vẽ trong SVG. */
-function shieldTexture(): THREE.CanvasTexture {
-  const S = 6
-  const c = document.createElement('canvas')
-  c.width = BOARD_W * S
-  c.height = BOARD_H * S
-  const g = c.getContext('2d')!
-  g.scale(S, S)
-  g.fillStyle = '#1c8a4a'
-  g.beginPath()
-  g.roundRect(0, 0, BOARD_W, BOARD_H, 24)
-  g.fill()
-  for (const [x, y] of [
-    [11, 22],
-    [199, 22],
-    [11, 190],
-    [199, 190],
-  ]) {
-    g.beginPath()
-    g.arc(x, y, 4, 0, Math.PI * 2)
-    g.fillStyle = '#ffffff'
-    g.fill()
-    g.lineWidth = 2.5
-    g.strokeStyle = '#d7b25a'
-    g.stroke()
-  }
-  g.fillStyle = '#eef6ef'
-  const silk = (t: string, x: number, y: number, size = 7, align: CanvasTextAlign = 'center') => {
-    g.font = `600 ${size}px ${FONT}`
-    g.textAlign = align
-    g.fillText(t, x, y)
-  }
-  silk('M3', 37, 26)
-  silk('ON ↔ OFF', 122, 25)
-  silk('M4', 167, 26)
-  for (let n = 1; n <= 5; n++) silk(`S${n}`, 18, 44 + (14 - (n - 1) * 3) * 10.5 + 2.5, 6, 'start')
-  silk('PS2', 192, 42)
-  silk('I2C', 192, 152)
-  silk('SW', 196, 158)
-  silk('L1', 186, 213)
-  silk('L2', 29, 205, 6, 'start')
-  for (const [t, x] of [
-    ['M2', 45],
-    ['IO0', 82],
-    ['IO4', 128],
-    ['M1', 165],
-  ] as const)
-    silk(t, x, 206, 6)
-  const tex = new THREE.CanvasTexture(c)
-  tex.colorSpace = THREE.SRGBColorSpace
-  tex.anisotropy = 4
-  return tex
-}
-
-function coreTexture(): THREE.CanvasTexture {
-  const S = 6
-  const c = document.createElement('canvas')
-  c.width = 140 * S
-  c.height = 150 * S
-  const g = c.getContext('2d')!
-  g.scale(S, S)
-  g.fillStyle = '#25a35f'
-  g.fillRect(0, 0, 140, 150)
-  g.fillStyle = '#eef6ef'
-  g.font = `700 11px ${FONT}`
-  g.fillText('ThingEdu', 50, 16)
-  g.font = `600 6px ${FONT}`
-  g.fillText('ESP32-C3 · PCA9685', 50, 25)
-  g.textAlign = 'center'
-  g.font = `700 9px ${FONT}`
-  g.fillText('ThingBot Core', 70, 138)
-  g.font = `600 5.5px ${FONT}`
-  g.fillText('PCA9685', 112, 116)
-  const tex = new THREE.CanvasTexture(c)
-  tex.colorSpace = THREE.SRGBColorSpace
-  tex.anisotropy = 4
-  return tex
-}
-
-/** Đường dây dữ liệu (toạ độ mạch phẳng), từ nguồn đến đích. */
+/**
+ * Đường dây dữ liệu (px ảnh), từ nguồn đến đích. Điểm nằm trong khung Core thì dây đi trên mặt Core;
+ * ngoài khung thì sát mặt Shield, và tự leo lên/xuống ở mép Core.
+ */
 const TRACES: Record<TraceName, [number, number][]> = {
   io3: [
-    [196, 173],
-    [56, 173],
-    [56, 127],
+    [1100, 797],
+    [890, 797],
+    [890, 470],
+    [665, 470],
   ],
   sda: [
-    [75, 92],
-    [133, 92],
-    [133, 137],
+    [640, 500],
+    [752, 500],
+    [752, 580],
   ],
   scl: [
-    [75, 99],
-    [139, 99],
-    [139, 137],
+    [640, 516],
+    [736, 516],
+    [736, 580],
   ],
   ch15: [
-    [155, 145],
-    [178, 145],
-    [178, 200],
-    [183, 200],
+    [826, 618],
+    [1000, 618],
+    [1000, 840],
+    [1030, 840],
   ],
 }
-
-/** Điểm gắn nhãn số ①…④ của từng linh kiện (toạ độ mạch phẳng + độ cao). */
-const PART_AT: Record<PartName, [number, number, number]> = {
-  sw: [226, 160, 6],
-  esp: [56, 72, 6],
-  pca: [142, 128, 5],
-  l1: [206, 218, 3],
+/** Vị trí linh kiện (px ảnh). ESP32-C3 ở mặt dưới Core; PCA9685, còi, L1, L2 trên Shield dưới Core. */
+const AT = {
+  sw: [1150, 797],
+  esp: [632, 485],
+  pca: [764, 618],
+  l1: [1035, 840],
+  l2: [532, 845],
+} as const
+/** Khung đánh dấu chip nằm khuất (px ảnh: tâm, rộng, cao). */
+const CHIPS: [number, number, number, number][] = [
+  [632, 485, 80, 90],
+  [764, 618, 126, 76],
+]
+const BADGE_AT: Record<PartName, [number, number]> = {
+  sw: [1205, 735],
+  esp: [590, 420],
+  pca: [764, 565],
+  l1: [1085, 905],
 }
-/** Tâm vòng chú ý của từng linh kiện. */
-const RING_AT: Record<PartName, [number, number, number]> = {
-  sw: [205, 173, 5.4],
-  esp: [56, 103, 6],
-  pca: [142, 145, 3.8],
-  l1: [186, 200, 4],
-}
+const RING: Record<PartName, number> = { sw: 4.6, esp: 5, pca: 3.6, l1: 3.6 }
 
 interface Pulse {
   trace: TraceName
@@ -202,125 +179,119 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
   container.prepend(renderer.domElement)
 
   const scene = new THREE.Scene()
-  scene.add(new THREE.HemisphereLight(0xffffff, 0xd9d2c0, 2.4))
-  const sun = new THREE.DirectionalLight(0xffffff, 1.4)
-  sun.position.set(-30, 90, 60)
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xe0d8c6, 2.1))
+  const sun = new THREE.DirectionalLight(0xffffff, 1.2)
+  sun.position.set(-30, 90, 50)
   scene.add(sun)
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 1000)
-  const view = { azimuth: 0.12, elevation: 0.98, zoom: 1 }
+  const view = { azimuth: 0.18, elevation: 0.95, zoom: 1 }
+
+  const loader = new THREE.TextureLoader()
+  const photo = loader.load(`${import.meta.env.BASE_URL}board/top.webp`)
+  photo.colorSpace = THREE.SRGBColorSpace
+  photo.anisotropy = 8
+  const underPhoto = loader.load(`${import.meta.env.BASE_URL}board/under.webp`)
+  underPhoto.colorSpace = THREE.SRGBColorSpace
+  underPhoto.anisotropy = 8
 
   const board = new THREE.Group()
   scene.add(board)
 
+  // Bóng mềm
   const shadow = new THREE.Mesh(
-    new THREE.PlaneGeometry(BOARD_W * K + 6, BOARD_H * K + 6),
-    new THREE.MeshBasicMaterial({ color: 0x6f6448, transparent: true, opacity: 0.16 }),
+    new THREE.ShapeGeometry(roundedShape(402, 170, 1155, 1000, 60)),
+    new THREE.MeshBasicMaterial({ color: 0x6f6448, transparent: true, opacity: 0.18 }),
   )
   shadow.rotation.x = -Math.PI / 2
-  shadow.position.set(2, -1.7, 2.5)
+  shadow.position.set(1.8, -1.8, 2.4)
   board.add(shadow)
 
-  // Shield: thân mạch (bo góc) + mặt in
-  const [x0, z0] = P(0, 0)
-  const [x1, z1] = P(BOARD_W, BOARD_H)
-  const r = 24 * K
-  const s = new THREE.Shape()
-  s.moveTo(x0 + r, z0)
-  s.lineTo(x1 - r, z0)
-  s.quadraticCurveTo(x1, z0, x1, z0 + r)
-  s.lineTo(x1, z1 - r)
-  s.quadraticCurveTo(x1, z1, x1 - r, z1)
-  s.lineTo(x0 + r, z1)
-  s.quadraticCurveTo(x0, z1, x0, z1 - r)
-  s.lineTo(x0, z0 + r)
-  s.quadraticCurveTo(x0, z0, x0 + r, z0)
-  const bodyGeo = new THREE.ExtrudeGeometry(s, { depth: 1.6, bevelEnabled: false, curveSegments: 8 })
-  bodyGeo.rotateX(Math.PI / 2) // hình (x, y) nằm thành (x, z), đùn xuống dưới mặt y = 0
-  board.add(part(bodyGeo, new THREE.MeshLambertMaterial({ color: C.pcbEdge })))
-  const top = new THREE.Mesh(
-    new THREE.PlaneGeometry(BOARD_W * K, BOARD_H * K),
-    new THREE.MeshLambertMaterial({ map: shieldTexture(), transparent: true }),
+  // Shield: thân dày 1,6 + mặt trên là ảnh (UV theo vị trí điểm ảnh)
+  const shape = roundedShape(402, 170, 1155, 1000, 60)
+  const body = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(shape, { depth: 1.6, bevelEnabled: false, curveSegments: 10 }),
+    new THREE.MeshLambertMaterial({ color: COLOR.pcbEdge }),
   )
-  top.rotation.x = -Math.PI / 2
-  top.position.y = 0.01
-  board.add(top)
+  body.rotation.x = -Math.PI / 2
+  body.position.y = -1.6
+  board.add(body)
+  const topGeo = new THREE.ShapeGeometry(shape, 10)
+  const pos = topGeo.getAttribute('position')
+  const uv: number[] = []
+  for (let i = 0; i < pos.count; i++) {
+    const px = pos.getX(i) / S + CX
+    const py = -pos.getY(i) / S + CY
+    uv.push((px - TX0) / TW, 1 - (py - TY0) / TH)
+  }
+  topGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2))
+  const shieldTop = new THREE.Mesh(topGeo, new THREE.MeshLambertMaterial({ map: photo }))
+  shieldTop.rotation.x = -Math.PI / 2
+  shieldTop.position.y = 0.01
+  board.add(shieldTop)
 
-  // Mép trên: M3 · jack · ON/OFF · M4
-  board.add(slab(22, -8, 30, 18, 5, C.socket))
-  board.add(slab(60, -6, 30, 34, 7, C.jack))
-  board.add(slab(100, 3, 44, 13, 2.4, C.metal))
-  board.add(slab(104, 5, 14, 9, 3.6, C.chip))
-  board.add(slab(152, -8, 30, 18, 5, C.socket))
-  // Cột chân servo S1–S5 (15 chân)
-  board.add(slab(6.5, 39, 9, 157, 2.5, C.chip))
-  for (let i = 0; i < 15; i++) board.add(slab(10, 43 + i * 10.5, 2, 2, 6, C.pin, 0, false))
-  // Mép phải: PS2 · I2C; mép dưới: M2 · IO0 · IO4 · M1
-  board.add(slab(184, 46, 16, 52, 5, C.socket))
-  board.add(slab(184, 106, 16, 36, 5, C.socket))
-  board.add(slab(32, 210, 26, 22, 5, C.socketDark))
-  board.add(slab(60, 210, 44, 22, 5, C.socketDark))
-  board.add(slab(106, 210, 44, 22, 5, C.socketDark))
-  board.add(slab(152, 210, 26, 22, 5, C.socketDark))
+  // Phần Shield dưới Core (từ ảnh Shield chưa lắp Core)
+  {
+    const [x0, z0] = W(CORE.x0, CORE.y0)
+    const [x1, z1] = W(CORE.x1, CORE.y1)
+    const under = new THREE.Mesh(
+      new THREE.PlaneGeometry(x1 - x0, z1 - z0),
+      new THREE.MeshLambertMaterial({ map: underPhoto }),
+    )
+    under.rotation.x = -Math.PI / 2
+    under.position.set((x0 + x1) / 2, 0.03, (z0 + z1) / 2)
+    board.add(under)
+  }
 
-  // ThingBot Core: mạch con, ESP32-C3 (vỏ kim loại), PCA9685, còi, cổng USB-C
-  const edge = new THREE.MeshLambertMaterial({ color: C.coreEdge })
-  const core = part(new THREE.BoxGeometry(140 * K, CORE_TOP, 150 * K), [
-    edge,
-    edge,
-    new THREE.MeshLambertMaterial({ map: coreTexture() }),
-    edge,
-    edge,
-    edge,
+  // Mép trên: M3 · jack nguồn · công tắc ON/OFF · M4
+  board.add(photoBox(photo, 500, 140, 602, 265, 6, COLOR.white))
+  board.add(photoBox(photo, 607, 140, 742, 285, 11, COLOR.black))
+  board.add(photoBox(photo, 763, 152, 927, 242, 4.5, COLOR.metal))
+  board.add(photoBox(photo, 946, 140, 1050, 265, 6, COLOR.white))
+  // Mép phải: PS2 · I2C · thân nút SW
+  board.add(photoBox(photo, 1080, 313, 1160, 556, 6, COLOR.white))
+  board.add(photoBox(photo, 1080, 560, 1160, 727, 6, COLOR.white))
+  board.add(photoBox(photo, 1093, 748, 1158, 846, 3.6, COLOR.black))
+  // Mép trái: cột chân servo; mép dưới: M2 · IO0 · IO4 · M1
+  board.add(photoBox(photo, 433, 328, 472, 842, 8.5, COLOR.black))
+  board.add(photoBox(photo, 490, 900, 596, 1005, 6, COLOR.white))
+  board.add(photoBox(photo, 600, 900, 766, 1005, 6, COLOR.white))
+  board.add(photoBox(photo, 770, 900, 936, 1005, 6, COLOR.white))
+  board.add(photoBox(photo, 940, 900, 1042, 1005, 6, COLOR.white))
+  // Hai hàng header nối Core với Shield
+  for (const [a, b] of [
+    [505, 540],
+    [1012, 1047],
   ])
-  const [ccx, ccz] = P(100, 119)
-  core.position.set(ccx, CORE_TOP / 2, ccz)
-  board.add(core)
-  board.add(slab(38, 80, 36, 46, 1.8, C.metal, CORE_TOP))
-  board.add(slab(130, 138, 24, 14, 1.0, C.chip, CORE_TOP))
-  for (let i = 0; i < 6; i++) {
-    board.add(slab(132 + i * 3.6, 136, 1.4, 2, 0.5, C.metal, CORE_TOP, false))
-    board.add(slab(132 + i * 3.6, 152, 1.4, 2, 0.5, C.metal, CORE_TOP, false))
-  }
-  const buzzer = part(new THREE.CylinderGeometry(9 * K, 9 * K, 3, 28), new THREE.MeshLambertMaterial({ color: C.chip }))
-  const [bzx, bzz] = P(112, 170)
-  buzzer.position.set(bzx, CORE_TOP + 1.5, bzz)
-  board.add(buzzer)
-  board.add(slab(104, 188, 24, 8, 1.4, C.metal, CORE_TOP))
-
-  // Dây dữ liệu (dạy học), nổi nhẹ trên mặt mạch
-  const WIRE_Y = CORE_TOP + 0.6
-  const traceMats = {} as Record<TraceName, THREE.MeshBasicMaterial>
-  const tracePaths = {} as Record<TraceName, THREE.CurvePath<THREE.Vector3>>
-  for (const name of Object.keys(TRACES) as TraceName[]) {
-    const mat = new THREE.MeshBasicMaterial({ color: C.wire, transparent: true, opacity: 0.55 })
-    traceMats[name] = mat
-    const path = new THREE.CurvePath<THREE.Vector3>()
-    const pts = TRACES[name].map(([sx, sy]) => {
-      const [x, z] = P(sx, sy)
-      return new THREE.Vector3(x, WIRE_Y, z)
-    })
-    for (let i = 0; i < pts.length - 1; i++) {
-      path.add(new THREE.LineCurve3(pts[i], pts[i + 1]))
-      const seg = new THREE.Mesh(new THREE.BoxGeometry(pts[i].distanceTo(pts[i + 1]) + 0.7, 0.25, 0.7), mat)
-      seg.position.copy(pts[i]).add(pts[i + 1]).multiplyScalar(0.5)
-      seg.rotation.y = -Math.atan2(pts[i + 1].z - pts[i].z, pts[i + 1].x - pts[i].x)
-      board.add(seg)
-    }
-    tracePaths[name] = path
+  {
+    const [x0, z0] = W(a, 520)
+    const [x1, z1] = W(b, 862)
+    const hdr = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, CORE_BASE, z1 - z0), new THREE.MeshLambertMaterial({ color: COLOR.black }))
+    hdr.position.set((x0 + x1) / 2, CORE_BASE / 2, (z0 + z1) / 2)
+    board.add(hdr)
   }
 
-  // Nút SW: thân đen ở mép phải, núm nhô ra ngoài cạnh mạch
-  board.add(slab(194, 162, 16, 22, 3.6, C.socketDark))
-  const knob = slab(206, 166, 8, 14, 2.4, 0x111214, 0.6)
+  // Core: nổi trên header, mặt trên là ảnh
+  const coreSideMat = new THREE.MeshLambertMaterial({ color: COLOR.coreEdge, transparent: true })
+  const [cx0, cz0] = W(CORE.x0, CORE.y0)
+  const [cx1, cz1] = W(CORE.x1, CORE.y1)
+  const coreBody = new THREE.Mesh(new THREE.BoxGeometry(cx1 - cx0, CORE_T, cz1 - cz0), coreSideMat)
+  coreBody.position.set((cx0 + cx1) / 2, CORE_BASE + CORE_T / 2, (cz0 + cz1) / 2)
+  board.add(coreBody)
+  const coreTop = photoPlane(photo, CORE.x0, CORE.y0, CORE.x1, CORE.y1, CORE_BASE + CORE_T + 0.02)
+  ;(coreTop.material as THREE.MeshLambertMaterial).transparent = true
+  board.add(coreTop)
+
+  // Núm nút SW nhô ra cạnh phải; vùng bấm rộng hơn núm cho dễ trúng
+  const knob = photoBox(photo, 1158, 776, 1192, 818, 2.6, COLOR.black, 0.6)
   board.add(knob)
-  const knobRestX = knob.position.x
-  // Vùng bấm rộng hơn núm, để ngón tay dễ trúng
-  const swHit = new THREE.Mesh(new THREE.BoxGeometry(10, 8, 12), new THREE.MeshBasicMaterial({ visible: false }))
-  const [hx, hz] = P(205, 173)
-  swHit.position.set(hx, 3, hz)
+  const swHit = new THREE.Mesh(new THREE.BoxGeometry(11, 9, 13), new THREE.MeshBasicMaterial({ visible: false }))
+  {
+    const [x, z] = W(1150, 797)
+    swHit.position.set(x, 3, z)
+  }
   board.add(swHit)
 
-  // L1 (đỏ), L2 (xanh lá)
+  // Đèn L1 (đỏ), L2 (xanh lá): nằm trên Shield sát mép dưới Core; ánh sáng hắt ra khe dưới Core
   const haloTex = (() => {
     const c = document.createElement('canvas')
     c.width = c.height = 128
@@ -333,45 +304,131 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
     g.fillRect(0, 0, 128, 128)
     return new THREE.CanvasTexture(c)
   })()
-  const leds = {} as Record<'L1' | 'L2', { lens: THREE.MeshLambertMaterial; glow: THREE.Sprite; on: number; off: number }>
+  const leds = {} as Record<'L1' | 'L2', { lens: THREE.MeshLambertMaterial; glow: THREE.Sprite; light: THREE.PointLight; on: number; off: number }>
   ;(
     [
-      ['L1', 186, 200, 0xff3b30, 0x7c2420],
-      ['L2', 23, 203, 0x2fd158, 0x1d5a2c],
+      ['L1', AT.l1, 0xff3b30, 0x6e2622],
+      ['L2', AT.l2, 0x2fd158, 0x1d5a2c],
     ] as const
-  ).forEach(([name, sx, sy, on, off]) => {
-    const [x, z] = P(sx, sy)
-    board.add(slab(sx - 5, sy - 3.5, 10, 7, 0.5, 0xf4f1ea, 0, false))
+  ).forEach(([name, [px, py], on, off]) => {
+    const [x, z] = W(px, py)
     const lens = new THREE.MeshLambertMaterial({ color: off })
-    const m = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.1, 1.5), lens)
-    m.position.set(x, 1, z)
+    const m = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.9, 1.1), lens)
+    m.position.set(x, 0.45, z)
     board.add(m)
     const glow = new THREE.Sprite(
-      new THREE.SpriteMaterial({ map: haloTex, color: on, transparent: true, depthWrite: false, opacity: 0 }),
+      new THREE.SpriteMaterial({ map: haloTex, color: on, transparent: true, depthWrite: false, depthTest: false, opacity: 0 }),
     )
-    glow.position.set(x, 2.5, z)
-    glow.scale.set(14, 14, 1)
+    glow.position.set(x, 2, z)
+    glow.scale.set(16, 16, 1)
+    glow.renderOrder = 5
     board.add(glow)
-    leds[name] = { lens, glow, on, off }
+    const light = new THREE.PointLight(on, 0, 26, 1.4)
+    light.position.set(x, 2.5, z)
+    board.add(light)
+    leds[name] = { lens, glow, light, on, off }
   })
 
-  // Vòng chú ý
+  // Lớp vẽ trên cùng: dây dữ liệu, hạt dữ liệu, vòng chú ý (luôn nhìn thấy, không bị Core che).
+  // Khi nhìn xuyên Core, cả lớp hạ xuống mặt Shield cho khớp với chip bên dưới.
+  const overlay = <T extends THREE.Mesh | THREE.LineSegments>(m: T) => {
+    const mat = m.material as THREE.Material
+    mat.depthTest = false
+    mat.transparent = true
+    m.renderOrder = 10
+    return m
+  }
+  const inCore = (px: number, py: number) => px >= CORE.x0 && px <= CORE.x1 && py >= CORE.y0 && py <= CORE.y1
+  let seeThrough = false
+  const heightAt = (px: number, py: number) => (seeThrough ? 1 : inCore(px, py) ? OVER : 1.2)
+  const traceMats = {} as Record<TraceName, THREE.MeshBasicMaterial>
+  for (const name of Object.keys(TRACES) as TraceName[])
+    traceMats[name] = new THREE.MeshBasicMaterial({ color: COLOR.wire, transparent: true, opacity: 0.55 })
+  const tracePaths = {} as Record<TraceName, THREE.CurvePath<THREE.Vector3>>
+  const wireLayer = new THREE.Group()
+  board.add(wireLayer)
+  const UP = new THREE.Vector3(0, 1, 0)
+  const segment = (a: THREE.Vector3, b: THREE.Vector3, mat: THREE.Material) => {
+    const len = a.distanceTo(b)
+    const m = overlay(new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, len + 0.4, 8), mat))
+    m.position.copy(a).add(b).multiplyScalar(0.5)
+    m.quaternion.setFromUnitVectors(UP, b.clone().sub(a).normalize())
+    return m
+  }
+  /** Điểm đi qua mép Core trên đoạn (a, b), nếu có. */
+  const edgeCrossing = ([ax, ay]: [number, number], [bx, by]: [number, number]): [number, number] | null => {
+    if (inCore(ax, ay) === inCore(bx, by)) return null
+    for (let i = 1; i < 200; i++) {
+      const t = i / 200
+      const x = ax + (bx - ax) * t
+      const y = ay + (by - ay) * t
+      if (inCore(x, y) !== inCore(ax, ay)) return [x, y]
+    }
+    return null
+  }
+  const buildWires = () => {
+    wireLayer.clear()
+    for (const name of Object.keys(TRACES) as TraceName[]) {
+      const pts: THREE.Vector3[] = []
+      const push = (px: number, py: number, h: number) => {
+        const [x, z] = W(px, py)
+        pts.push(new THREE.Vector3(x, h, z))
+      }
+      const src = TRACES[name]
+      src.forEach((p, i) => {
+        if (i > 0) {
+          const cross = edgeCrossing(src[i - 1], p)
+          if (cross && !seeThrough) {
+            push(cross[0], cross[1], heightAt(...src[i - 1]))
+            push(cross[0], cross[1], heightAt(...p))
+          }
+        }
+        push(p[0], p[1], heightAt(...p))
+      })
+      const path = new THREE.CurvePath<THREE.Vector3>()
+      for (let i = 0; i < pts.length - 1; i++) {
+        if (pts[i].distanceTo(pts[i + 1]) < 1e-3) continue
+        path.add(new THREE.LineCurve3(pts[i], pts[i + 1]))
+        wireLayer.add(segment(pts[i], pts[i + 1], traceMats[name]))
+      }
+      tracePaths[name] = path
+    }
+    for (const [px, py, w, h] of CHIPS) {
+      const [x, z] = W(px, py)
+      const box = overlay(
+        new THREE.LineSegments(
+          new THREE.EdgesGeometry(new THREE.PlaneGeometry(w * S, h * S)),
+          new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.8, gapSize: 0.5, opacity: 0.95 }),
+        ),
+      )
+      box.computeLineDistances()
+      box.rotation.x = -Math.PI / 2
+      box.position.set(x, heightAt(px, py), z)
+      wireLayer.add(box)
+    }
+    for (const name of Object.keys(RING) as PartName[]) {
+      const [px, py] = AT[name]
+      const [x, z] = W(px, py)
+      rings[name].position.set(x, heightAt(px, py) + 0.1, z)
+    }
+    for (const b of badges) b.at.y = heightAt(b.px, b.py) + 1
+  }
   const rings = {} as Record<PartName, THREE.Mesh>
-  for (const name of Object.keys(RING_AT) as PartName[]) {
-    const [sx, sy, radius] = RING_AT[name]
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(radius, radius + 0.9, 40),
-      new THREE.MeshBasicMaterial({ color: 0xf08a24, transparent: true, opacity: 0, depthWrite: false }),
+  for (const name of Object.keys(RING) as PartName[]) {
+    const ring = overlay(
+      new THREE.Mesh(
+        new THREE.RingGeometry(RING[name], RING[name] + 0.9, 40),
+        new THREE.MeshBasicMaterial({ color: 0xf08a24, opacity: 0 }),
+      ),
     )
     ring.rotation.x = -Math.PI / 2
-    const [x, z] = P(sx, sy)
-    ring.position.set(x, CORE_TOP + 2.2, z)
     ring.visible = false
     board.add(ring)
     rings[name] = ring
   }
 
-  const badges: { el: HTMLElement; at: THREE.Vector3 }[] = []
+  const badges: { el: HTMLElement; at: THREE.Vector3; px: number; py: number }[] = []
+  buildWires()
 
   // --- tương tác ---------------------------------------------------------------------------
   const pointer = new THREE.Vector2()
@@ -402,8 +459,10 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
   canvas.addEventListener('pointerup', release)
   canvas.addEventListener('pointercancel', release)
 
-  // --- camera: khớp khung bao của mạch vào khung vẽ -----------------------------------------
-  const corners = [-34, 35].flatMap((x) => [-2, 8].flatMap((y) => [-40, 40].map((z) => new THREE.Vector3(x, y, z))))
+  // --- camera: khớp khung bao của mạch ------------------------------------------------------
+  const [bx0, bz0] = W(TX0, TY0)
+  const [bx1, bz1] = W(TX0 + TW, TY0 + TH)
+  const corners = [bx0, bx1].flatMap((x) => [-2, 12].flatMap((y) => [bz0, bz1].map((z) => new THREE.Vector3(x, y, z))))
   const tmp = new THREE.Vector3()
   const fit = () => {
     const { clientWidth: w, clientHeight: h } = container
@@ -420,7 +479,7 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
       minY = Math.min(minY, tmp.y)
       maxY = Math.max(maxY, tmp.y)
     }
-    const pad = 18
+    const pad = 22
     const upp = Math.max((maxX - minX) / Math.max(40, w - pad * 2), (maxY - minY) / Math.max(40, h - pad * 2)) / view.zoom
     const cx = (minX + maxX) / 2
     const cy = (minY + maxY) / 2
@@ -433,7 +492,7 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
 
   // --- vòng vẽ ------------------------------------------------------------------------------
   const pulses: Pulse[] = []
-  const pulseGeo = new THREE.SphereGeometry(0.85, 14, 10)
+  const pulseGeo = new THREE.SphereGeometry(0.9, 14, 10)
   const projected = new THREE.Vector3()
   let last = performance.now()
   const frame = (now: number) => {
@@ -457,12 +516,11 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
         continue
       }
       p.mesh.position.copy(tracePaths[p.trace].getPointAt(p.t))
-      p.mesh.position.y += 0.4
     }
     const beat = 0.5 + 0.5 * Math.sin(now / 260)
     for (const ring of Object.values(rings)) {
       if (!ring.visible) continue
-      ;(ring.material as THREE.MeshBasicMaterial).opacity = 0.35 + 0.55 * beat
+      ;(ring.material as THREE.MeshBasicMaterial).opacity = 0.35 + 0.6 * beat
       ring.scale.setScalar(1 + 0.15 * beat)
     }
 
@@ -479,7 +537,7 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
 
   return {
     setSwitch(pressed) {
-      knob.position.x = pressed ? knobRestX - 1.2 : knobRestX
+      knob.position.x = pressed ? -1.6 : 0
     },
     setLed(name, level) {
       const led = leds[name]
@@ -487,29 +545,39 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
       led.lens.color.setHex(l > 0 ? led.on : led.off)
       led.lens.emissive.setHex(l > 0 ? led.on : 0x000000)
       led.lens.emissiveIntensity = l
-      ;(led.glow.material as THREE.SpriteMaterial).opacity = l > 0 ? 0.3 + 0.7 * l : 0
+      ;(led.glow.material as THREE.SpriteMaterial).opacity = l > 0 ? 0.35 + 0.65 * l : 0
+      led.light.intensity = l * 260
     },
     pulse(trace, color) {
       if (pulses.length > 24) return
-      const mesh = new THREE.Mesh(pulseGeo, new THREE.MeshBasicMaterial({ color }))
+      const mesh = overlay(new THREE.Mesh(pulseGeo, new THREE.MeshBasicMaterial({ color })))
       board.add(mesh)
       pulses.push({ trace, mesh, t: 0 })
     },
     setTrace(trace, color) {
-      traceMats[trace].color.set(color ?? C.wire)
-      traceMats[trace].opacity = color ? 1 : 0.55
+      traceMats[trace].color.set(color ?? COLOR.wire)
+      traceMats[trace].opacity = color ? 1 : 0.5
     },
     highlight(parts) {
       for (const [name, ring] of Object.entries(rings)) ring.visible = parts.includes(name as PartName)
+    },
+    setSeeThrough(on) {
+      seeThrough = on
+      buildWires()
+      const o = on ? 0.15 : 1
+      coreSideMat.opacity = o
+      ;(coreTop.material as THREE.MeshLambertMaterial).opacity = o
+      coreSideMat.depthWrite = !on
+      ;(coreTop.material as THREE.MeshLambertMaterial).depthWrite = !on
     },
     addBadge(name, html) {
       const el = document.createElement('div')
       el.className = 'badge'
       el.innerHTML = html
       badgeLayer.appendChild(el)
-      const [sx, sy, y] = PART_AT[name]
-      const [x, z] = P(sx, sy)
-      badges.push({ el, at: new THREE.Vector3(x, y, z) })
+      const [px, py] = BADGE_AT[name]
+      const [x, z] = W(px, py)
+      badges.push({ el, at: new THREE.Vector3(x, heightAt(px, py) + 1, z), px, py })
       return el
     },
     onSwitch(cb) {

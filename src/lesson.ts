@@ -36,7 +36,8 @@ const tb = (t: string) => `<span class="chip tb">${t}</span>`
 export const CARDS: Card[] = [
   {
     title: 'Chào em!',
-    body: `<p>Trên mạch ThingBot có <b>nút SW</b> (cạnh phải) và <b>đèn L1</b> (góc dưới) — chỗ có vòng cam nhấp nháy.</p>
+    body: `<p>Trên mạch ThingBot có <b>nút SW</b> (cạnh phải) và <b>đèn L1</b> (nằm sát mép dưới tấm Core, gần nút SW) — chỗ có vòng cam nhấp nháy.</p>
+      <p>Bấm <b>👁 Dưới Core</b> để thấy những con chip nằm bên dưới.</p>
       <p>Hôm nay em làm cho <b>đèn sáng khi giữ nút, tắt khi nhả nút</b>.</p>`,
     look: ['sw', 'l1'],
   },
@@ -52,7 +53,7 @@ export const CARDS: Card[] = [
   },
   {
     title: 'Giữ nút SW',
-    body: `<p>Giữ chuột lên nút SW trên mạch, hoặc giữ nút <b>✋ Giữ nút SW</b>, hoặc giữ phím <kbd>Space</kbd>.</p>
+    body: `<p>Giữ chuột lên nút SW trên mạch, hoặc giữ nút <b>✋ Giữ SW</b>, hoặc giữ phím <kbd>Space</kbd>.</p>
       <p>Nhìn dải <b>1 → 4</b> dưới mạch: dữ liệu đi từ nút vào não, qua chip PCA9685 rồi tới đèn.</p>`,
     check: 'on',
     look: ['sw'],

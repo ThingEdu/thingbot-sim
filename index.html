@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Trang chỉ có giao diện sáng: chặn trình duyệt tự tối hoá làm nền vùng khối thành đen -->
+    <meta name="color-scheme" content="only light" />
     <title>ThingBot Sim · Bài 3: Nút bấm</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link
@@ -55,7 +57,8 @@
       <section class="board-col" aria-label="Mạch ThingBot ảo">
         <div class="board-bar">
           <button id="run" class="btn btn-run" type="button">▶ Chạy</button>
-          <button id="hold" class="btn btn-hold" type="button" aria-pressed="false">✋ Giữ nút SW</button>
+          <button id="hold" class="btn btn-hold" type="button" aria-pressed="false" title="Giữ để bấm nút SW (hoặc giữ phím Space)">✋ Giữ SW</button>
+          <button id="see" class="btn btn-see" type="button" aria-pressed="false" title="Làm Core trong suốt để thấy chip bên dưới">👁 Dưới Core</button>
           <span id="status" class="status">Chưa chạy</span>
           <span class="zoom">
             <button type="button" data-zoom="out" title="Thu nhỏ" aria-label="Thu nhỏ">−</button>
@@ -92,7 +95,7 @@
           <tr><td>Servo S1…S5</td><td>PCA9685 kênh 12 … 8</td></tr>
         </tbody>
       </table>
-      <p class="muted">Bố cục mạch giống bảng Simulator của ThingBlock. Đường dây trên mạch là để em nhìn dữ liệu đi, không phải đường mạch thật.</p>
+      <p class="muted">Mạch dựng từ ảnh chụp mạch ThingBot thật (bản 2024). ESP32-C3 nằm ở mặt dưới Core; PCA9685, còi, đèn L1/L2 nằm trên Shield bên dưới Core. Đường dây trắng là để em nhìn dữ liệu đi, không phải đường mạch thật.</p>
     </dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>

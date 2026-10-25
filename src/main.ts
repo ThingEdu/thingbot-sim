@@ -276,6 +276,13 @@ function render(snap: Snapshot | null, bus: Bus) {
 }
 render(null, { reads: {}, writes: {} })
 
+const see = $('#see')
+see.addEventListener('click', () => {
+  const on = see.getAttribute('aria-pressed') !== 'true'
+  see.setAttribute('aria-pressed', String(on))
+  scene.setSeeThrough(on)
+})
+
 // --- hộp thoại & thu phóng ------------------------------------------------------------------
 const openDialog = (id: string) => {
   if (id === '#code-dialog') showCode()
