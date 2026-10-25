@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- Trang chỉ có giao diện sáng: chặn trình duyệt tự tối hoá làm nền vùng khối thành đen -->
     <meta name="color-scheme" content="only light" />
-    <title>ThingBot Sim · Bài 3: Nút bấm</title>
+    <title>ThingBot Sim</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link
       href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
@@ -16,7 +16,7 @@
   <body>
     <header class="topbar">
       <div class="brand"><span class="logo" aria-hidden="true">⬡</span> ThingBot Sim</div>
-      <div class="lesson-title"><span class="lesson-no">Bài 3</span> Nút bấm điều khiển đèn</div>
+      <nav class="lesson-pick" id="lesson-pick" aria-label="Chọn bài"></nav>
       <div class="progress" title="Số bài đã xong">
         <div class="progress-bar"><div id="progress-fill"></div></div>
         <span id="progress-count">0/10 bài</span>
@@ -68,12 +68,12 @@
         <div id="stage" class="stage">
           <div id="badges" class="badges"></div>
         </div>
-        <ol class="flow" aria-label="Dữ liệu đi từ nút tới đèn">
-          <li id="f1"><b><i>1</i>Nút SW</b><span class="v"></span><span class="t"></span></li>
-          <li id="f2"><b><i>2</i>Não</b><span class="v"></span><span class="t"></span></li>
-          <li id="f3"><b><i>3</i>Chip PCA</b><span class="v"></span><span class="t"></span></li>
-          <li id="f4"><b><i>4</i>Đèn L1</b><span class="v"></span><span class="t"></span></li>
-        </ol>
+        <ol class="flow" id="flow" aria-label="Dữ liệu đi qua mạch"></ol>
+        <div class="rhythm" id="rhythm" hidden>
+          <span class="rhythm-label" id="rhythm-label">Nhịp đèn L1</span>
+          <canvas id="rhythm-canvas" aria-label="Đèn sáng/tắt trong 4 giây vừa qua"></canvas>
+          <span class="rhythm-read" id="rhythm-read"></span>
+        </div>
       </section>
     </main>
 

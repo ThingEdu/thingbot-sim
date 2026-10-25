@@ -12,6 +12,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@scratch/scratch-blocks': pkg('scratch-blocks/src/index.ts'),
+      // Bộ chấm luật `kiểm:` của bài học ThingBlock (đặt trước để không bị alias gói chính nuốt).
+      '@thingblock/thingblock-sim/checker': pkg('thingblock-sim/src/checker/index.ts'),
       '@thingblock/thingblock-sim': pkg('thingblock-sim/src/index.ts'),
       '@thingblock/resource': pkg('thingblock-resource/src'),
       // Bảng màu khối mặc định của ThingBlock GUI (file JS thuần, không phụ thuộc gì).

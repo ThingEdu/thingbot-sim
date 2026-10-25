@@ -1,6 +1,6 @@
 /**
  * Vùng khối: đúng scratch-blocks và đúng định nghĩa khối của gói `thingbot-core` trong ThingBlock —
- * không chép, không định nghĩa lại. Mỗi bài chỉ mở vài khối trong hộp công cụ.
+ * không chép, không định nghĩa lại. Mỗi bài chỉ mở vài khối trong hộp công cụ (xem `lessons/`).
  */
 import * as ScratchBlocks from '@scratch/scratch-blocks'
 import { registerBlocks } from '@thingblock/resource/extensions/peripheral/thingbot-core/blocks'
@@ -9,113 +9,23 @@ import { registerSimGenerators } from '@thingblock/resource/extensions/periphera
 import type { WorkspaceSvg } from '@scratch/scratch-blocks'
 import { blockColors } from '@thingblock/block-colors'
 
-type Shadow = { shadow: { type: string; fields: Record<string, string | number> } }
-
-const num = (value: number): Shadow => ({ shadow: { type: 'math_number', fields: { NUM: value } } })
-
-/** Hộp công cụ của bài 3: chỉ những khối cần để "nút bật đèn". */
-const TOOLBOX = {
-  kind: 'categoryToolbox',
-  contents: [
-    {
-      kind: 'category',
-      name: 'Sự kiện',
-      categorystyle: 'events_category',
-      colour: '#FFD500',
-      secondaryColour: '#CC9900',
-      contents: [
-        { kind: 'block', type: 'event_whenarduinobegin' },
-        { kind: 'block', type: 'event_whenarduinoloop' },
-      ],
-    },
-    {
-      kind: 'category',
-      name: 'Điều khiển',
-      colour: '#FFAB19',
-      secondaryColour: '#CF8B17',
-      contents: [
-        { kind: 'block', type: 'control_if' },
-        { kind: 'block', type: 'control_if_else' },
-        {
-          kind: 'block',
-          type: 'control_wait',
-          inputs: { DURATION: { shadow: { type: 'math_positive_number', fields: { NUM: 1 } } } },
-        },
-      ],
-    },
-    {
-      kind: 'category',
-      name: 'ThingBot',
-      colour: '#6600ff',
-      secondaryColour: '#4400aa',
-      contents: [
-        { kind: 'block', type: 'thingBotC3_init' },
-        { kind: 'block', type: 'thingBotC3_switch' },
-        { kind: 'block', type: 'thingBotC3_setLed', inputs: { BRIGHTNESS: num(100) } },
-        { kind: 'block', type: 'thingBotC3_setLed', inputs: { BRIGHTNESS: num(0) } },
-      ],
-    },
-  ],
-}
-
-type BlockState = Record<string, unknown>
-
-const hat = (type: string, x: number, y: number, next?: BlockState): BlockState => ({
-  type,
-  x,
-  y,
-  ...(next ? { next: { block: next } } : {}),
-})
-
-const setLed = (brightness: number, next?: BlockState): BlockState => ({
-  type: 'thingBotC3_setLed',
-  fields: { LED: 'LED_1' },
-  inputs: { BRIGHTNESS: num(brightness) },
-  ...(next ? { next: { block: next } } : {}),
-})
-
-/** Khung ban đầu: hai khối mũ, khối khởi động ThingBot đã đặt sẵn. */
-export const STARTER = {
-  blocks: {
-    languageVersion: 0,
-    blocks: [
-      hat('event_whenarduinobegin', 30, 30, { type: 'thingBotC3_init' }),
-      hat('event_whenarduinoloop', 30, 150),
-    ],
-  },
-}
-
-/** Lời giải mẫu: nếu nút được bấm thì L1 sáng 100, không thì 0. */
-export const EXAMPLE = {
-  blocks: {
-    languageVersion: 0,
-    blocks: [
-      hat('event_whenarduinobegin', 30, 30, { type: 'thingBotC3_init' }),
-      hat('event_whenarduinoloop', 30, 150, {
-        type: 'control_if_else',
-        inputs: {
-          CONDITION: { block: { type: 'thingBotC3_switch' } },
-          SUBSTACK: { block: setLed(100) },
-          SUBSTACK2: { block: setLed(0) },
-        },
-      }),
-    ],
-  },
-}
-
 export interface BlocksApi {
   workspace: WorkspaceSvg
   /** Mã cho bộ mô phỏng, hoặc lỗi nếu có khối chưa mô phỏng được. */
   simCode(): { code: string; error?: string }
   arduinoCode(): string
   load(state: object): void
+  /** Đổi hộp công cụ khi đổi bài. */
+  setToolbox(toolbox: object): void
+  /** Khối đang chạy, kể cho trẻ bằng đúng chữ trên khối: "set led 1 100", "đợi 0.5 giây"… */
+  describe(id: string | undefined): string | null
   highlight(id: string | undefined): void
   onChange(cb: () => void): void
 }
 
 let registered = false
 
-export function createBlocks(container: HTMLElement): BlocksApi {
+export function createBlocks(container: HTMLElement, toolbox: object): BlocksApi {
   ScratchBlocks.ScratchMsgs.setLocale('vi')
   if (!registered) {
     registerBlocks(ScratchBlocks)
@@ -125,7 +35,7 @@ export function createBlocks(container: HTMLElement): BlocksApi {
   }
 
   const workspace = ScratchBlocks.inject(container, {
-    toolbox: TOOLBOX,
+    toolbox,
     theme: new ScratchBlocks.Theme('default', blockColors as never, undefined, {
       workspaceBackgroundColour: '#ffffff',
       flyoutBackgroundColour: '#f4f2ee',
@@ -172,6 +82,24 @@ export function createBlocks(container: HTMLElement): BlocksApi {
         ScratchBlocks.Events.enable()
       }
       workspace.scroll(0, 0)
+    },
+    setToolbox(next) {
+      workspace.updateToolbox(next as never)
+    },
+    describe(id) {
+      const block = id ? workspace.getBlockById(id) : null
+      if (!block) return null
+      const input = (name: string) => block.getInputTargetBlock(name)?.getFieldValue('NUM')
+      switch (block.type) {
+        case 'thingBotC3_setLed':
+          return `set led ${block.getFieldValue('LED') === 'LED_2' ? 2 : 1} ${input('BRIGHTNESS') ?? '…'}`
+        case 'control_wait':
+          return `đợi ${input('DURATION') ?? '…'} giây`
+        case 'thingBotC3_init':
+          return 'init ThingBot'
+        default:
+          return null
+      }
     },
     highlight(id) {
       if (id === highlighted) return

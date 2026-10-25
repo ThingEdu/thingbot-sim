@@ -10,8 +10,8 @@
  */
 import * as THREE from 'three'
 
-export type TraceName = 'io3' | 'sda' | 'scl' | 'ch15'
-export type PartName = 'sw' | 'esp' | 'pca' | 'l1'
+export type TraceName = 'io3' | 'sda' | 'scl' | 'ch15' | 'ch13'
+export type PartName = 'sw' | 'esp' | 'pca' | 'l1' | 'l2'
 
 export interface SceneApi {
   setSwitch(pressed: boolean): void
@@ -21,6 +21,8 @@ export interface SceneApi {
   setTrace(trace: TraceName, color: string | null): void
   highlight(parts: PartName[]): void
   addBadge(part: PartName, html: string): HTMLElement
+  /** Gỡ mọi nhãn số (khi đổi bài). */
+  clearBadges(): void
   /** Làm Core trong suốt để thấy linh kiện trên Shield bên dưới. */
   setSeeThrough(on: boolean): void
   onSwitch(cb: (pressed: boolean) => void): void
@@ -145,6 +147,12 @@ const TRACES: Record<TraceName, [number, number][]> = {
     [1000, 840],
     [1030, 840],
   ],
+  ch13: [
+    [701, 632],
+    [600, 632],
+    [600, 845],
+    [548, 845],
+  ],
 }
 /** Vị trí linh kiện (px ảnh). ESP32-C3 ở mặt dưới Core; PCA9685, còi, L1, L2 trên Shield dưới Core. */
 const AT = {
@@ -164,8 +172,9 @@ const BADGE_AT: Record<PartName, [number, number]> = {
   esp: [590, 420],
   pca: [764, 565],
   l1: [1085, 905],
+  l2: [482, 905],
 }
-const RING: Record<PartName, number> = { sw: 4.6, esp: 5, pca: 3.6, l1: 3.6 }
+const RING: Record<PartName, number> = { sw: 4.6, esp: 5, pca: 3.6, l1: 3.6, l2: 3.6 }
 
 interface Pulse {
   trace: TraceName
@@ -579,6 +588,10 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
       const [x, z] = W(px, py)
       badges.push({ el, at: new THREE.Vector3(x, heightAt(px, py) + 1, z), px, py })
       return el
+    },
+    clearBadges() {
+      for (const b of badges) b.el.remove()
+      badges.length = 0
     },
     onSwitch(cb) {
       switchCb = cb

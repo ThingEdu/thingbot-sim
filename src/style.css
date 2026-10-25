@@ -29,6 +29,9 @@ body {
   font-size: 15px;
   line-height: 1.55;
 }
+[hidden] {
+  display: none !important;
+}
 button {
   font: inherit;
   color: inherit;
@@ -67,21 +70,6 @@ kbd {
   font-size: 20px;
   vertical-align: -2px;
   margin-right: 4px;
-}
-.lesson-title {
-  flex: 1;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.lesson-no {
-  background: var(--teal);
-  color: #fff;
-  border-radius: 999px;
-  padding: 1px 10px;
-  font-size: 13px;
-  margin-right: 6px;
 }
 .progress {
   display: flex;
@@ -588,4 +576,94 @@ kbd {
 .blocks .blocklyFlyoutBackground {
   fill: #f4f2ee !important;
   fill-opacity: 1 !important;
+}
+
+/* --- chọn bài trên thanh trên ------------------------------------------------------------------ */
+.lesson-pick {
+  flex: 1;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+}
+.lesson-pick button {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 999px;
+  padding: 3px 12px 3px 4px;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lesson-pick button b {
+  background: var(--line);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0 8px;
+  font-size: 12.5px;
+}
+.lesson-pick button[aria-current='true'] {
+  border-color: var(--teal);
+  background: #e9f5f5;
+}
+.lesson-pick button[aria-current='true'] b {
+  background: var(--teal);
+  color: #fff;
+}
+.lesson-pick button.done b::after {
+  content: ' ✓';
+}
+
+/* dải 3 ô (bài 2) */
+.flow.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* --- dải nhịp đèn: đèn sáng/tắt theo thời gian ------------------------------------------------- */
+.rhythm {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px 10px;
+  background: var(--paper-2);
+  font-size: 12px;
+}
+.rhythm[hidden] {
+  display: none;
+}
+.rhythm-label {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.rhythm canvas {
+  width: 100%;
+  height: 40px;
+  display: block;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.rhythm-read {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  min-width: 9ch;
+  text-align: right;
+}
+@media (max-width: 640px) {
+  .flow.three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .flow.three li:nth-child(3)::before {
+    display: block;
+  }
+  .lesson-pick button span {
+    display: none;
+  }
 }

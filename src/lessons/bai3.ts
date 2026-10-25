@@ -5,35 +5,12 @@
  * Bộ chấm `kiểm:` của ThingBlock chưa có luật "khi giữ SW thì…", nên spike tự chấm; về sau thay bằng
  * luật trong `bai.vi.md`.
  */
-import type { PartName } from './scene'
+import { B, ctrl, ev, hat, program, setLed, STARTER, tb, toolbox } from './state'
+import type { Card, Grader, GraderChange, Lesson, Observation } from './types'
 
-export interface Observation {
-  running: boolean
-  pressed: boolean
-  /** Chương trình vừa đọc nút SW. */
-  readsSwitch: boolean
-  /** Duty kênh L1, 0..4096. */
-  duty: number
-  /** Thời gian thực, ms. */
-  now: number
-}
+const L1 = 15
 
-type Check = 'build' | 'on' | 'off' | 'half'
-
-export interface Card {
-  title: string
-  body: string
-  check?: Check
-  optional?: boolean
-  /** Linh kiện có vòng sáng chú ý trên mạch. */
-  look?: PartName[]
-}
-
-const ev = (t: string) => `<span class="chip ev">${t}</span>`
-const ctrl = (t: string) => `<span class="chip ctrl">${t}</span>`
-const tb = (t: string) => `<span class="chip tb">${t}</span>`
-
-export const CARDS: Card[] = [
+const CARDS: Card[] = [
   {
     title: 'Chào em!',
     body: `<p>Trên mạch ThingBot có <b>nút SW</b> (cạnh phải) và <b>đèn L1</b> (nằm sát mép dưới tấm Core, gần nút SW) — chỗ có vòng cam nhấp nháy.</p>
@@ -82,37 +59,40 @@ export const CARDS: Card[] = [
 const HOLD_MS = 250
 const STUCK_MS = 1200
 
-export function createLesson(onChange: (passed: ReadonlySet<Check>, hint: string | null) => void) {
-  let passed = new Set<Check>()
+function createGrader(onChange: GraderChange): Grader {
+  let passed = new Set<string>()
   let hint: string | null = null
   let since = 0
   let lastKey = ''
   let pressedOnce = false
 
   const emit = () => onChange(passed, hint)
-  const pass = (id: Check) => {
+  const pass = (id: string) => {
     if (passed.has(id)) return
     passed.add(id)
     hint = null
     emit()
   }
 
+  const reset = () => {
+    passed = new Set()
+    hint = null
+    since = 0
+    lastKey = ''
+    pressedOnce = false
+    emit()
+  }
   return {
-    /** Chương trình mới: chấm lại từ đầu. */
-    reset() {
-      passed = new Set()
-      hint = null
-      since = 0
-      lastKey = ''
-      pressedOnce = false
-      emit()
-    },
+    // Bài 3: mỗi lần chương trình đổi, chấm lại từ đầu (chương trình mới phải tự chứng minh lại).
+    restart: reset,
+    clear: reset,
     observe(o: Observation) {
       if (!o.running) return
+      const duty = o.pwm[L1]
       if (o.readsSwitch) pass('build')
       if (o.pressed) pressedOnce = true
-      const lit = o.duty > 0
-      const key = `${o.pressed}:${o.duty}`
+      const lit = duty > 0
+      const key = `${o.pressed}:${duty}`
       if (key !== lastKey) {
         lastKey = key
         since = o.now
@@ -121,7 +101,7 @@ export function createLesson(onChange: (passed: ReadonlySet<Check>, hint: string
 
       if (o.pressed && lit && held >= HOLD_MS) {
         pass('on')
-        if (o.duty >= 1500 && o.duty <= 2600) pass('half')
+        if (duty >= 1500 && duty <= 2600) pass('half')
       }
       if (!o.pressed && !lit && pressedOnce && passed.has('on') && held >= HOLD_MS) pass('off')
 
@@ -141,4 +121,29 @@ export function createLesson(onChange: (passed: ReadonlySet<Check>, hint: string
       }
     },
   }
+}
+
+export const BAI_3: Lesson = {
+  id: 'bai-3',
+  no: 3,
+  title: 'Nút bấm điều khiển đèn',
+  toolbox: toolbox([B.if, B.ifElse, B.wait], [B.init, B.switch, B.setLed(100), B.setLed(0)]),
+  starter: STARTER,
+  // Lời giải mẫu: nếu nút được bấm thì L1 sáng 100, không thì 0.
+  example: program(
+    hat('event_whenarduinobegin', 30, 30, { type: 'thingBotC3_init' }),
+    hat('event_whenarduinoloop', 30, 150, {
+      type: 'control_if_else',
+      inputs: {
+        CONDITION: { block: { type: 'thingBotC3_switch' } },
+        SUBSTACK: { block: setLed(100) },
+        SUBSTACK2: { block: setLed(0) },
+      },
+    }),
+  ),
+  cards: CARDS,
+  flow: 'button',
+  badges: ['sw', 'esp', 'pca', 'l1'],
+  done: ['on', 'off'],
+  createGrader,
 }

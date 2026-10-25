@@ -21,6 +21,9 @@
       "@scratch/scratch-blocks": [
         "../thingblock-editor-sim/packages/scratch-blocks/src/index.ts"
       ],
+      "@thingblock/thingblock-sim/checker": [
+        "../thingblock-editor-sim/packages/thingblock-sim/src/checker/index.ts"
+      ],
       "@thingblock/thingblock-sim": [
         "../thingblock-editor-sim/packages/thingblock-sim/src/index.ts"
       ],
