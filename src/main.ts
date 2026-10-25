@@ -1,11 +1,11 @@
 /**
- * Nối ba phần của bài: vùng khối (ThingBlock) → bộ mô phỏng (Web Worker) → mạch 3D + sơ đồ dòng chảy.
+ * Nối ba phần của bài: cột bài học → vùng khối (ThingBlock) → bộ mô phỏng (Web Worker) → mạch 3D và
+ * dải dòng chảy 1 → 4 dưới mạch.
  */
 import * as ScratchBlocks from '@scratch/scratch-blocks'
 import type { Snapshot } from '@thingblock/thingblock-sim'
 import { createBlocks, EXAMPLE, STARTER } from './blocks'
-import { createFlow } from './flow'
-import { createLesson, STEPS } from './lesson'
+import { CARDS, createLesson } from './lesson'
 import { createScene } from './scene'
 import type { Bus, Command, Message } from './sim-worker'
 import SimWorker from './sim-worker?worker'
@@ -13,123 +13,124 @@ import SimWorker from './sim-worker?worker'
 const SW_GPIO = 3
 const L1_CHANNEL = 15
 const STORE = 'thingbot-sim:v1'
+const HI = '#e2473b'
+const LO = '#2f6fde'
+const BUS = '#e59612'
 
-const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T
+const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T
 
-// --- lưu tiến độ (chỉ là tiện ích, hỏng thì bỏ qua) ----------------------------------------
+// --- lưu tiến độ (chỉ là tiện ích; trình duyệt chặn lưu thì vẫn chạy) -------------------------
+interface Saved {
+  done: string[]
+  workspace?: object
+  card?: number
+}
 const store = {
-  get(): { done: string[]; workspace?: object } {
+  get(): Saved {
     try {
-      return JSON.parse(localStorage.getItem(STORE) ?? '') as { done: string[]; workspace?: object }
+      const v = JSON.parse(localStorage.getItem(STORE) ?? '{}') as Partial<Saved>
+      return { ...v, done: v.done ?? [] }
     } catch {
       return { done: [] }
     }
   },
-  set(value: { done: string[]; workspace?: object }) {
+  set(value: Saved) {
     try {
       localStorage.setItem(STORE, JSON.stringify(value))
     } catch {
-      /* trình duyệt chặn lưu: vẫn chạy bình thường */
+      /* bỏ qua */
     }
   },
 }
 const saved = store.get()
 const showProgress = () => {
   const n = new Set(saved.done).size
-  $('#progress-count').textContent = `${n}/10`
+  $('#progress-count').textContent = `${n}/10 bài`
   $('#progress-fill').style.width = `${n * 10}%`
 }
 showProgress()
 
-// --- nhật ký ---------------------------------------------------------------------------------
-const logEl = $('#log')
-const log = (text: string, kind = '') => {
-  const li = document.createElement('li')
-  li.className = kind
-  const t = new Date()
-  li.innerHTML = `<time>${t.toLocaleTimeString('vi-VN', { hour12: false })}</time> ${text}`
-  logEl.prepend(li)
-  while (logEl.children.length > 30) logEl.lastChild!.remove()
-}
+// --- mạch ---------------------------------------------------------------------------------
+const scene = createScene($('#stage'), $('#badges'))
+;(['sw', 'esp', 'pca', 'l1'] as const).forEach((p, i) => scene.addBadge(p, `${i + 1}`))
 
-// --- cảnh 3D & sơ đồ --------------------------------------------------------------------------
-const scene = createScene($('#stage'), $('#tags'))
-const flow = createFlow($('#flow') as unknown as SVGSVGElement)
-const a = scene.anchors
-scene.addTag('callout', a.core).textContent = 'ThingBot Core · ESP32-C3'
-scene.addTag('callout', a.pca).textContent = 'PCA9685'
-scene.addTag('callout callout-accent', a.sw).textContent = 'Nút SW · giữ để bấm'
-scene.addTag('callout', a.l1).textContent = 'Đèn L1'
-const tagIo3 = scene.addTag('wire', a.io3)
-const tagI2c = scene.addTag('wire', a.i2c)
-const tagCh15 = scene.addTag('wire', a.ch15)
-
-// Khung cảnh thấp (máy tính bảng, màn hình nhỏ): tự ẩn tên linh kiện — sơ đồ dòng chảy đã có tên —
-// trừ khi em tự bật/tắt bằng nút ⓘ.
-let namesChosen = false
-new ResizeObserver(() => {
-  if (namesChosen) return
-  const hide = $('#stage').clientHeight < 380
-  $('#tags').classList.toggle('no-callouts', hide)
-  $('[data-view="names"]').setAttribute('aria-pressed', String(!hide))
-}).observe($('#stage'))
-// Chừa chỗ cho thanh điều khiển góc nhìn ở mép dưới.
-scene.setInset({ top: 12, right: 12, bottom: 54, left: 12 })
-
-// --- khối ------------------------------------------------------------------------------------
+// --- khối ---------------------------------------------------------------------------------
 const blocks = createBlocks($('#blocks'))
 blocks.load(saved.workspace ?? STARTER)
 const showCode = () => {
   $('#arduino-code').textContent = blocks.arduinoCode()
 }
-showCode()
 
-// --- bài học ---------------------------------------------------------------------------------
-const stepsEl = $('#steps')
-STEPS.forEach((s) => {
-  const li = document.createElement('li')
-  li.dataset.step = s.id
-  li.className = s.optional ? 'optional' : ''
-  li.textContent = s.text
-  stepsEl.appendChild(li)
-})
-const lesson = createLesson((passed, hint, done) => {
-  for (const li of stepsEl.querySelectorAll('li')) li.classList.toggle('ok', passed.has(li.dataset.step!))
+// --- bài học từng bước --------------------------------------------------------------------
+let card = Math.min(saved.card ?? 0, CARDS.length - 1)
+let passed: ReadonlySet<string> = new Set()
+const dots = $('#dots')
+CARDS.forEach(() => dots.appendChild(document.createElement('span')))
+
+const renderCard = () => {
+  const c = CARDS[card]
+  $('#step-no').textContent = `Bước ${card + 1}/${CARDS.length}${c.optional ? ' · không bắt buộc' : ''}`
+  $('#step-title').textContent = c.title
+  $('#step-body').innerHTML = c.body
+  const ok = c.check ? passed.has(c.check) : false
+  const status = $('#step-status')
+  status.hidden = !c.check
+  status.className = `step-status${ok ? ' ok' : ''}`
+  status.textContent = ok ? '✓ Làm được rồi!' : 'Đang chờ em làm…'
+  ;[...dots.children].forEach((d, i) => {
+    const check = CARDS[i].check
+    d.className = `${i === card ? 'now' : ''}${check && passed.has(check) ? ' ok' : ''}`
+  })
+  ;($('#prev') as HTMLButtonElement).disabled = card === 0
+  const next = $('#next') as HTMLButtonElement
+  next.disabled = card === CARDS.length - 1
+  next.classList.toggle('ready', ok || !c.check)
+  scene.highlight(c.look ?? [])
+  saved.card = card
+  store.set(saved)
+}
+const lesson = createLesson((p, hint) => {
+  passed = p
   const hintEl = $('#hint')
-  const wasHidden = hintEl.hidden
   hintEl.hidden = !hint
   hintEl.textContent = hint ?? ''
-  if (hint && wasHidden) hintEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  $('#done').hidden = !done
-  if (done) $('#done').scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  if (done && !saved.done.includes('bai-3')) {
+  if (p.has('on') && p.has('off') && !saved.done.includes('bai-3')) {
     saved.done.push('bai-3')
-    store.set(saved)
     showProgress()
-    log('✓ Bài 3 hoàn thành', 'ok')
   }
+  renderCard()
 })
+$('#prev').addEventListener('click', () => {
+  card = Math.max(0, card - 1)
+  renderCard()
+})
+$('#next').addEventListener('click', () => {
+  card = Math.min(CARDS.length - 1, card + 1)
+  renderCard()
+})
+renderCard()
 
-// --- mô phỏng --------------------------------------------------------------------------------
+// --- mô phỏng -----------------------------------------------------------------------------
 const worker = new SimWorker()
 const send = (c: Command) => worker.postMessage(c)
 let running = false
 let pressed = false
 let lastSnap: Snapshot | null = null
-let lastDuty = 0
 let lastPulse = { io3: 0, i2c: 0 }
 let readsPerSec = 0
 
+const runBtn = $<HTMLButtonElement>('#run')
 const statusEl = $('#status')
-const runBtn = $('#run') as HTMLButtonElement
 const setRunning = (on: boolean) => {
   running = on
   runBtn.textContent = on ? '■ Dừng' : '▶ Chạy'
-  runBtn.classList.toggle('btn-stop', on)
-  statusEl.textContent = on ? 'Đang chạy trên mạch ảo' : 'Đã dừng'
-  statusEl.className = `status${on ? ' on' : ''}`
+  runBtn.classList.toggle('stop', on)
+  statusEl.textContent = on ? 'Đang chạy' : 'Đã dừng'
+  statusEl.classList.toggle('on', on)
   if (!on) {
     blocks.highlight(undefined)
+    lastSnap = null
+    readsPerSec = 0
     render(null, { reads: {}, writes: {} })
   }
 }
@@ -137,12 +138,12 @@ const setRunning = (on: boolean) => {
 const start = () => {
   const { code, error } = blocks.simCode()
   if (error) {
-    log(`Không chạy được: ${error}`, 'err')
     statusEl.textContent = error
-    statusEl.className = 'status err'
+    statusEl.classList.remove('on')
     return
   }
   lesson.reset()
+  lastSnap = null
   send({ type: 'load', code })
   send({ type: 'input', key: `gpio${SW_GPIO}`, value: pressed ? 0 : 1 })
   send({ type: 'run' })
@@ -152,54 +153,53 @@ const stop = () => {
   send({ type: 'stop' })
   setRunning(false)
 }
+runBtn.addEventListener('click', () => (running ? stop() : start()))
 
-runBtn.addEventListener('click', () => {
-  if (running) {
-    stop()
-    log('■ Dừng chương trình')
-  } else {
-    start()
-    log('▶ Chạy chương trình trên mạch ảo')
-  }
-})
-const loadBlocks = (state: object, message: string) => {
+const loadBlocks = (state: object) => {
   blocks.load(state)
   saved.workspace = state
   store.set(saved)
-  showCode()
-  log(message)
   if (running) start()
 }
-$('#example').addEventListener('click', () => loadBlocks(EXAMPLE, 'Đã nạp khối mẫu'))
-$('#restart').addEventListener('click', () => loadBlocks(STARTER, 'Đã xoá về khung ban đầu'))
+$('#example').addEventListener('click', () => loadBlocks(EXAMPLE))
+$('#restart').addEventListener('click', () => {
+  loadBlocks(STARTER)
+  card = 0
+  renderCard()
+})
 
 let changeTimer = 0
 blocks.onChange(() => {
   window.clearTimeout(changeTimer)
   changeTimer = window.setTimeout(() => {
-    showCode()
     saved.workspace = ScratchBlocks.serialization.workspaces.save(blocks.workspace)
     store.set(saved)
-    // Khối đổi khi đang chạy: chạy lại ngay chương trình mới, như sửa mạch lúc đang cắm điện.
+    // Khối đổi khi đang chạy: chạy ngay chương trình mới.
     if (running) start()
   }, 250)
 })
 
-// Nút SW
+// Nút SW: chuột/chạm trên mạch, nút ✋, hoặc phím Space
 const setPressed = (p: boolean) => {
   if (p === pressed) return
   pressed = p
   scene.setSwitch(p)
+  $('#hold').setAttribute('aria-pressed', String(p))
   send({ type: 'input', key: `gpio${SW_GPIO}`, value: p ? 0 : 1 })
-  log(p ? 'Nút SW: <b>bấm</b> → IO3 = LOW (0 V)' : 'Nút SW: <b>nhả</b> → IO3 = HIGH (3,3 V)')
-  if (!running) render(lastSnap, { reads: {}, writes: {} })
+  if (!running) render(null, { reads: {}, writes: {} })
 }
 scene.onSwitch(setPressed)
+const hold = $('#hold')
+hold.addEventListener('pointerdown', (e) => {
+  hold.setPointerCapture(e.pointerId)
+  setPressed(true)
+})
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) hold.addEventListener(type, () => setPressed(false))
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'Space' && !e.repeat && !(e.target instanceof HTMLInputElement) && document.activeElement?.closest('#blocks') == null) {
-    e.preventDefault()
-    setPressed(true)
-  }
+  if (e.code !== 'Space' || e.repeat) return
+  if ((e.target as HTMLElement).closest('#blocks, input, textarea, dialog')) return
+  e.preventDefault()
+  setPressed(true)
 })
 window.addEventListener('keyup', (e) => {
   if (e.code === 'Space') setPressed(false)
@@ -207,95 +207,86 @@ window.addEventListener('keyup', (e) => {
 
 worker.onmessage = ({ data }: MessageEvent<Message>) => {
   if (data.type === 'error') {
-    log(`Lỗi khi chạy: ${data.message}`, 'err')
+    statusEl.textContent = `Lỗi: ${data.message}`
     setRunning(false)
     return
   }
   if (!running) return
-  const prevT = lastSnap?.t ?? 0
   const { snapshot, bus } = data
-  const dt = (snapshot.t - prevT) / 1e6
-  if (dt > 0 && prevT > 0) readsPerSec = readsPerSec * 0.8 + ((bus.reads[SW_GPIO] ?? 0) / dt) * 0.2
+  const dt = lastSnap ? (snapshot.t - lastSnap.t) / 1e6 : 0
+  if (dt > 0) readsPerSec = readsPerSec ? readsPerSec * 0.8 + ((bus.reads[SW_GPIO] ?? 0) / dt) * 0.2 : (bus.reads[SW_GPIO] ?? 0) / dt
   lastSnap = snapshot
-  if (snapshot.error) log(`Chương trình dừng: ${snapshot.error}`, 'err')
+  if (snapshot.error) statusEl.textContent = `Chương trình dừng: ${snapshot.error}`
   if (!snapshot.running && snapshot.phase === 'halted') setRunning(false)
   blocks.highlight(snapshot.block)
   render(snapshot, bus)
 }
 
+const setFlow = (id: string, value: string, tech: string, state: string) => {
+  const li = $(`#${id}`)
+  li.className = state
+  li.querySelector('.v')!.textContent = value
+  li.querySelector('.t')!.textContent = tech
+}
+
 function render(snap: Snapshot | null, bus: Bus) {
   const on = running && snap !== null
   const duty = on ? snap.pwm[L1_CHANNEL] : 0
-  const reads = on ? (bus.reads[SW_GPIO] ?? 0) : 0
-  const writes = on ? (bus.writes[L1_CHANNEL] ?? 0) : 0
+  const reads = on && (bus.reads[SW_GPIO] ?? 0) > 0
+  const writes = on && (bus.writes[L1_CHANNEL] ?? 0) > 0
   const pct = Math.round((Math.min(duty, 4095) / 4095) * 100)
   const now = performance.now()
+  const level = pressed ? LO : HI
 
   scene.setLed('L1', duty / 4096)
-  const levelColor = pressed ? '#2f6fde' : '#e2473b'
-  scene.setTrace('io3', on ? levelColor : null)
-  scene.setTrace('sda', on && writes ? '#f0a020' : null)
-  scene.setTrace('scl', on && writes ? '#f0a020' : null)
-  scene.setTrace('ch15', on ? (pct > 0 ? '#e2473b' : '#2f6fde') : null)
-
-  // Hạt dữ liệu: nút → não khi chương trình đọc nút; não → PCA → đèn khi chương trình ghi đèn.
+  scene.setTrace('io3', on ? level : null)
+  scene.setTrace('sda', writes ? BUS : null)
+  scene.setTrace('scl', writes ? BUS : null)
+  scene.setTrace('ch15', on ? (pct > 0 ? HI : LO) : null)
   if (reads && now - lastPulse.io3 > 160) {
-    scene.pulse('io3', levelColor)
+    scene.pulse('io3', level)
     lastPulse.io3 = now
   }
-  if (writes && now - lastPulse.i2c > 220) {
-    scene.pulse('sda', '#f0a020')
-    scene.pulse('scl', '#f0a020')
-    window.setTimeout(() => running && scene.pulse('ch15', pct > 0 ? '#ff6a50' : '#5b8ff0'), 380)
+  if (writes && now - lastPulse.i2c > 240) {
+    scene.pulse('sda', BUS)
+    scene.pulse('scl', BUS)
+    window.setTimeout(() => running && scene.pulse('ch15', pct > 0 ? HI : LO), 420)
     lastPulse.i2c = now
   }
 
-  tagIo3.innerHTML = `<b>IO3</b> ${pressed ? 'LOW' : 'HIGH'}`
-  tagIo3.className = `tag wire ${on ? (pressed ? 'lo' : 'hi') : 'idle'}`
-  tagI2c.innerHTML = `<b>I2C</b> ${on && writes ? `→ ${Math.min(duty, 4095)}` : '—'}`
-  tagI2c.className = `tag wire ${on && writes ? 'bus' : 'idle'}`
-  tagCh15.innerHTML = `<b>PWM</b> ${pct} %`
-  tagCh15.className = `tag wire ${on ? (pct > 0 ? 'hi' : 'lo') : 'idle'}`
+  setFlow('f1', pressed ? 'Đang bấm' : 'Không bấm', `IO3 ${pressed ? 'LOW\u00a00\u00a0V' : 'HIGH\u00a03,3\u00a0V'}`, pressed ? 'lo' : '')
+  if (!on) setFlow('f2', 'Chưa chạy', 'ESP32-C3', 'idle')
+  else if (!reads) setFlow('f2', 'Không hỏi nút', 'thiếu «read switch»', 'idle')
+  else
+    setFlow(
+      'f2',
+      pressed ? 'Thấy bấm' : 'Thấy nhả',
+      readsPerSec > 1 ? `hỏi ${Math.round(readsPerSec).toLocaleString('vi-VN')} lần/giây` : 'đang hỏi nút',
+      'active',
+    )
+  setFlow(
+    'f3',
+    on ? (writes ? `Lệnh: ${pct} %` : `Giữ lệnh: ${pct} %`) : '—',
+    on ? `I2C kênh 15 = ${Math.min(duty, 4095)}` : 'PCA9685 · I2C',
+    writes ? 'bus' : on ? '' : 'idle',
+  )
+  setFlow('f4', pct > 0 ? `SÁNG ${pct} %` : 'TẮT', `PWM ${pct} %`, pct > 0 ? 'lit' : '')
 
-  flow.update({
-    running: on,
-    pressed,
-    switchValue: reads ? pressed : null,
-    duty,
-    readActive: reads > 0,
-    writeActive: writes > 0,
-  })
-  $('#flow-rate').textContent =
-    on && readsPerSec > 1 ? `não hỏi nút ≈ ${Math.round(readsPerSec).toLocaleString('vi-VN')} lần/giây` : ''
-
-  if (on && duty !== lastDuty) {
-    log(`Đèn L1: ${Math.round((Math.min(lastDuty, 4095) / 4095) * 100)} % → <b>${pct} %</b>`)
-  }
-  lastDuty = duty
-  lesson.observe({ running: on, pressed, duty, now })
+  lesson.observe({ running: on, pressed, readsSwitch: reads, duty, now })
 }
 render(null, { reads: {}, writes: {} })
 
-// --- tab & góc nhìn ---------------------------------------------------------------------------
-for (const tab of document.querySelectorAll<HTMLButtonElement>('.tab')) {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t === tab))
-    document.querySelectorAll<HTMLElement>('.tab-body').forEach((b) => (b.hidden = b.dataset.body !== tab.dataset.tab))
-  })
+// --- hộp thoại & thu phóng ------------------------------------------------------------------
+const openDialog = (id: string) => {
+  if (id === '#code-dialog') showCode()
+  $<HTMLDialogElement>(id).showModal()
 }
-for (const btn of document.querySelectorAll<HTMLButtonElement>('[data-view]')) {
-  btn.addEventListener('click', () => {
-    const v = btn.dataset.view
-    if (v === 'left') scene.rotate(-Math.PI / 8)
-    if (v === 'right') scene.rotate(Math.PI / 8)
-    if (v === 'in') scene.zoom(1.15)
-    if (v === 'out') scene.zoom(1 / 1.15)
-    if (v === 'reset') scene.reset()
-    if (v === 'names') {
-      namesChosen = true
-      const hidden = $('#tags').classList.toggle('no-callouts')
-      btn.setAttribute('aria-pressed', String(!hidden))
-    }
-  })
+$('#show-code').addEventListener('click', () => openDialog('#code-dialog'))
+$('#show-pins').addEventListener('click', () => openDialog('#pins-dialog'))
+for (const d of document.querySelectorAll<HTMLDialogElement>('dialog')) {
+  d.querySelector('.close')!.addEventListener('click', () => d.close())
+  d.addEventListener('click', (e) => e.target === d && d.close())
 }
-log('Chào em! Ghép khối rồi bấm ▶ Chạy.')
+for (const btn of document.querySelectorAll<HTMLButtonElement>('[data-zoom]')) {
+  btn.addEventListener('click', () => scene.zoom(btn.dataset.zoom === 'in' ? 1.15 : 1 / 1.15))
+}

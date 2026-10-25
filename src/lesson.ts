@@ -1,44 +1,95 @@
 /**
- * Chấm bài 3 bằng chính bộ mô phỏng: ✓ chỉ khi đèn thật sự làm đúng lúc em giữ và nhả nút — bấm Chạy
- * không đủ. Mỗi lần chương trình đổi, kết quả chấm làm lại từ đầu.
+ * Bài 3, từng bước một như cột bài học của ThingBlock. Bước có luật chỉ được ✓ khi bộ mô phỏng thấy mạch
+ * làm đúng — bấm Chạy không đủ. Mỗi lần chương trình đổi, kết quả chấm làm lại từ đầu.
  *
- * Bộ chấm của ThingBlock (`thingblock-sim/checker`, luật `kiểm:`) chưa có luật "khi giữ SW thì…"
- * chạy được ở đây; spike tự chấm ba bước, về sau thay bằng luật `kiểm:` trong `bai.vi.md`.
+ * Bộ chấm `kiểm:` của ThingBlock chưa có luật "khi giữ SW thì…", nên spike tự chấm; về sau thay bằng
+ * luật trong `bai.vi.md`.
  */
+import type { PartName } from './scene'
+
 export interface Observation {
   running: boolean
   pressed: boolean
+  /** Chương trình vừa đọc nút SW. */
+  readsSwitch: boolean
   /** Duty kênh L1, 0..4096. */
   duty: number
   /** Thời gian thực, ms. */
   now: number
 }
 
-interface Step {
-  id: string
-  text: string
+type Check = 'build' | 'on' | 'off' | 'half'
+
+export interface Card {
+  title: string
+  body: string
+  check?: Check
   optional?: boolean
+  /** Linh kiện có vòng sáng chú ý trên mạch. */
+  look?: PartName[]
 }
 
-export const STEPS: Step[] = [
-  { id: 'run', text: 'Ghép khối vào «vòng lặp Arduino» rồi bấm ▶ Chạy.' },
-  { id: 'on', text: 'Giữ nút SW: đèn L1 sáng.' },
-  { id: 'off', text: 'Nhả nút SW: đèn L1 tắt.' },
-  { id: 'half', text: 'Thử thách: khi giữ nút, đèn chỉ sáng một nửa (≈ 50 %).', optional: true },
+const ev = (t: string) => `<span class="chip ev">${t}</span>`
+const ctrl = (t: string) => `<span class="chip ctrl">${t}</span>`
+const tb = (t: string) => `<span class="chip tb">${t}</span>`
+
+export const CARDS: Card[] = [
+  {
+    title: 'Chào em!',
+    body: `<p>Trên mạch ThingBot có <b>nút SW</b> (cạnh phải) và <b>đèn L1</b> (góc dưới) — chỗ có vòng cam nhấp nháy.</p>
+      <p>Hôm nay em làm cho <b>đèn sáng khi giữ nút, tắt khi nhả nút</b>.</p>`,
+    look: ['sw', 'l1'],
+  },
+  {
+    title: 'Ghép khối',
+    body: `<ol class="todo">
+        <li>Kéo ${ctrl('nếu … thì … nếu không thì')} vào trong ${ev('vòng lặp Arduino')}.</li>
+        <li>Đặt ${tb('read switch')} vào ô hình lục giác.</li>
+        <li>Đặt ${tb('set led 1 100')} vào chỗ <b>thì</b>, ${tb('set led 1 0')} vào chỗ <b>nếu không thì</b>.</li>
+        <li>Bấm <b>▶ Chạy</b> ở trên mạch.</li>
+      </ol>`,
+    check: 'build',
+  },
+  {
+    title: 'Giữ nút SW',
+    body: `<p>Giữ chuột lên nút SW trên mạch, hoặc giữ nút <b>✋ Giữ nút SW</b>, hoặc giữ phím <kbd>Space</kbd>.</p>
+      <p>Nhìn dải <b>1 → 4</b> dưới mạch: dữ liệu đi từ nút vào não, qua chip PCA9685 rồi tới đèn.</p>`,
+    check: 'on',
+    look: ['sw'],
+  },
+  {
+    title: 'Nhả nút',
+    body: `<p>Thả nút ra. Đèn L1 phải <b>tắt</b>.</p>
+      <p>Để ý ô <b>2</b>: não hỏi nút liên tục hàng nghìn lần mỗi giây — vì vậy đèn đổi ngay khi em nhả.</p>`,
+    check: 'off',
+    look: ['l1'],
+  },
+  {
+    title: 'Thử thách',
+    body: `<p>Làm cho đèn chỉ <b>sáng một nửa</b> khi giữ nút: đổi số trong ${tb('set led 1 100')} thành <b>50</b>, rồi giữ nút.</p>
+      <p>Ô <b>3</b> sẽ cho em thấy chip PCA9685 nhận con số nào.</p>`,
+    check: 'half',
+    optional: true,
+  },
+  {
+    title: 'Xong rồi! 🎉',
+    body: `<p>Em đã cho <b>não</b> đọc nút và ra lệnh cho <b>chip PCA9685</b> bật tắt đèn.</p>
+      <p>Muốn thử trên kit thật: mở ThingBlock, chọn bo ThingBot, ghép đúng các khối này rồi bấm <b>Nạp</b>.</p>`,
+  },
 ]
 
 const HOLD_MS = 250
 const STUCK_MS = 1200
 
-export function createLesson(onChange: (passed: Set<string>, hint: string | null, done: boolean) => void) {
-  let passed = new Set<string>()
+export function createLesson(onChange: (passed: ReadonlySet<Check>, hint: string | null) => void) {
+  let passed = new Set<Check>()
   let hint: string | null = null
   let since = 0
   let lastKey = ''
   let pressedOnce = false
 
-  const emit = () => onChange(passed, hint, passed.has('on') && passed.has('off'))
-  const pass = (id: string) => {
+  const emit = () => onChange(passed, hint)
+  const pass = (id: Check) => {
     if (passed.has(id)) return
     passed.add(id)
     hint = null
@@ -46,6 +97,7 @@ export function createLesson(onChange: (passed: Set<string>, hint: string | null
   }
 
   return {
+    /** Chương trình mới: chấm lại từ đầu. */
     reset() {
       passed = new Set()
       hint = null
@@ -56,10 +108,10 @@ export function createLesson(onChange: (passed: Set<string>, hint: string | null
     },
     observe(o: Observation) {
       if (!o.running) return
-      pass('run')
+      if (o.readsSwitch) pass('build')
       if (o.pressed) pressedOnce = true
       const lit = o.duty > 0
-      const key = `${o.pressed}:${lit}:${o.duty}`
+      const key = `${o.pressed}:${o.duty}`
       if (key !== lastKey) {
         lastKey = key
         since = o.now
@@ -73,15 +125,14 @@ export function createLesson(onChange: (passed: Set<string>, hint: string | null
       if (!o.pressed && !lit && pressedOnce && passed.has('on') && held >= HOLD_MS) pass('off')
 
       let next: string | null = null
-      if (o.pressed && !lit && held >= STUCK_MS) {
-        next =
-          'Giữ nút mà đèn chưa sáng? Khối «set led 1 …» phải nằm trong «nếu ‹read switch› thì», và độ sáng lớn hơn 0.'
+      if (!o.readsSwitch && held >= 1500) {
+        next = 'Chương trình chưa hỏi nút SW. Em đã đặt khối «read switch» vào ô lục giác của «nếu … thì» chưa?'
+      } else if (o.pressed && !lit && held >= STUCK_MS) {
+        next = 'Giữ nút mà đèn chưa sáng? Khối «set led 1 …» ở chỗ «thì» cần độ sáng lớn hơn 0.'
       } else if (!o.pressed && lit && pressedOnce && held >= STUCK_MS) {
         next = passed.has('on')
-          ? 'Nhả nút mà đèn vẫn sáng? Chương trình mới chỉ có lệnh BẬT. Thử khối «nếu … thì … nếu không thì» để thêm lệnh TẮT.'
-          : 'Đèn sáng cả khi không bấm nút. Lệnh bật đèn cần nằm bên trong khối «nếu ‹read switch› thì».'
-      } else if (!pressedOnce && passed.has('run') && held >= 2500) {
-        next = 'Giờ hãy giữ chuột lên nút đỏ SW trên mạch (hoặc giữ phím Space).'
+          ? 'Nhả nút mà đèn vẫn sáng? Chương trình mới có lệnh BẬT. Dùng «nếu … thì … nếu không thì» và đặt «set led 1 0» vào chỗ «nếu không thì».'
+          : 'Đèn sáng cả khi không bấm nút. Lệnh bật đèn cần nằm trong chỗ «thì».'
       }
       if (next !== hint) {
         hint = next
