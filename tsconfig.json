@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable",
+      "WebWorker"
+    ],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "types": [
+      "vite/client"
+    ],
+    "paths": {
+      "@scratch/scratch-blocks": [
+        "../thingblock-editor-sim/packages/scratch-blocks/src/index.ts"
+      ],
+      "@thingblock/thingblock-sim": [
+        "../thingblock-editor-sim/packages/thingblock-sim/src/index.ts"
+      ],
+      "@thingblock/resource/*": [
+        "../thingblock-editor-sim/packages/thingblock-resource/src/*"
+      ]
+    },
+    "allowJs": true,
+    "checkJs": false,
+    "useDefineForClassFields": false
+  },
+  "include": [
+    "src"
+  ]
+}

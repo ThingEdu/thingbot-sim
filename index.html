@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ThingBot Sim · Bài 3: Nút bấm</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo" aria-hidden="true">⬡</span>
+        <div>
+          <div class="brand-name">ThingBot Sim</div>
+          <div class="brand-sub">Khám phá · Hiểu · Làm</div>
+        </div>
+      </div>
+      <div class="lesson-title">
+        <span class="lesson-no">Bài 3</span>
+        <span>Nút bấm điều khiển đèn</span>
+      </div>
+      <div class="progress" title="Tiến độ 10 bài">
+        <div class="progress-label">Tiến độ <b id="progress-count">0/10</b></div>
+        <div class="progress-bar"><div id="progress-fill"></div></div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="blocks-col" aria-label="Khối lệnh">
+        <div class="toolbar">
+          <button id="run" class="btn btn-run" type="button">▶ Chạy</button>
+          <button id="example" class="btn" type="button">Xem mẫu</button>
+          <button id="restart" class="btn btn-ghost" type="button">Làm lại</button>
+          <span id="status" class="status">Chưa chạy</span>
+        </div>
+        <div id="blocks" class="blocks"></div>
+        <details class="code-view">
+          <summary>Xem code Arduino <span class="muted">(chỉ đọc — đúng mã ThingBlock sẽ nạp xuống mạch)</span></summary>
+          <pre id="arduino-code"></pre>
+        </details>
+      </section>
+
+      <section class="stage-col" aria-label="Mạch ThingBot ảo">
+          <div class="flow-card">
+            <div class="card-head">
+              <span>Dòng chảy dữ liệu</span>
+              <span id="flow-rate" class="muted"></span>
+            </div>
+            <svg id="flow" viewBox="0 0 564 132" role="img" aria-label="Sơ đồ dòng chảy: nút, ESP32-C3, PCA9685, đèn L1"></svg>
+          </div>
+
+        <div id="stage" class="stage">
+          <div id="tags" class="tags"></div>
+          <div class="controls" role="group" aria-label="Điều khiển góc nhìn">
+            <button type="button" data-view="left" title="Xoay trái">⟲</button>
+            <button type="button" data-view="right" title="Xoay phải">⟳</button>
+            <button type="button" data-view="out" title="Thu nhỏ">−</button>
+            <button type="button" data-view="in" title="Phóng to">+</button>
+            <button type="button" data-view="reset" title="Góc nhìn ban đầu">⌂</button>
+            <button type="button" data-view="names" title="Hiện / ẩn tên linh kiện" aria-pressed="true">ⓘ</button>
+            <span class="controls-hint">Giữ chuột lên nút đỏ (hoặc phím Space) để bấm SW · kéo để xoay</span>
+          </div>
+
+        </div>
+      </section>
+
+      <aside class="side-col" aria-label="Bài học">
+          <div class="lesson-card">
+            <nav class="tabs" role="tablist">
+              <button class="tab active" data-tab="lesson" role="tab">Bài học</button>
+              <button class="tab" data-tab="pinout" role="tab">Sơ đồ chân</button>
+              <button class="tab" data-tab="real" role="tab">Kit thật</button>
+            </nav>
+            <div class="tab-body" data-body="lesson">
+              <p>
+                Trên ThingBot có nút <b>SW</b> và đèn <b>L1</b>. Em hãy làm cho
+                <b>đèn sáng khi giữ nút, tắt khi nhả nút</b>.
+              </p>
+              <ol id="steps" class="steps"></ol>
+              <p id="hint" class="hint" hidden></p>
+              <p id="done" class="done" hidden>🎉 Hoàn thành bài 3! Em đã cho "não" đọc nút và ra lệnh cho đèn.</p>
+            </div>
+            <div class="tab-body" data-body="pinout" hidden>
+              <table class="pinout">
+                <thead><tr><th>Linh kiện</th><th>Nối vào</th></tr></thead>
+                <tbody>
+                  <tr><td>Nút SW</td><td>GPIO3 (nhả = HIGH, bấm = LOW)</td></tr>
+                  <tr><td>I2C</td><td>GPIO8 = SDA, GPIO9 = SCL</td></tr>
+                  <tr><td>Đèn L1 / L2</td><td>PCA9685 kênh 15 / 13</td></tr>
+                  <tr><td>Còi</td><td>PCA9685 kênh 14</td></tr>
+                  <tr><td>Motor M1…M4</td><td>PCA9685 (2,3) (4,5) (7,6) (1,0)</td></tr>
+                  <tr><td>Servo S1…S5</td><td>PCA9685 kênh 12…8</td></tr>
+                </tbody>
+              </table>
+              <p class="muted small">Bố cục cổng trên hình là tạm, chờ phần cứng xác nhận ThingBot 2027.</p>
+            </div>
+            <div class="tab-body" data-body="real" hidden>
+              <p>Làm với kit thật:</p>
+              <ol class="plain">
+                <li>Mở ThingBlock, chọn bo <b>ThingBot</b>, ghép đúng các khối như trên.</li>
+                <li>Bấm <b>Nạp</b>. Giữ nút SW trên mạch: đèn L1 phải sáng, nhả ra thì tắt.</li>
+                <li>So với mạch ảo: có giống không? Nếu khác, chụp ảnh gửi thầy cô.</li>
+              </ol>
+            </div>
+          </div>
+
+          <div class="log-card">
+            <div class="card-head"><span>Nhật ký</span></div>
+            <ul id="log" class="log"></ul>
+          </div>
+      </aside>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
