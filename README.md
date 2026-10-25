@@ -1,6 +1,6 @@
 # ThingBot Sim — 10 bài cơ bản
 
-Web mô phỏng mạch ThingBot theo bài học, kiểu Learn Arduino nhưng dùng **khối ThingBlock thật**. Bản này là spike S0 của spec `ThingBot-Sim-Web-Sample.md` v0.2, để kiểm câu hỏi "trẻ có nhìn ra dòng chảy dữ liệu từ khối hay không". Có hai bài, chọn trên thanh trên:
+Web mô phỏng mạch ThingBot theo bài học, kiểu Learn Arduino nhưng dùng **khối ThingBlock thật**. Bản này là spike S0 của spec `ThingBot-Sim-Web-Sample.md` v0.2, để kiểm câu hỏi "trẻ có nhìn ra dòng chảy dữ liệu từ khối hay không". Mười bài, chọn trên thanh trên:
 
 | Bài | Nội dung | Trên màn hình | Chấm |
 |---|---|---|---|
