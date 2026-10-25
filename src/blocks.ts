@@ -6,6 +6,14 @@ import * as ScratchBlocks from '@scratch/scratch-blocks'
 import { registerBlocks } from '@thingblock/resource/extensions/peripheral/thingbot-core/blocks'
 import { registerGenerators } from '@thingblock/resource/extensions/peripheral/thingbot-core/generator'
 import { registerSimGenerators } from '@thingblock/resource/extensions/peripheral/thingbot-core/sim'
+import { registerBlocks as registerOledBlocks } from '@thingblock/resource/extensions/peripheral/oled/blocks'
+import { registerGenerators as registerOledGenerators } from '@thingblock/resource/extensions/peripheral/oled/generator'
+import { registerSimGenerators as registerOledSim } from '@thingblock/resource/extensions/peripheral/oled/sim'
+import { registerBlocks as registerSonarBlocks } from '@thingblock/resource/extensions/peripheral/ultrasonic/blocks'
+import { registerGenerators as registerSonarGenerators } from '@thingblock/resource/extensions/peripheral/ultrasonic/generator'
+import { registerBlocks as registerPs2Blocks } from '@thingblock/resource/extensions/peripheral/ps2/blocks'
+import { registerGenerators as registerPs2Generators } from '@thingblock/resource/extensions/peripheral/ps2/generator'
+import { registerExtraSimGenerators } from './sim-extra'
 import type { WorkspaceSvg } from '@scratch/scratch-blocks'
 import { blockColors } from '@thingblock/block-colors'
 
@@ -30,9 +38,13 @@ let registered = false
 export function createBlocks(container: HTMLElement, toolbox: object): BlocksApi {
   ScratchBlocks.ScratchMsgs.setLocale('vi')
   if (!registered) {
-    registerBlocks(ScratchBlocks)
-    registerGenerators(ScratchBlocks.arduinoGenerator, ScratchBlocks.ArduinoOrder)
+    // Khối ThingBot và ba ngoại vi các bài dùng: màn OLED, cảm biến siêu âm, tay cầm PS2.
+    for (const register of [registerBlocks, registerOledBlocks, registerSonarBlocks, registerPs2Blocks]) register(ScratchBlocks)
+    for (const register of [registerGenerators, registerOledGenerators, registerSonarGenerators, registerPs2Generators])
+      register(ScratchBlocks.arduinoGenerator, ScratchBlocks.ArduinoOrder)
     registerSimGenerators(ScratchBlocks.simGenerator, ScratchBlocks.ArduinoOrder)
+    registerOledSim(ScratchBlocks.simGenerator, ScratchBlocks.ArduinoOrder)
+    registerExtraSimGenerators(ScratchBlocks.simGenerator, ScratchBlocks.ArduinoOrder)
     registered = true
   }
 
@@ -105,6 +117,22 @@ export function createBlocks(container: HTMLElement, toolbox: object): BlocksApi
           return `đợi ${input('DURATION') ?? '…'} giây`
         case 'thingBotC3_init':
           return 'init ThingBot'
+        case 'thingBotC3_setMotor':
+          return `set motor M${block.getFieldValue('MOTOR')} go ${block.getFieldValue('DIRECTION')} at ${input('SPEED') ?? '…'}`
+        case 'thingBotC3_setServoAngle':
+          return `set servo S${block.getFieldValue('SERVO')} to angle ${input('ANGLE') ?? '…'}`
+        case 'thingBotC3_moveServoAngle':
+          return `move servo S${block.getFieldValue('SERVO')} to angle ${input('ANGLE') ?? '…'}`
+        case 'oled_print':
+          return 'oled print'
+        case 'oled_refresh':
+          return 'refresh oled display'
+        case 'oled_clear':
+          return 'clear oled'
+        case 'oled_init':
+          return 'init oled'
+        case 'ps2_readData':
+          return 'read PS2 receiver data'
         default:
           return null
       }

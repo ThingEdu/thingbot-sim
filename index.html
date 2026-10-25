@@ -64,6 +64,9 @@
           <button id="run" class="btn btn-run" type="button">▶ Chạy</button>
           <button id="hold" class="btn btn-hold" type="button" aria-pressed="false" title="Giữ để bấm nút SW (hoặc giữ phím Space)">✋ Giữ SW</button>
           <button id="see" class="btn btn-see" type="button" aria-pressed="false" title="Làm Core trong suốt để thấy chip bên dưới">👁 Dưới Core</button>
+          <button id="power" class="btn btn-power" type="button" aria-pressed="false" title="Công tắc nguồn: bật để động cơ và servo có điện từ pin" hidden>🔋 Nguồn: TẮT</button>
+          <label id="sonar-wrap" class="sonar-wrap" hidden>Vật cản <input id="sonar" type="range" min="3" max="150" value="50" /> <output id="sonar-out">50 cm</output></label>
+          <button id="reset-car" class="btn" type="button" hidden>↺ Đặt lại xe</button>
           <span id="status" class="status">Chưa chạy</span>
           <span class="zoom">
             <button type="button" data-zoom="out" title="Thu nhỏ" aria-label="Thu nhỏ">−</button>
@@ -72,6 +75,12 @@
         </div>
         <div id="stage" class="stage">
           <div id="badges" class="badges"></div>
+          <div id="pad" class="pad" hidden aria-label="Tay cầm PS2 ảo">
+            <button type="button" data-pad="PSB_PAD_UP" class="up" aria-label="Lên">▲</button>
+            <button type="button" data-pad="PSB_PAD_LEFT" class="left" aria-label="Trái">◀</button>
+            <button type="button" data-pad="PSB_PAD_RIGHT" class="right" aria-label="Phải">▶</button>
+            <button type="button" data-pad="PSB_PAD_DOWN" class="down" aria-label="Xuống">▼</button>
+          </div>
         </div>
         <ol class="flow" id="flow" aria-label="Dữ liệu đi qua mạch"></ol>
         <div class="rhythm" id="rhythm" hidden>

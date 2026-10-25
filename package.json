@@ -6,10 +6,11 @@
   "description": "ThingBot Sim — web mô phỏng ThingBot theo bài học (spike bài 3: Nút bấm)",
   "license": "AGPL-3.0-only",
   "scripts": {
-    "dev": "vite",
     "build": "vite build",
-    "typecheck": "tsc --noEmit",
-    "preview": "vite preview"
+    "dev": "vite",
+    "preview": "vite preview",
+    "smoke": "node scripts/smoke-lessons.mjs && node scripts/smoke-lessons.mjs --starter",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "three": "0.180.0"

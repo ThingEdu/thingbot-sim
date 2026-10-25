@@ -818,3 +818,105 @@ kbd {
   border-color: var(--hi);
   background: #fff1ef;
 }
+.chip.op {
+  background: #59c059;
+}
+.chip.per {
+  background: #8a6bbf;
+}
+
+/* --- bài 4–10: nút nguồn, thanh vật cản, sàn xe, tay cầm ảo ------------------------------------- */
+.btn-power[aria-pressed='true'] {
+  border-color: var(--ok);
+  background: #eaf7ef;
+  color: #17723d;
+}
+.sonar-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.sonar-wrap input {
+  width: 120px;
+  accent-color: var(--orange);
+}
+.sonar-wrap output {
+  font-family: var(--mono);
+  min-width: 6ch;
+}
+.stage canvas.arena {
+  display: none;
+}
+.mode-arena .stage canvas:not(.arena) {
+  display: none !important;
+}
+.mode-arena .zoom {
+  display: none;
+}
+.mode-arena .stage canvas.arena {
+  display: block;
+}
+.mode-arena .badges {
+  display: none;
+}
+.pad {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: grid;
+  grid-template: repeat(3, 44px) / repeat(3, 44px);
+  gap: 4px;
+  z-index: 2;
+}
+.pad button {
+  border: 1.5px solid var(--line);
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 10px;
+  font-size: 18px;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+.pad button.on {
+  background: var(--orange);
+  border-color: var(--orange);
+  color: #fff;
+}
+.pad .up {
+  grid-area: 1 / 2;
+}
+.pad .left {
+  grid-area: 2 / 1;
+}
+.pad .right {
+  grid-area: 2 / 3;
+}
+.pad .down {
+  grid-area: 3 / 2;
+}
+
+/* 10 bài: bài đang mở hiện tên, các bài khác chỉ hiện số */
+.lesson-pick button {
+  padding: 3px 4px;
+}
+.lesson-pick button span {
+  display: none;
+}
+.lesson-pick button[aria-current='true'] {
+  padding-right: 12px;
+}
+.lesson-pick button[aria-current='true'] span {
+  display: inline;
+}
+.lesson-pick button.done:not([aria-current='true']) b {
+  background: #d6efe0;
+}
+
+/* thẻ tên khối dài trong cột bài học thì xuống dòng thay vì tràn ra ngoài */
+.step-body .chip {
+  white-space: normal;
+  max-width: 100%;
+}

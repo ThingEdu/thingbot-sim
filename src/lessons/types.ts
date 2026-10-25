@@ -3,7 +3,8 @@
  * và bộ chấm. Bộ chấm nhận một quan sát mỗi lần bộ mô phỏng gửi snapshot.
  */
 import type { RuleResult } from '@thingblock/thingblock-sim/checker'
-import type { PartName } from '../scene'
+import type { ArenaLayout, CarState } from '../arena'
+import type { PartName, PropName } from '../scene'
 
 export interface Card {
   title: string
@@ -34,6 +35,19 @@ export interface Observation {
   now: number
   /** Bước đang mở. */
   card: Card
+  /** Số lần đọc từng cảm biến kể từ snapshot trước. */
+  sensors: Record<string, number>
+  /** Chữ đang hiện trên OLED; `oledOn`: chương trình đã khởi động màn hình. */
+  oledText: string | null
+  oledOn: boolean
+  /** Công tắc nguồn (pin) đang bật. */
+  power: boolean
+  /** Khoảng cách vật cản trước cảm biến siêu âm, cm. */
+  sonar: number
+  /** Nút tay cầm PS2 đang giữ. */
+  pad: Record<string, boolean>
+  /** Xe trên sàn (bài 8–10). */
+  car: CarState | null
 }
 
 export type GraderChange = (passed: ReadonlySet<string>, hint: string | null) => void
@@ -48,7 +62,10 @@ export interface Grader {
   event?(type: 'pick' | 'answer', value: string): void
 }
 
-export type FlowKind = 'button' | 'blink' | 'explore'
+export type FlowKind = 'button' | 'blink' | 'explore' | 'oled' | 'servo' | 'sonar' | 'motor' | 'car' | 'ps2' | 'avoid'
+
+/** Nút điều khiển trên thanh mạch: giữ SW, công tắc nguồn, thanh kéo vật cản, tay cầm PS2. */
+export type Control = 'hold' | 'power' | 'sonar' | 'pad'
 
 export interface Lesson {
   id: string
@@ -66,6 +83,11 @@ export interface Lesson {
   flow: FlowKind
   /** Nhãn số trên mạch, theo thứ tự ô của dải dòng chảy. */
   badges: PartName[]
+  controls?: Control[]
+  /** Linh kiện gắn ngoài hiện trên mạch 3D. */
+  props?: PropName[]
+  /** Có thì sân khấu là sàn chạy xe thay cho mạch 3D. */
+  arena?: ArenaLayout
   /** Bài coi là xong khi đạt các việc này. */
   done: string[]
   createGrader(onChange: GraderChange): Grader

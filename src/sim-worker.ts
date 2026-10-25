@@ -23,6 +23,10 @@ export interface Bus {
   ons: Record<number, boolean>
   /** Số lần `loop()` đã bắt đầu, từ lúc chạy (cộng dồn). */
   loops: number
+  /** Số lần chương trình đọc từng cảm biến (khoá `analogRead`, ví dụ `sonar_0_4`, `ps2_PSB_PAD_UP`). */
+  sensors: Record<string, number>
+  /** Chữ đang hiện trên OLED (sau `refresh oled display`), hoặc null khi chương trình không có OLED. */
+  oledText: string | null
 }
 
 export type Command =
@@ -42,7 +46,7 @@ interface WorkerScope {
 }
 
 interface BoardInternals {
-  $: { digitalRead: (pin: number) => number }
+  $: { digitalRead: (pin: number) => number; analogRead: (key: number | string) => number }
   devices: { pwm?: { duty: number[]; setPWM: (ch: number, on: number, off: number) => void } }
 }
 
@@ -53,7 +57,7 @@ let session: Session | null = null
 let timer: ReturnType<typeof setInterval> | null = null
 let last = 0
 let loops = 0
-const emptyBus = (): Bus => ({ reads: {}, writes: {}, zeros: {}, ons: {}, loops })
+const emptyBus = (): Bus => ({ reads: {}, writes: {}, zeros: {}, ons: {}, sensors: {}, loops, oledText: null })
 let bus: Bus = emptyBus()
 let rules: Rule[] = []
 let lastCheck = ''
@@ -72,6 +76,11 @@ const instrument = (s: Session): void => {
     bus.reads[pin] = (bus.reads[pin] ?? 0) + 1
     return read(pin)
   }
+  const analog = board.$.analogRead
+  board.$.analogRead = (key) => {
+    bus.sensors[key] = (bus.sensors[key] ?? 0) + 1
+    return analog(key)
+  }
   const pwm = board.devices.pwm
   if (pwm) {
     const setPWM = pwm.setPWM.bind(pwm)
@@ -86,8 +95,16 @@ const instrument = (s: Session): void => {
 
 const post = (snapshot: Snapshot): void => {
   bus.loops = loops
+  bus.oledText = session ? oledText(session) : null
   scope.postMessage({ type: 'snapshot', snapshot, bus })
   bus = emptyBus()
+}
+
+// Chữ đang hiện trên OLED: SSD1306 ảo ghi chữ vào nhật ký mỗi lần `display()` (giống bộ chấm đọc).
+const oledText = (s: Session): string | null => {
+  const log = s.log
+  for (let i = log.length - 1; i >= 0; i--) if (log[i].dev === 'oled' && log[i].key === 'text') return String(log[i].value)
+  return null
 }
 
 /** Chấm luật của bài; bỏ qua lúc `setup` đang chạy dở, như Watcher của ThingBlock. */

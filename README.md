@@ -1,12 +1,27 @@
-# ThingBot Sim — bài 1 (Làm quen) + bài 2 (Đèn nhấp nháy) + bài 3 (Nút bấm)
+# ThingBot Sim — 10 bài cơ bản
 
 Web mô phỏng mạch ThingBot theo bài học, kiểu Learn Arduino nhưng dùng **khối ThingBlock thật**. Bản này là spike S0 của spec `ThingBot-Sim-Web-Sample.md` v0.2, để kiểm câu hỏi "trẻ có nhìn ra dòng chảy dữ liệu từ khối hay không". Có hai bài, chọn trên thanh trên:
 
-- **Bài 1 — Làm quen ThingBot:** không ghép khối. Bấm 13 bộ phận trên mạch (theo trang "Làm quen ThingBot" của khóa ThingBlock) để xem tên, việc và khối điều khiển; nhìn xuyên Core tìm PCA9685 và còi; 2 câu đố.
-- **Bài 2 — Đèn nhấp nháy:** vòng lặp Arduino + `set led` + `đợi`. Chấm bằng đúng luật `kiểm: L1 nhấp nháy, chu kỳ …` của ThingBlock (chạy trong worker), có thêm dải *Nhịp đèn* (đèn sáng/tắt theo thời gian) và ô *Não* đếm số vòng.
-- **Bài 3 — Nút bấm điều khiển đèn:** nút SW → IO3 → não → I2C → PCA9685 → L1.
+| Bài | Nội dung | Trên màn hình | Chấm |
+|---|---|---|---|
+| 1 | Làm quen ThingBot (không code) | 13 bộ phận bấm được, nhìn xuyên Core, 2 câu đố | tự chấm |
+| 2 | Đèn nhấp nháy | dải Nhịp đèn, đếm vòng lặp | luật `kiểm:` ThingBlock + ngưỡng sáng/tắt thấy được |
+| 3 | Nút bấm điều khiển đèn | Nút SW → IO3 → não → I2C → PCA9685 → L1 | tự chấm |
+| 4 | Màn hình OLED | màn OLED ở cổng I2C, vẽ đúng khung hình SSD1306 | luật `OLED hiện "…"` |
+| 5 | Servo quét | servo S1 có cần quay, công tắc nguồn | luật `servo S1 ở … độ` + bước quét |
+| 6 | Cảm biến khoảng cách | siêu âm (TRIG IO0, ECHO IO4) + thanh kéo vật cản | tự chấm |
+| 7 | Động cơ DC | động cơ TT + bánh ở M1, IC động cơ, công tắc nguồn | tự chấm (chiều theo bộ sinh mã) |
+| 8 | Xe đi thẳng – rẽ | sàn 3 m × 2 m, M1 trái / M2 phải, vệt đường đi | theo chuyển động xe |
+| 9 | Tay cầm điều khiển | tay cầm PS2 ảo (▲▼◀▶ hoặc phím mũi tên) | theo chuyển động xe |
+| 10 | Dự án: xe tránh vật cản | sàn có hộp, nón siêu âm, quán tính, đếm va chạm | đi 3 m không đâm |
+
+Siêu âm và PS2 chưa có bản mô phỏng trong ThingBlock: `src/sim-extra.ts` tự sinh mã mô phỏng cho hai gói này.
 
 Không nạp xuống mạch thật, không có tài khoản, không có backend.
+
+## Chạy thử tự động
+
+`npm run smoke` (cần `npm run dev` đang chạy): mở từng bài 2–10 trên Chromium không giao diện, nạp lời giải mẫu và làm thao tác của trẻ — bước đang mở phải ✓; rồi chạy khung trống — không bước nào được ✓.
 
 ## Chạy
 

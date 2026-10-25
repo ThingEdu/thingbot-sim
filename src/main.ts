@@ -6,10 +6,13 @@
 import * as ScratchBlocks from '@scratch/scratch-blocks'
 import type { Snapshot } from '@thingblock/thingblock-sim'
 import type { RuleResult } from '@thingblock/thingblock-sim/checker'
+import { createArena, type CarState } from './arena'
 import { createBlocks } from './blocks'
 import { LESSONS, type Lesson } from './lessons'
+import { motorSpeed, pct, servoAngle } from './lessons/grader'
 import type { FlowKind, Grader, Part } from './lessons/types'
 import { createScene, type TraceName } from './scene'
+import { ps2Key, PS2_BUTTONS, SONAR_KEY } from './sim-extra'
 import type { Bus, Command, Message } from './sim-worker'
 import SimWorker from './sim-worker?worker'
 
@@ -25,7 +28,7 @@ const LED_COLOR: Record<Led, string> = { L1: '#e2473b', L2: '#22a652' }
 const RHYTHM_S = 4
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T
-const IDLE_BUS: Bus = { reads: {}, writes: {}, zeros: {}, ons: {}, loops: 0 }
+const IDLE_BUS: Bus = { reads: {}, writes: {}, zeros: {}, ons: {}, sensors: {}, loops: 0, oledText: null }
 
 // --- lưu tiến độ (chỉ là tiện ích; trình duyệt chặn lưu thì vẫn chạy) -------------------------
 interface LessonSave {
@@ -36,6 +39,8 @@ interface LessonSave {
 }
 interface Saved {
   done: string[]
+  /** Công tắc nguồn trên mạch ảo (bật thì động cơ, servo có điện). */
+  power?: boolean
   current?: string
   lessons: Record<string, LessonSave>
 }
@@ -46,7 +51,7 @@ const store = {
       const lessons = v.lessons ?? {}
       // Bản cũ chỉ có bài 3 và lưu thẳng ở gốc.
       if (!v.lessons && v.workspace) lessons['bai-3'] = { workspace: v.workspace, card: v.card }
-      return { done: v.done ?? [], current: v.current, lessons }
+      return { done: v.done ?? [], current: v.current, power: v.power, lessons }
     } catch {
       return { done: [], lessons: {} }
     }
@@ -70,6 +75,7 @@ showProgress()
 // --- mạch & khối ------------------------------------------------------------------------------
 const scene = createScene($('#stage'), $('#badges'))
 const blocks = createBlocks($('#blocks'), LESSONS[0].toolbox)
+const arena = createArena($('#stage'))
 
 let lesson: Lesson = LESSONS[0]
 let grader: Grader
@@ -85,6 +91,7 @@ const renderPicker = () => {
       const b = document.createElement('button')
       b.type = 'button'
       b.innerHTML = `<b>Bài ${l.no}</b><span>${l.title}</span>`
+      b.title = `Bài ${l.no}: ${l.title}`
       b.setAttribute('aria-current', String(l === lesson))
       b.classList.toggle('done', saved.done.includes(l.id))
       b.addEventListener('click', () => l !== lesson && openLesson(l))
@@ -98,6 +105,13 @@ const FLOWS: Record<FlowKind, string[]> = {
   button: ['Nút SW', 'Não', 'Chip PCA', 'Đèn L1'],
   blink: ['Não', 'Chip PCA', 'Đèn L1'],
   explore: [],
+  oled: ['Não', 'I2C', 'Màn OLED'],
+  servo: ['Não', 'Chip PCA', 'Servo S1'],
+  sonar: ['Cảm biến', 'Não', 'Chip PCA', 'Đèn L1'],
+  motor: ['Não', 'Chip PCA', 'IC động cơ', 'Bánh M1'],
+  car: ['Não', 'Bánh trái M1', 'Bánh phải M2', 'Xe'],
+  ps2: ['Tay cầm', 'Não', 'Hai bánh', 'Xe'],
+  avoid: ['Cảm biến', 'Não', 'Hai bánh', 'Xe'],
 }
 const flowEl = $('#flow')
 const buildFlow = (kind: FlowKind) => {
@@ -210,8 +224,14 @@ const start = () => {
   rhythm.length = 0
   activeLed = lesson.cards[card].check?.startsWith('L2') ? 'L2' : 'L1'
   placeBadges()
+  if (lesson.arena) {
+    arena.reset()
+    car = arena.state()
+  }
+  carT = -1
   send({ type: 'load', code, rules: lesson.rules })
   send({ type: 'input', key: `gpio${SW_GPIO}`, value: pressed ? 0 : 1 })
+  sendInputs()
   send({ type: 'run' })
   setRunning(true)
 }
@@ -295,6 +315,7 @@ worker.onmessage = ({ data }: MessageEvent<Message>) => {
   if (snapshot.error) statusEl.textContent = `Chương trình dừng: ${snapshot.error}`
   if (!snapshot.running && snapshot.phase === 'halted') setRunning(false)
   blocks.highlight(snapshot.block)
+  if (lesson.arena) stepCar(snapshot)
   render(snapshot, bus)
 }
 
@@ -306,8 +327,26 @@ function render(snap: Snapshot | null, bus: Bus) {
   scene.setLed('L1', pwm[CH.L1] / 4096)
   scene.setLed('L2', pwm[CH.L2] / 4096)
   const readsSwitch = on && (bus.reads[SW_GPIO] ?? 0) > 0
-  if (lesson.flow === 'button') renderButton(on, pwm, bus, readsSwitch)
-  else renderBlink(snap, on, pwm, bus)
+  const props = lesson.props ?? []
+  if (props.includes('oled')) scene.setOled(on ? snap.oled : null)
+  if (props.includes('servo') && power) {
+    const a = servoAngle(pwm[12])
+    if (a !== null) scene.setServo(a)
+  }
+  if (props.includes('motor')) scene.setWheel(power ? motorSpeed(pwm, 1) : 0)
+  switch (lesson.flow) {
+    case 'button':
+      renderButton(on, pwm, bus, readsSwitch)
+      break
+    case 'blink':
+      renderBlink(snap, on, pwm, bus)
+      break
+    case 'explore':
+      break
+    default:
+      renderDevice(snap, on, pwm, bus)
+  }
+  if (lesson.arena) arena.draw()
   grader.observe({
     running: on,
     pressed,
@@ -320,6 +359,13 @@ function render(snap: Snapshot | null, bus: Bus) {
     t: snap?.t ?? 0,
     now: performance.now(),
     card: lesson.cards[card],
+    sensors: on ? bus.sensors : {},
+    oledText: on ? bus.oledText : null,
+    oledOn: on && snap.oled !== null,
+    power,
+    sonar: sonarCm(),
+    pad: { ...pad },
+    car: lesson.arena ? car : null,
   })
 }
 
@@ -486,6 +532,203 @@ function drawRhythm(tNow: number | null) {
   $('#rhythm-label').textContent = `Nhịp đèn ${activeLed}`
 }
 
+// --- bài 4–10: màn hình, servo, cảm biến, động cơ, xe --------------------------------------------
+let power = saved.power ?? false
+let sliderCm = 50
+const pad: Record<string, boolean> = {}
+let car: CarState = arena.state()
+let carT = -1
+let lastSonarSent = -1
+let lastOled: string | null = null
+/** Lần cuối chương trình đọc từng loại cảm biến (ms thực): chương trình đọc mỗi vài chục ms, còn mỗi gói
+ *  từ worker chỉ dài một khung hình, nên "đang đọc" được giữ thêm một lúc cho khỏi nhấp nháy. */
+const readAt: Record<string, number> = {}
+const readsRecently = (bus: Bus, prefix: string) => {
+  const now = performance.now()
+  if (Object.keys(bus.sensors).some((k) => k.startsWith(prefix))) readAt[prefix] = now
+  return now - (readAt[prefix] ?? -1e9) < 400
+}
+
+const sonarCm = () => (lesson.arena ? car.sonar : sliderCm)
+const sendSonar = () => {
+  const cm = Math.round(sonarCm())
+  if (cm === lastSonarSent) return
+  lastSonarSent = cm
+  send({ type: 'input', key: `adc${SONAR_KEY}`, value: cm })
+}
+function sendInputs() {
+  lastSonarSent = -1
+  sendSonar()
+  for (const b of PS2_BUTTONS) send({ type: 'input', key: `adc${ps2Key(b)}`, value: pad[b] ? 1 : 0 })
+}
+
+/** Xe chạy theo thời gian ảo của chương trình, nên nhanh/chậm khớp với các khối «đợi». */
+function stepCar(snap: Snapshot) {
+  const dt = carT < 0 ? 0 : Math.min(0.1, (snap.t - carT) / 1e6)
+  carT = snap.t
+  const on = power ? 1 : 0
+  car = arena.step(motorSpeed(snap.pwm, 1) * on, motorSpeed(snap.pwm, 2) * on, dt)
+  sendSonar()
+}
+
+const vn = (n: number, digits = 1) => n.toFixed(digits).replace('.', ',')
+const wheelText = (v: number) => (v > 0 ? `TIẾN ${pct(v)} %` : v < 0 ? `LÙI ${pct(v)} %` : 'DỪNG')
+const motion = (l: number, r: number) => {
+  if (l === 0 && r === 0) return 'Đứng yên'
+  if (l * r < 0) return l > r ? 'Xoay phải' : 'Xoay trái'
+  if (Math.abs(l - r) < 0.05) return l > 0 ? 'Đi thẳng' : 'Lùi'
+  return (l > r) === l + r > 0 ? 'Rẽ phải' : 'Rẽ trái'
+}
+const doing = (snap: Snapshot | null) => {
+  const d = blocks.describe(snap?.block)
+  return d ? `đang: ${d}` : 'ESP32-C3'
+}
+
+function renderDevice(snap: Snapshot | null, on: boolean, pwm: number[], bus: Bus) {
+  const now = performance.now()
+  const writes = on && Object.keys(bus.writes).length > 0
+  if (writes) lastWrite = now
+  const busy = on && now - lastWrite < 260
+  const brain = () => setFlow(lesson.flow === 'car' ? 'f1' : 'f2', on ? 'Đang chạy' : 'Chưa chạy', on ? doing(snap) : 'ESP32-C3', on ? 'active' : 'idle')
+  scene.setTrace('io3', null)
+  scene.setTrace('ch13', null)
+  scene.setTrace('ch15', on && lesson.flow === 'sonar' ? (pwm[CH.L1] > 0 ? HI : LO) : null)
+  scene.setTrace('sda', busy ? BUS : null)
+  scene.setTrace('scl', busy ? BUS : null)
+  if (writes && now - lastPulse.i2c > 160) {
+    scene.pulse('sda', BUS)
+    scene.pulse('scl', BUS)
+    lastPulse.i2c = now
+  }
+  const l = power ? motorSpeed(pwm, 1) : 0
+  const r = power ? motorSpeed(pwm, 2) : 0
+  const carBox = () =>
+    setFlow('f4', on ? motion(l, r) : 'Đứng yên', `đã đi ${vn(car.travelled / 100, 2)} m${car.bumps ? ` · đâm ${car.bumps} lần` : ''}`, car.touching ? 'lit' : l || r ? 'active' : '')
+  const noPower = !power ? 'Không có điện: bật 🔋 Nguồn' : ''
+
+  switch (lesson.flow) {
+    case 'oled': {
+      const text = on ? bus.oledText : null
+      if (text !== lastOled && text) {
+        scene.pulse('sda', BUS)
+        scene.pulse('scl', BUS)
+      }
+      lastOled = text
+      setFlow('f1', on ? 'Đang chạy' : 'Chưa chạy', on ? doing(snap) : 'ESP32-C3', on ? 'active' : 'idle')
+      setFlow('f2', on && snap?.oled ? 'Màn hình 0x3C' : '—', 'SDA · SCL, chung với PCA9685', on && text ? 'bus' : on ? '' : 'idle')
+      const first = (text ?? '').split('\n').filter((s) => s.trim())
+      setFlow('f3', first.length ? first.join(' / ') : on && snap?.oled ? 'Đen' : 'Tắt', `${first.length} dòng chữ`, first.length ? 'lit' : '')
+      break
+    }
+    case 'servo': {
+      const a = servoAngle(pwm[12])
+      setFlow('f1', on ? 'Đang chạy' : 'Chưa chạy', on ? doing(snap) : 'ESP32-C3', on ? 'active' : 'idle')
+      setFlow('f2', a === null ? '—' : `Xung ${pwm[12]}`, 'kênh 12 = S1 (102…512)', busy ? 'bus' : on ? '' : 'idle')
+      setFlow('f3', a === null ? 'Chưa có lệnh' : power ? `${a}°` : `${a}° · chưa quay`, a !== null && !power ? noPower : 'góc 0…180 độ', a !== null && power ? 'lit' : '')
+      break
+    }
+    case 'sonar': {
+      const cm = Math.round(sliderCm)
+      const reads = on && readsRecently(bus, 'sonar_')
+      setFlow('f1', `Vật cách ${cm} cm`, `tiếng vọng ${(cm * 58).toLocaleString('vi-VN')} µs`, on && reads ? 'lo' : '')
+      if (!on) setFlow('f2', 'Chưa chạy', 'ESP32-C3', 'idle')
+      else setFlow('f2', reads ? 'Đang đo' : 'Không hỏi cảm biến', reads ? doing(snap) : 'thiếu «ultrasonic … read distance»', reads ? 'active' : 'idle')
+      const p = pctOf(pwm[CH.L1])
+      setFlow('f3', on ? `Lệnh: ${p} %` : '—', on ? `I2C kênh 15 = ${Math.min(pwm[CH.L1], 4095)}` : 'PCA9685 · I2C', busy ? 'bus' : on ? '' : 'idle')
+      setFlow('f4', p > 0 ? `SÁNG ${p} %` : 'TẮT', `PWM ${p} %`, p > 0 ? 'lit' : '')
+      break
+    }
+    case 'motor': {
+      const v = motorSpeed(pwm, 1)
+      setFlow('f1', on ? 'Đang chạy' : 'Chưa chạy', on ? doing(snap) : 'ESP32-C3', on ? 'active' : 'idle')
+      setFlow('f2', on ? `kênh 2 = ${Math.min(pwm[2], 4095)}` : '—', on ? `kênh 3 = ${Math.min(pwm[3], 4095)}` : 'PCA9685 · I2C', busy ? 'bus' : on ? '' : 'idle')
+      setFlow('f3', !power ? 'Không có điện' : v > 0 ? 'Đẩy chiều tới' : v < 0 ? 'Đẩy chiều lùi' : 'Không đẩy', power ? 'dòng điện từ pin' : noPower, power && v ? 'active' : '')
+      setFlow('f4', power ? wheelText(v) : 'ĐỨNG YÊN', `tốc độ ${pct(v)} %`, power && v ? 'lit' : '')
+      break
+    }
+    case 'car':
+      brain()
+      setFlow('f2', wheelText(l), noPower || `kênh 2 = ${Math.min(pwm[2], 4095)} · 3 = ${Math.min(pwm[3], 4095)}`, l ? 'active' : '')
+      setFlow('f3', wheelText(r), noPower || `kênh 4 = ${Math.min(pwm[4], 4095)} · 5 = ${Math.min(pwm[5], 4095)}`, r ? 'active' : '')
+      carBox()
+      break
+    case 'ps2': {
+      const held = PS2_BUTTONS.filter((b) => pad[b]).map((b) => PAD_LABEL[b])
+      const reads = on && readsRecently(bus, 'ps2_')
+      setFlow('f1', held.length ? `Bấm ${held.join(' ')}` : 'Không bấm', reads ? 'não đang đọc bộ thu' : on ? 'não chưa đọc bộ thu' : 'bộ thu cổng PS2', held.length ? 'lo' : '')
+      brain()
+      setFlow('f3', `${pct(l)} % · ${pct(r)} %`, noPower || `M1 ${wheelText(l).toLowerCase()} · M2 ${wheelText(r).toLowerCase()}`, l || r ? 'active' : '')
+      carBox()
+      break
+    }
+    case 'avoid':
+      setFlow('f1', `Vật cách ${Math.round(car.sonar)} cm`, car.sonar < 25 ? 'GẦN!' : 'đường thoáng', car.sonar < 25 ? 'lit' : 'lo')
+      brain()
+      setFlow('f3', `${pct(l)} % · ${pct(r)} %`, noPower || `M1 ${wheelText(l).toLowerCase()} · M2 ${wheelText(r).toLowerCase()}`, l || r ? 'active' : '')
+      carBox()
+      break
+  }
+}
+
+const PAD_LABEL: Record<string, string> = { PSB_PAD_UP: '▲', PSB_PAD_DOWN: '▼', PSB_PAD_LEFT: '◀', PSB_PAD_RIGHT: '▶' }
+const KEY_PAD: Record<string, string> = { ArrowUp: 'PSB_PAD_UP', ArrowDown: 'PSB_PAD_DOWN', ArrowLeft: 'PSB_PAD_LEFT', ArrowRight: 'PSB_PAD_RIGHT' }
+const setPad = (button: string, down: boolean) => {
+  if (!!pad[button] === down) return
+  pad[button] = down
+  document.querySelector(`[data-pad="${button}"]`)?.classList.toggle('on', down)
+  send({ type: 'input', key: `adc${ps2Key(button)}`, value: down ? 1 : 0 })
+}
+for (const b of document.querySelectorAll<HTMLButtonElement>('[data-pad]')) {
+  b.addEventListener('pointerdown', (e) => {
+    b.setPointerCapture(e.pointerId)
+    setPad(b.dataset.pad!, true)
+  })
+  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(type, () => setPad(b.dataset.pad!, false))
+}
+window.addEventListener('keydown', (e) => {
+  const b = KEY_PAD[e.key]
+  if (!b || !(lesson.controls ?? []).includes('pad')) return
+  if ((e.target as HTMLElement).closest('#blocks, input, textarea, dialog')) return
+  e.preventDefault()
+  setPad(b, true)
+})
+window.addEventListener('keyup', (e) => {
+  const b = KEY_PAD[e.key]
+  if (b) setPad(b, false)
+})
+
+const powerBtn = $('#power')
+const showPower = () => {
+  powerBtn.textContent = power ? '🔋 Nguồn: BẬT' : '🔋 Nguồn: TẮT'
+  powerBtn.setAttribute('aria-pressed', String(power))
+}
+powerBtn.addEventListener('click', () => {
+  power = !power
+  saved.power = power
+  store.set(saved)
+  showPower()
+  if (!running) render(null, IDLE_BUS)
+})
+showPower()
+
+const slider = $<HTMLInputElement>('#sonar')
+slider.addEventListener('input', () => {
+  sliderCm = Number(slider.value)
+  $('#sonar-out').textContent = `${sliderCm} cm`
+  scene.setObstacle(sliderCm)
+  sendSonar()
+  if (!running) render(null, IDLE_BUS)
+})
+scene.setObstacle(sliderCm)
+
+$('#reset-car').addEventListener('click', () => {
+  arena.reset()
+  car = arena.state()
+  carT = -1
+  grader.restart()
+  arena.draw()
+})
+
 // --- bài 1: khám phá mạch -------------------------------------------------------------------
 let selected: Part | null = null
 let seeing = false
@@ -588,8 +831,21 @@ function openLesson(next: Lesson) {
   dots.replaceChildren(...next.cards.map(() => document.createElement('span')))
   placeBadges()
   buildFlow(next.flow)
+  const controls = next.controls ?? []
   $('#hold').hidden = next.flow !== 'button'
+  $('#power').hidden = !controls.includes('power')
+  $('#sonar-wrap').hidden = !controls.includes('sonar')
+  $('#pad').hidden = !controls.includes('pad')
+  $('#reset-car').hidden = !next.arena
+  $('#see').hidden = !!next.arena
   $('#rhythm').hidden = next.flow !== 'blink'
+  scene.setProps(next.props ?? [])
+  document.body.classList.toggle('mode-arena', !!next.arena)
+  if (next.arena) {
+    arena.setLayout(next.arena)
+    car = arena.state()
+  }
+  for (const b of PS2_BUTTONS) pad[b] = false
   document.title = `ThingBot Sim · Bài ${next.no}: ${next.title}`
   $('#hint').hidden = true
   renderPicker()
@@ -599,6 +855,7 @@ function openLesson(next: Lesson) {
     for (const id of mine().found ?? []) grader.event?.('pick', id)
     renderExplore()
   } else render(null, IDLE_BUS)
+  if (next.arena) requestAnimationFrame(() => arena.draw())
 }
 openLesson(LESSONS.find((l) => l.id === saved.current) ?? LESSONS[0])
 

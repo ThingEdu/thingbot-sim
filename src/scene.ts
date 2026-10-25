@@ -12,6 +12,7 @@ import * as THREE from 'three'
 
 export type TraceName = 'io3' | 'sda' | 'scl' | 'ch15' | 'ch13'
 export type PartName = 'sw' | 'esp' | 'pca' | 'l1' | 'l2'
+export type PropName = 'oled' | 'servo' | 'motor' | 'sonar'
 
 export interface SceneApi {
   setSwitch(pressed: boolean): void
@@ -27,6 +28,16 @@ export interface SceneApi {
    * Điểm bấm trên linh kiện (px ảnh). `under`: linh kiện nằm dưới Core, chỉ hiện khi nhìn xuyên Core.
    */
   addHotspot(px: number, py: number, html: string, onClick: () => void, under?: boolean): HTMLElement
+  /** Linh kiện gắn ngoài mạch mà bài cần (màn OLED, servo, động cơ + bánh, cảm biến siêu âm + vật cản). */
+  setProps(props: PropName[]): void
+  /** Khung hình OLED đang hiện (bố cục trang SSD1306), hoặc null = màn tắt. */
+  setOled(frame: { width: number; height: number; frame: Uint8Array } | null): void
+  /** Góc servo S1, 0..180 độ. */
+  setServo(deg: number): void
+  /** Tốc độ bánh M1, -1..1 (âm = lùi). */
+  setWheel(speed: number): void
+  /** Khoảng cách tới vật cản trước cảm biến siêu âm, cm. */
+  setObstacle(cm: number): void
   /** Hiện/ẩn lớp dây dữ liệu (bài khám phá không cần). */
   showWires(on: boolean): void
   /** Vòng chú ý ở một điểm (px ảnh), hoặc tắt. */
@@ -467,6 +478,119 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
   const badges: { el: HTMLElement; at: THREE.Vector3; px: number; py: number; under?: boolean }[] = []
   buildWires()
 
+
+  // --- linh kiện gắn ngoài (minh hoạ, đặt cạnh đúng cổng cắm; kích thước và khoảng cách không theo tỉ lệ) ---
+  const propGroups = {} as Record<PropName, THREE.Group>
+  const prop = (name: PropName) => {
+    const g = new THREE.Group()
+    g.visible = false
+    board.add(g)
+    propGroups[name] = g
+    return g
+  }
+  const mat = (color: number) => new THREE.MeshLambertMaterial({ color })
+  const boxAt = (g: THREE.Group, w: number, h: number, d: number, color: number, x: number, y: number, z: number) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(color))
+    m.position.set(x, y, z)
+    g.add(m)
+    return m
+  }
+  /** Dây cắm (4 sợi màu) từ cổng trên mạch tới linh kiện, px ảnh. */
+  const cable = (g: THREE.Group, from: [number, number], to: [number, number], colors = [0x222222, 0xd23c3c, 0xe8c547, 0x3c8de0]) => {
+    const [ax, az] = W(...from)
+    const [bx, bz] = W(...to)
+    const dir = new THREE.Vector2(bx - ax, bz - az)
+    const side = new THREE.Vector2(-dir.y, dir.x).normalize()
+    colors.forEach((c, i) => {
+      const o = (i - (colors.length - 1) / 2) * 0.9
+      const curve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(ax + side.x * o, 2.5, az + side.y * o),
+        new THREE.Vector3((ax + bx) / 2 + side.x * o, 5, (az + bz) / 2 + side.y * o),
+        new THREE.Vector3(bx + side.x * o, 2.5, bz + side.y * o),
+      ])
+      g.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 16, 0.35, 6), mat(c)))
+    })
+  }
+
+  // OLED 0,96" cắm cổng I2C (cạnh phải).
+  const oledGroup = prop('oled')
+  // Phóng to ~1,6 lần so với module thật để đọc được chữ trên màn hình.
+  const [ox, oz] = W(1440, 630)
+  boxAt(oledGroup, 44, 1.6, 40, 0x1f4fa8, ox, 1.6, oz)
+  boxAt(oledGroup, 39, 1.2, 22, 0x0a0d12, ox, 3, oz - 1)
+  const oledCanvas = document.createElement('canvas')
+  oledCanvas.width = 128
+  oledCanvas.height = 64
+  const oledCtx = oledCanvas.getContext('2d')!
+  oledCtx.fillStyle = '#05070a'
+  oledCtx.fillRect(0, 0, 128, 64)
+  const oledTex = new THREE.CanvasTexture(oledCanvas)
+  oledTex.magFilter = THREE.NearestFilter
+  oledTex.minFilter = THREE.LinearFilter
+  oledTex.colorSpace = THREE.SRGBColorSpace
+  const oledScreen = new THREE.Mesh(new THREE.PlaneGeometry(37, 18.5), new THREE.MeshBasicMaterial({ map: oledTex }))
+  oledScreen.rotation.x = -Math.PI / 2
+  oledScreen.position.set(ox, 3.65, oz - 1)
+  oledGroup.add(oledScreen)
+  cable(oledGroup, [1150, 630], [1195, 630])
+
+  // Servo SG90 cắm S1 (hàng chân trái): cần trắng quay quanh trục đứng.
+  const servoGroup = prop('servo')
+  const [sx, sz] = W(225, 420)
+  boxAt(servoGroup, 23, 12, 12, 0x2b62c9, sx, 6, sz)
+  boxAt(servoGroup, 32, 2, 12, 0x2b62c9, sx, 9, sz)
+  const horn = new THREE.Group()
+  horn.position.set(sx + 6, 14, sz)
+  servoGroup.add(horn)
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, 3, 20), mat(0xf4f4f4))
+  horn.add(hub)
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(18, 1.6, 4), mat(0xf4f4f4))
+  arm.position.x = 8
+  horn.add(arm)
+  cable(servoGroup, [440, 420], [290, 420], [0x6b4a2b, 0xd23c3c, 0xf08a24])
+
+  // Động cơ TT + bánh cắm M1 (cổng dưới bên trái).
+  const motorGroup = prop('motor')
+  const [mx, mz] = W(560, 1215)
+  boxAt(motorGroup, 40, 18, 20, 0xf2c230, mx + 6, 9, mz)
+  const wheel = new THREE.Group()
+  wheel.position.set(mx - 22, 17, mz)
+  motorGroup.add(wheel)
+  const tyre = new THREE.Mesh(new THREE.CylinderGeometry(17, 17, 8, 32), mat(0x222222))
+  tyre.rotation.z = Math.PI / 2
+  wheel.add(tyre)
+  for (let i = 0; i < 3; i++) {
+    const spoke = new THREE.Mesh(new THREE.BoxGeometry(8.4, 26, 3), mat(i === 0 ? 0xf08a24 : 0xf2c230))
+    spoke.rotation.x = (i * Math.PI) / 3
+    wheel.add(spoke)
+  }
+  cable(motorGroup, [550, 990], [560, 1110], [0xd23c3c, 0x222222])
+
+  // Cảm biến siêu âm HC-SR04P cắm cổng cảm biến (TRIG IO0, ECHO IO4), nhìn xuống phía dưới mạch.
+  const sonarGroup = prop('sonar')
+  const [ux, uz] = W(860, 1180)
+  boxAt(sonarGroup, 45, 2, 20, 0x2d6fb8, ux, 8, uz)
+  for (const dx of [-12, 12]) {
+    const eye = new THREE.Mesh(new THREE.CylinderGeometry(7.5, 7.5, 12, 24), mat(0xc9ced6))
+    eye.rotation.x = Math.PI / 2
+    eye.position.set(ux + dx, 10, uz + 6)
+    sonarGroup.add(eye)
+  }
+  const SONAR_SCALE = 0.55
+  const obstacle = boxAt(sonarGroup, 70, 34, 6, 0xb07a4f, ux, 17, uz + 40)
+  const beamMat = new THREE.MeshBasicMaterial({ color: 0x5fb4ff, transparent: true, opacity: 0.18, depthWrite: false })
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 24, 1, true), beamMat)
+  beam.rotation.x = Math.PI / 2
+  sonarGroup.add(beam)
+  const placeObstacle = (cm: number) => {
+    const d = Math.min(cm, 120) * SONAR_SCALE
+    obstacle.position.z = uz + 12 + d + 3
+    beam.position.set(ux, 10, uz + 12 + d / 2)
+    beam.scale.set(4 + d * 0.25, Math.max(0.1, d), 4 + d * 0.25)
+  }
+  placeObstacle(40)
+  cable(sonarGroup, [855, 990], [860, 1165])
+
   // --- tương tác ---------------------------------------------------------------------------
   const pointer = new THREE.Vector2()
   const raycaster = new THREE.Raycaster()
@@ -479,6 +603,7 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
     raycaster.setFromCamera(pointer, camera)
     return raycaster.intersectObject(swHit, false).length > 0
   }
+  let wheelSpeed = 0
   let pickCb: ((px: number, py: number) => void) | null = null
   const local = new THREE.Vector3()
   canvas.addEventListener('pointerdown', (e) => {
@@ -517,7 +642,15 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
   // --- camera: khớp khung bao của mạch ------------------------------------------------------
   const [bx0, bz0] = W(TX0, TY0)
   const [bx1, bz1] = W(TX0 + TW, TY0 + TH)
-  const corners = [bx0, bx1].flatMap((x) => [-2, 12].flatMap((y) => [bz0, bz1].map((z) => new THREE.Vector3(x, y, z))))
+  let corners: THREE.Vector3[] = []
+  const box = new THREE.Box3()
+  const fitBounds = () => {
+    box.set(new THREE.Vector3(bx0, -2, bz0), new THREE.Vector3(bx1, 12, bz1))
+    for (const g of Object.values(propGroups)) if (g.visible) box.expandByObject(g)
+    const { min, max } = box
+    corners = [min.x, max.x].flatMap((x) => [min.y, max.y].flatMap((y) => [min.z, max.z].map((z) => new THREE.Vector3(x, y, z))))
+  }
+  fitBounds()
   const tmp = new THREE.Vector3()
   const fit = () => {
     const { clientWidth: w, clientHeight: h } = container
@@ -572,6 +705,7 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
       }
       p.mesh.position.copy(tracePaths[p.trace].getPointAt(p.t))
     }
+    wheel.rotation.x += wheelSpeed * dt * 9
     const beat = 0.5 + 0.5 * Math.sin(now / 260)
     for (const ring of [...Object.values(rings), focusRing]) {
       if (!ring.visible) continue
@@ -650,6 +784,37 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
       badges.push({ el, at: new THREE.Vector3(x, heightAt(px, py) + 1, z), px, py, under })
       if (under) el.hidden = !seeThrough
       return el
+    },
+    setProps(names) {
+      for (const [name, g] of Object.entries(propGroups)) g.visible = names.includes(name as PropName)
+      fitBounds()
+    },
+    setOled(f) {
+      oledCtx.fillStyle = '#05070a'
+      oledCtx.fillRect(0, 0, 128, 64)
+      if (f) {
+        const img = oledCtx.getImageData(0, 0, 128, 64)
+        for (let y = 0; y < Math.min(64, f.height); y++)
+          for (let x = 0; x < Math.min(128, f.width); x++) {
+            if (!((f.frame[(y >> 3) * f.width + x] >> (y & 7)) & 1)) continue
+            const i = (y * 128 + x) * 4
+            img.data[i] = 150
+            img.data[i + 1] = 225
+            img.data[i + 2] = 255
+          }
+        oledCtx.putImageData(img, 0, 0)
+      }
+      oledTex.needsUpdate = true
+    },
+    setServo(deg) {
+      // 0° hướng sang phải (+x), 180° sang trái, quay ngược chiều kim đồng hồ khi nhìn từ trên.
+      horn.rotation.y = THREE.MathUtils.degToRad(THREE.MathUtils.clamp(deg, 0, 180))
+    },
+    setWheel(speed) {
+      wheelSpeed = THREE.MathUtils.clamp(speed, -1, 1)
+    },
+    setObstacle(cm) {
+      placeObstacle(cm)
     },
     showWires(on) {
       wireLayer.visible = on
