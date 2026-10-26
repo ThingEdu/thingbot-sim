@@ -37,7 +37,8 @@ const CARDS: Card[] = [
   },
   {
     title: 'Thử thách',
-    body: `<p>Cho màn OLED <b>hiện số đo</b>: trong vòng lặp thêm ${per('clear oled')}, ${per('oled print …')} (đặt khối cảm biến vào ô chữ), ${per('refresh oled display')}. Đừng quên ${per('init oled …')} trong khởi động.</p>`,
+    body: `<p>Cho màn OLED <b>hiện số đo</b>: trong vòng lặp thêm ${per('clear oled')}, ${per('oled print …')} (đặt khối cảm biến vào ô chữ), ${per('refresh oled display')}. Đừng quên ${per('init oled …')} trong khởi động.</p>
+      <p>Rồi kéo thanh <b>Vật cản</b>: số trên màn hình phải đổi theo.</p>`,
     check: 'oled',
     optional: true,
   },
@@ -77,14 +78,15 @@ export const BAI_6: Lesson = {
     track(o, run) {
       if (reads(o).length) run.seen.read = true
       if (reads(o).some((k) => k !== SONAR_KEY)) run.seen.wrongPins = true
+      // Bước OLED: màn hình phải hiện đúng số đo ở ít nhất hai khoảng cách khác nhau (in chữ "50" cố định không tính).
+      const cm = String(Math.trunc(o.sonar))
+      if ((o.oledText ?? '').split(/\s+/).includes(cm) && !String(run.seen.shown ?? '').split(',').includes(cm))
+        run.seen.shown = `${run.seen.shown ?? ''},${cm}`
     },
     checks: {
       near: { when: (o, run) => run.seen.read === true && o.sonar < NEAR && o.pwm[L1] > 0 },
       far: { when: (o, run) => run.passed.has('near') && run.seen.read === true && o.sonar > NEAR + 3 && o.pwm[L1] === 0 },
-      oled: {
-        when: (o) => o.sonar > 0 && (o.oledText ?? '').split(/\s+/).includes(String(Math.trunc(o.sonar))),
-        hold: 0,
-      },
+      oled: { when: (_o, run) => String(run.seen.shown ?? '').split(',').filter(Boolean).length >= 2, hold: 0 },
     },
     hint(o, run) {
       if (run.elapsed < 1_500_000) return null
@@ -95,6 +97,7 @@ export const BAI_6: Lesson = {
       if (o.card.check === 'oled') {
         if (!o.oledOn) return 'Màn hình chưa khởi động: thêm «init oled …» vào khi Arduino khởi động.'
         if (!o.oledText) return 'Màn hình vẫn đen: thêm «refresh oled display» sau «oled print».'
+        if (String(run.seen.shown ?? '').split(',').filter(Boolean).length === 1) return 'Kéo thanh Vật cản sang chỗ khác: số trên màn hình phải đổi theo.'
         return null
       }
       if (o.sonar < NEAR && !lit) return 'Vật ở gần mà đèn chưa sáng: chỗ «thì» cần «set led 1 100».'

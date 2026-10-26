@@ -137,7 +137,10 @@ let answered: Record<string, string> = {}
 $('#step-body').addEventListener('click', (e) => {
   const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-answer]')
   if (!b) return
-  answered[b.dataset.answer!.split(':')[0]] = b.dataset.answer!
+  const q = b.dataset.answer!.split(':')[0]
+  // Đã trả lời đúng thì khoá câu hỏi: bấm tiếp không đổi được kết quả.
+  if (passed.has(q)) return
+  answered[q] = b.dataset.answer!
   grader.event?.('answer', b.dataset.answer!)
 })
 const renderCard = () => {
@@ -194,16 +197,19 @@ let running = false
 let pressed = false
 let lastSnap: Snapshot | null = null
 let lastRules: RuleResult[] | null = null
+/** Số lần chạy hiện tại: thư của worker mang số khác là của lần chạy trước, bỏ qua. */
+let runId = 0
 const lastPulse = { io3: 0, i2c: 0 }
 let readsPerSec = 0
 
 const runBtn = $<HTMLButtonElement>('#run')
 const statusEl = $('#status')
-const setRunning = (on: boolean) => {
+/** `reason`: vì sao chương trình dừng (lỗi), hiện thay cho "Đã dừng" để trẻ đọc được. */
+const setRunning = (on: boolean, reason?: string) => {
   running = on
   runBtn.textContent = on ? '■ Dừng' : '▶ Chạy'
   runBtn.classList.toggle('stop', on)
-  statusEl.textContent = on ? 'Đang chạy' : 'Đã dừng'
+  statusEl.textContent = on ? 'Đang chạy' : (reason ?? 'Đã dừng')
   statusEl.classList.toggle('on', on)
   if (!on) {
     blocks.highlight(undefined)
@@ -231,7 +237,8 @@ const start = () => {
     car = arena.state()
   }
   carT = -1
-  send({ type: 'load', code, rules: lesson.rules })
+  runId++
+  send({ type: 'load', code, rules: lesson.rules, run: runId })
   send({ type: 'input', key: `gpio${SW_GPIO}`, value: pressed ? 0 : 1 })
   sendInputs()
   send({ type: 'run' })
@@ -265,6 +272,7 @@ let changeTimer = 0
 blocks.onChange(() => {
   window.clearTimeout(changeTimer)
   changeTimer = window.setTimeout(() => {
+    changeTimer = 0
     mine().workspace = ScratchBlocks.serialization.workspaces.save(blocks.workspace)
     store.set(saved)
     // Khối đổi khi đang chạy: chạy ngay chương trình mới.
@@ -299,9 +307,9 @@ window.addEventListener('keyup', (e) => {
 })
 
 worker.onmessage = ({ data }: MessageEvent<Message>) => {
+  if (data.run !== runId) return
   if (data.type === 'error') {
-    statusEl.textContent = `Lỗi: ${data.message}`
-    setRunning(false)
+    setRunning(false, `Lỗi: ${data.message}`)
     return
   }
   if (!running) return
@@ -314,8 +322,10 @@ worker.onmessage = ({ data }: MessageEvent<Message>) => {
   const reads = bus.reads[SW_GPIO] ?? 0
   if (dt > 0) readsPerSec = readsPerSec ? readsPerSec * 0.8 + (reads / dt) * 0.2 : reads / dt
   lastSnap = snapshot
-  if (snapshot.error) statusEl.textContent = `Chương trình dừng: ${snapshot.error}`
-  if (!snapshot.running && snapshot.phase === 'halted') setRunning(false)
+  if (!snapshot.running && snapshot.phase === 'halted') {
+    setRunning(false, snapshot.error ? `Chương trình dừng: ${snapshot.error}` : 'Chương trình đã chạy xong')
+    return
+  }
   blocks.highlight(snapshot.block)
   if (lesson.arena) stepCar(snapshot)
   render(snapshot, bus)
@@ -808,6 +818,12 @@ function placeBadges() {
 
 function openLesson(next: Lesson) {
   if (running) stop()
+  // Sửa khối chưa kịp lưu (đang chờ 250 ms) thuộc về bài cũ: lưu ngay trước khi đổi bài.
+  if (changeTimer) {
+    window.clearTimeout(changeTimer)
+    changeTimer = 0
+    if (lesson.flow !== 'explore') mine().workspace = ScratchBlocks.serialization.workspaces.save(blocks.workspace)
+  }
   lesson = next
   saved.current = next.id
   passed = new Set()
@@ -826,7 +842,13 @@ function openLesson(next: Lesson) {
   scene.showWires(!explore)
   if (!explore) {
     blocks.setToolbox(next.toolbox)
-    blocks.load(mine().workspace ?? next.starter)
+    try {
+      blocks.load(mine().workspace ?? next.starter)
+    } catch (e) {
+      console.warn('openLesson: bài đã lưu không đọc được, mở khung trống', next.id, e)
+      mine().workspace = undefined
+      blocks.load(next.starter)
+    }
     blocks.resize()
   }
   card = Math.min(mine().card ?? 0, next.cards.length - 1)

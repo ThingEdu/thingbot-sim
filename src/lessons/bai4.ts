@@ -99,7 +99,7 @@ export const BAI_4: Lesson = {
       if (run.elapsed < 1_000_000) return null
       if (!o.oledOn) return 'Màn hình chưa được khởi động: thêm khối «init oled width 128 height 64…» trước khối «oled print».'
       if (!o.oledText) return 'Màn hình vẫn đen: chữ mới nằm trong bộ nhớ. Thêm «refresh oled display» sau khối «oled print».'
-      if (/[^\x20-\x7e\n]/.test(o.oledText)) return 'Màn hình không có chữ có dấu: viết không dấu, ví dụ "Xin chao".'
+      if (/[^\x20-\x7e\r\n]/.test(o.oledText)) return 'Màn hình không có chữ có dấu: viết không dấu, ví dụ "Xin chao".'
       const wanted = o.card.check === 'two' ? [R_HELLO, R_TB] : o.card.check === 'hello' ? [R_HELLO] : []
       for (const r of wanted) {
         const res = ruleResult(RULES, o, r)

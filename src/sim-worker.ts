@@ -30,15 +30,19 @@ export interface Bus {
 }
 
 export type Command =
-  | { type: 'load'; code: string; rules?: string[] }
+  | { type: 'load'; code: string; rules?: string[]; run: number }
   | { type: 'run' }
   | { type: 'stop' }
   | { type: 'input'; key: string; value: number }
 
-export type Message =
+/** Mỗi thư mang số lần chạy (`run` của lệnh `load`) để trang bỏ được thư còn sót của lần chạy trước. */
+export type Message = { run: number } & (
   | { type: 'snapshot'; snapshot: Snapshot; bus: Bus }
   | { type: 'check'; results: RuleResult[] }
   | { type: 'error'; message: string }
+)
+
+type Body = Message extends infer M ? (M extends { run: number } ? Omit<M, 'run'> : never) : never
 
 interface WorkerScope {
   postMessage(message: Message): void
@@ -61,6 +65,14 @@ const emptyBus = (): Bus => ({ reads: {}, writes: {}, zeros: {}, ons: {}, sensor
 let bus: Bus = emptyBus()
 let rules: Rule[] = []
 let lastCheck = ''
+let lastCheckLen = -1
+let lastCheckAt = 0
+let run = 0
+let oledCursor = 0
+let oledShown: string | null = null
+const send = (body: Body): void => scope.postMessage({ ...body, run } as Message)
+/** Chấm luật tối đa mỗi CHECK_MS: chấm duyệt cả nhật ký, nên không làm mỗi khung hình. */
+const CHECK_MS = 200
 
 const instrument = (s: Session): void => {
   const internals = s as unknown as { board: BoardInternals; runner: { program: { loop: () => unknown } } }
@@ -96,26 +108,34 @@ const instrument = (s: Session): void => {
 const post = (snapshot: Snapshot): void => {
   bus.loops = loops
   bus.oledText = session ? oledText(session) : null
-  scope.postMessage({ type: 'snapshot', snapshot, bus })
+  send({ type: 'snapshot', snapshot, bus })
   bus = emptyBus()
 }
 
 // Chữ đang hiện trên OLED: SSD1306 ảo ghi chữ vào nhật ký mỗi lần `display()` (giống bộ chấm đọc).
+// Nhật ký chỉ nối thêm, nên chỉ đọc phần mới từ lần trước.
 const oledText = (s: Session): string | null => {
   const log = s.log
-  for (let i = log.length - 1; i >= 0; i--) if (log[i].dev === 'oled' && log[i].key === 'text') return String(log[i].value)
-  return null
+  for (; oledCursor < log.length; oledCursor++) {
+    const e = log[oledCursor]
+    if (e.dev === 'oled' && e.key === 'text') oledShown = String(e.value)
+  }
+  return oledShown
 }
 
 /** Chấm luật của bài; bỏ qua lúc `setup` đang chạy dở, như Watcher của ThingBlock. */
 const check = (s: Session): void => {
   if (!rules.length) return
   if (s.snapshot().phase === 'setup' && !s.sleeping) return
+  const now = performance.now()
+  if (s.log.length === lastCheckLen || now - lastCheckAt < CHECK_MS) return
+  lastCheckLen = s.log.length
+  lastCheckAt = now
   const results = evaluateLogRules(rules, s.log)
   const key = JSON.stringify(results)
   if (key === lastCheck) return
   lastCheck = key
-  scope.postMessage({ type: 'check', results })
+  send({ type: 'check', results })
 }
 
 const tick = (): void => {
@@ -127,7 +147,7 @@ const tick = (): void => {
     post(session.tick(elapsed))
     check(session)
   } catch (e) {
-    scope.postMessage({ type: 'error', message: e instanceof Error ? e.message : String(e) })
+    send({ type: 'error', message: e instanceof Error ? e.message : String(e) })
     session.running = false
   }
 }
@@ -135,6 +155,11 @@ const tick = (): void => {
 scope.onmessage = ({ data }) => {
   switch (data.type) {
     case 'load':
+      run = data.run
+      oledCursor = 0
+      oledShown = null
+      lastCheckLen = -1
+      lastCheckAt = 0
       try {
         session = new Session(data.code)
         loops = 0
@@ -145,7 +170,7 @@ scope.onmessage = ({ data }) => {
         post(session.snapshot())
       } catch (e) {
         session = null
-        scope.postMessage({ type: 'error', message: e instanceof Error ? e.message : String(e) })
+        send({ type: 'error', message: e instanceof Error ? e.message : String(e) })
       }
       break
     case 'run':

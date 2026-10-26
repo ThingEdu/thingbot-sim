@@ -1,7 +1,8 @@
 /**
  * Bài 10 — Dự án: xe tự tránh vật cản. Ghép bài 6 (siêu âm) với bài 8 (hai bánh): vật gần thì xoay, không
  * thì đi thẳng — chương trình "tự lái" của bài R4U trên robot.edu.vn (≈ FanRoc mini).
- * Chấm: xe tự đi được 3 m trên sàn có vật cản mà không đâm lần nào.
+ * Chấm: xe tự đi được 3 m mà không đâm lần nào, có ít nhất 2 lần xoay né (hai bánh ngược chiều), và đã
+ * ra xa chỗ xuất phát ít nhất 1 m — chạy vòng tròn quanh chỗ xuất phát (bán kính ~26 cm) không tính.
  *
  * Ngưỡng 25 cm (bài R4U dùng 15–20 cm cho xe thật): thử 300 lần với hướng xuất phát và nhịp vòng lặp
  * lệch ngẫu nhiên, ngưỡng 25 ở tốc độ 50 không trượt lần nào, còn 20 cm trượt ~2 % vì xe cần chỗ để
@@ -16,6 +17,9 @@ import type { Card, Lesson } from './types'
 const BUZZER = 14
 const GOAL_CM = 300
 const NEAR = 25
+/** Phải ra xa chỗ xuất phát ít nhất chừng này (cm). */
+const FAR_CM = 100
+const MIN_DODGES = 2
 const lessThan25 = { ...B.lessThan, inputs: { OPERAND1: { shadow: { type: 'text', fields: { TEXT: '' } } }, OPERAND2: { shadow: { type: 'text', fields: { TEXT: String(NEAR) } } } } }
 
 const CARDS: Card[] = [
@@ -40,7 +44,7 @@ const CARDS: Card[] = [
     title: 'Nhanh hơn thì sao?',
     body: `<p>Đổi tốc độ đi thẳng lên <b>80</b> rồi bấm Chạy vài lần. Xe có hay đâm hơn không?</p>
       <p>Thử chỉnh ngưỡng ${op('… < 25')} và tốc độ xoay để tìm cặp số chạy an toàn nhất. Ghi lại các lần thử!</p>
-      <p class="muted">Xe càng nhanh thì càng cần thấy vật từ xa hơn — và càng dễ quệt hông khi lách qua góc hộp.</p>`,
+      <p class="muted">Xe càng nhanh thì càng cần thấy vật từ xa hơn: cảm biến chỉ nhìn thẳng phía trước, nên lách qua góc hộp dễ đâm hông.</p>`,
   },
   {
     title: 'Thử thách: còi báo',
@@ -89,9 +93,26 @@ export const BAI_10: Lesson = {
     track(o, run) {
       if (o.sensors[SONAR_KEY]) run.seen.read = true
       if (o.car && o.car.sonar < NEAR + 5 && o.pwm[BUZZER] > 0) run.seen.beep = true
+      if (o.car) {
+        const d = Math.hypot(o.car.x - OBSTACLE_COURSE.start.x, o.car.y - OBSTACLE_COURSE.start.y)
+        if (d >= FAR_CM) run.seen.far = true
+        // một lần né = một lần chuyển sang xoay tại chỗ (hai bánh ngược chiều)
+        const spinning = motorSpeed(o.pwm, 1) * motorSpeed(o.pwm, 2) < 0
+        if (spinning && !run.seen.spinning) run.seen.dodges = Number(run.seen.dodges ?? 0) + 1
+        run.seen.spinning = spinning
+      }
     },
     checks: {
-      avoid: { when: (o, run) => run.seen.read === true && !!o.car && o.car.travelled >= GOAL_CM && o.car.bumps === 0, hold: 0 },
+      avoid: {
+        when: (o, run) =>
+          run.seen.read === true &&
+          run.seen.far === true &&
+          Number(run.seen.dodges ?? 0) >= MIN_DODGES &&
+          !!o.car &&
+          o.car.travelled >= GOAL_CM &&
+          o.car.bumps === 0,
+        hold: 0,
+      },
       beep: { when: (_o, run) => run.passed.has('avoid') && run.seen.beep === true, hold: 0 },
     },
     hint(o, run) {
@@ -106,6 +127,10 @@ export const BAI_10: Lesson = {
       if (car.bumps > 0)
         return 'Xe đâm vào vật! Tăng ngưỡng (ví dụ 30 cm) hoặc giảm tốc độ, rồi bấm Chạy lại — xe sẽ về chỗ xuất phát.'
       if (car.travelled < 30 && car.turned > 540) return 'Xe cứ xoay tại chỗ: chỗ «nếu không thì» cần cho cả M1 và M2 «forward».'
+      if (o.card.check === 'avoid' && car.travelled >= GOAL_CM && !run.seen.far)
+        return 'Xe cứ đi vòng quanh chỗ xuất phát: cho hai bánh cùng tốc độ để xe đi thẳng qua sàn, chỉ xoay khi gặp vật.'
+      if (o.card.check === 'avoid' && car.travelled >= GOAL_CM && Number(run.seen.dodges ?? 0) < MIN_DODGES)
+        return 'Xe chưa né vật nào: chỗ «thì» cho M1 «forward», M2 «backward» để xe xoay tại chỗ khi gặp vật.'
       if (o.card.check === 'beep' && run.elapsed > 5_000_000 && !run.seen.beep)
         return 'Xe tránh mà chưa kêu: thêm «play note C octave 5 for 0.25 beats» vào chỗ «thì».'
       return null

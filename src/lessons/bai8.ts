@@ -81,7 +81,8 @@ export const BAI_8: Lesson = {
       straight: {
         when: (o) => !!o.car && o.car.travelled >= 40 && o.car.turned <= 15 && stopped(o.pwm),
       },
-      turn: { when: (o) => !!o.car && o.car.turned >= 70 && stopped(o.pwm) },
+      // Xoay tại chỗ (hai bánh ngược chiều) rồi dừng, tổng góc khoảng một góc vuông (cộng cả đoạn đi thẳng).
+      turn: { when: (o, run) => !!o.car && run.seen.spun === true && o.car.turned >= 65 && o.car.turned <= 130 && stopped(o.pwm) },
       square: {
         when: (o, run) =>
           !!o.car &&
@@ -106,8 +107,13 @@ export const BAI_8: Lesson = {
         if (car.turned > 15) return 'Xe bị lệch: hai bánh cần cùng chiều «forward» và cùng tốc độ.'
         if (run.elapsed > 4_000_000 && !(l === 0 && r === 0)) return 'Xe chưa dừng: sau «đợi 2 giây», đặt tốc độ 0 cho cả M1 và M2.'
       }
-      if (o.card.check === 'turn' && run.elapsed > 4_000_000 && !run.seen.spun)
-        return 'Muốn xoay tại chỗ: M1 «forward», M2 «backward» (hoặc ngược lại), rồi đợi một chút.'
+      if (o.card.check === 'turn' && run.elapsed > 4_000_000) {
+        if (!run.seen.spun) return 'Muốn xoay tại chỗ: M1 «forward», M2 «backward» (hoặc ngược lại), rồi đợi một chút.'
+        if (l === 0 && r === 0 && car.turned > 130)
+          return `Xe xoay khoảng ${Math.round(car.turned)} độ — quá một góc vuông. Giảm số trong khối «đợi» sau lệnh xoay (thử 0.35).`
+        if (l === 0 && r === 0 && car.turned < 65)
+          return `Xe mới xoay khoảng ${Math.round(car.turned)} độ. Tăng số trong khối «đợi» sau lệnh xoay.`
+      }
       return null
     },
   }),

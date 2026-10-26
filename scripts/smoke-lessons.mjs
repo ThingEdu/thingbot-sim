@@ -83,6 +83,35 @@ const CASES = {
   'bai-10': [1, async (p) => [await p.waitForTimeout(15000), await flow(p)]],
 }
 
+// Chương trình "của trẻ" (đúng và sai cố ý) cho các bước dễ chấm nhầm: [bài, bước, khối, phải ✓?, giây chờ]
+const num = (v) => ({ shadow: { type: 'math_number', fields: { NUM: v } } })
+const chain = (...bs) => bs.reduceRight((next, b) => ({ ...b, ...(next ? { next: { block: next } } : {}) }), undefined)
+const motor = (m, dir, v) => ({ type: 'thingBotC3_setMotor', fields: { MOTOR: String(m), DIRECTION: dir }, inputs: { SPEED: num(v) } })
+const wait = (s) => ({ type: 'control_wait', inputs: { DURATION: { shadow: { type: 'math_positive_number', fields: { NUM: s } } } } })
+const sonar = { type: 'ultrasonic_readDistance', fields: { TRIG: 0, ECHO: 4, UNIT: 'CM' } }
+const lt = (a, b) => ({ type: 'operator_lt', inputs: { OPERAND1: { shadow: { type: 'text', fields: { TEXT: '' } }, block: a }, OPERAND2: { shadow: { type: 'text', fields: { TEXT: String(b) } } } } })
+const prog = (setup, loop) => ({
+  blocks: {
+    languageVersion: 0,
+    blocks: [
+      { type: 'event_whenarduinobegin', x: 30, y: 30, next: { block: chain({ type: 'thingBotC3_init' }, ...setup) } },
+      { type: 'event_whenarduinoloop', x: 30, y: 500, ...(loop ? { next: { block: loop } } : {}) },
+    ],
+  },
+})
+const spin = (t) => prog([motor(1, 'forward', 0), motor(1, 'forward', 50), motor(2, 'backward', 50), wait(t), motor(1, 'forward', 0), motor(2, 'forward', 0)])
+const KID = {
+  'bai-8 xoay 0,35 s': ['bai-8', 2, spin(0.35), true, 3000],
+  'bai-8 xoay 1 s (quá)': ['bai-8', 2, spin(1), false, 5000],
+  'bai-10 chạy vòng tròn': [
+    'bai-10',
+    1,
+    prog([], chain({ type: 'control_if_else', inputs: { CONDITION: { block: lt(sonar, 25) }, SUBSTACK: { block: chain(motor(1, 'forward', 50), motor(2, 'backward', 50)) }, SUBSTACK2: { block: chain(motor(1, 'forward', 50), motor(2, 'forward', 30)) } } }, wait(0.05))),
+    false,
+    16000,
+  ],
+}
+
 const browser = await chromium.launch()
 const starter = process.argv.includes('--starter')
 const only = process.argv.slice(2).filter((a) => !a.startsWith('--'))
@@ -112,5 +141,24 @@ for (const [id, [card, script]] of Object.entries(CASES)) {
   console.log(ok ? '    ĐẠT' : '    KHÔNG ĐẠT')
   await page.close()
 }
+if (!starter && !only.length)
+  for (const [name, [id, card, workspace, pass, ms]] of Object.entries(KID)) {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 640 } })
+    const errors = []
+    page.on('pageerror', (e) => errors.push(e.message))
+    await page.addInitScript(
+      ([id, card, workspace]) => localStorage.setItem('thingbot-sim:v1', JSON.stringify({ done: [], current: id, power: true, lessons: { [id]: { card, workspace } } })),
+      [id, card, workspace],
+    )
+    await page.goto(URL)
+    await page.waitForTimeout(1200)
+    await page.click('#run')
+    await page.waitForTimeout(ms)
+    const s = await state(page)
+    const ok = s.status.startsWith('✓') === pass && !errors.length
+    if (!ok) bad++
+    console.log(`\n== ${name} · ${s.dots}  ${s.status}${s.hint ? `\n    gợi ý: ${s.hint}` : ''}\n    ${ok ? 'ĐẠT' : 'KHÔNG ĐẠT'}${errors.length ? ` LỖI: ${errors[0]}` : ''}`)
+    await page.close()
+  }
 await browser.close()
 process.exit(bad ? 1 : 0)
