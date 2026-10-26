@@ -96,7 +96,7 @@ kbd {
 /* --- bố cục 3 cột: bài học · khối · mạch ----------------------------------------------------- */
 .layout {
   display: grid;
-  grid-template-columns: minmax(230px, 19%) minmax(500px, 1fr) minmax(330px, 37%);
+  grid-template-columns: minmax(200px, 19%) minmax(380px, 1fr) minmax(300px, 37%);
   grid-template-rows: minmax(0, 1fr);
   height: calc(100vh - 48px);
 }
@@ -531,7 +531,7 @@ kbd {
 }
 
 /* --- màn hình hẹp: bài học trên, mạch giữa, khối dưới (cuộn trang) ------------------------- */
-@media (max-width: 1100px) {
+@media (max-width: 900px) {
   .layout {
     display: flex;
     flex-direction: column;
@@ -919,4 +919,60 @@ kbd {
 .step-body .chip {
   white-space: normal;
   max-width: 100%;
+}
+
+/* Màn 900–1100 px (máy tính bảng nằm ngang, NEO One): bài học thành dải ngang ở trên, bên dưới là
+   vùng khối và mạch cạnh nhau — để vùng ghép khối đủ rộng mà trẻ vẫn thấy cả ba cùng lúc. */
+@media (min-width: 901px) and (max-width: 1100px) {
+  .progress-bar {
+    display: none;
+  }
+  .topbar {
+    gap: 12px;
+  }
+  .layout {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 40%);
+    grid-template-rows: minmax(0, auto) minmax(0, 1fr);
+  }
+  .lesson {
+    grid-column: 1 / -1;
+    max-height: 34vh;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 260px;
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .lesson-steps {
+    grid-column: 1 / -1;
+  }
+  .lesson-scroll {
+    grid-column: 1;
+    grid-row: 2 / 5;
+    padding-top: 4px;
+  }
+  .lesson h2 {
+    font-size: 18px;
+    margin-bottom: 4px;
+  }
+  .lesson-check,
+  .lesson-nav,
+  .lesson-tools {
+    grid-column: 2;
+  }
+  .lesson-check {
+    grid-row: 2;
+    padding-top: 8px;
+    overflow: auto;
+  }
+  .lesson-nav {
+    border-top: 0;
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+}
+/* thanh chọn bài: mờ dần ở mép phải để báo còn bài phía sau */
+.lesson-pick {
+  mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
+  scrollbar-width: none;
 }

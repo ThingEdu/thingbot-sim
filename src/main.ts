@@ -98,6 +98,8 @@ const renderPicker = () => {
       return b
     }),
   )
+  // Màn hẹp: thanh chọn bài cuộn ngang, nên kéo bài đang mở vào tầm nhìn.
+  picker.querySelector<HTMLElement>('[aria-current="true"]')?.scrollIntoView({ block: 'nearest', inline: 'center' })
 }
 
 // --- dải dòng chảy ---------------------------------------------------------------------------
