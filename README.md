@@ -21,11 +21,13 @@ Không nạp xuống mạch thật, không có tài khoản, không có backend.
 
 ## Chạy thử tự động
 
-`npm run smoke` (cần `npm run dev` đang chạy): mở từng bài 2–10 trên Chromium không giao diện, nạp lời giải mẫu và làm thao tác của trẻ — bước đang mở phải ✓; rồi chạy khung trống — không bước nào được ✓.
+`npm run smoke` (cần `npm run dev` đang chạy, hoặc đặt `SIM_URL`): mở từng bài 2–10 trên Chromium không giao diện, nạp lời giải mẫu và làm thao tác của trẻ — bước đang mở phải ✓; rồi chạy khung trống — không bước nào được ✓.
 
 ## Chạy
 
-Cần checkout `thingblock-editor` có gói `thingblock-sim` (nhánh `feat/sim-m0`, PR #25) nằm cạnh repo này và đã `npm ci`:
+Đang chạy tại **https://robot.edu.vn/mo-phong/** (robot.edu.vn chuyển tiếp ngầm sang project Vercel `thingbot-sim`; `?bai=6` mở thẳng bài 6).
+
+Cần checkout [`ThingEdu/thingblock-editor`](https://github.com/ThingEdu/thingblock-editor) có gói `thingblock-sim` (nhánh `feat/sim-m0`, PR #25 — bản đang chạy build từ commit `866ff1c`) nằm cạnh repo này và đã `npm ci`:
 
 ```
 ~/Ai-Code/thingblock-editor-sim   ← worktree feat/sim-m0
@@ -34,9 +36,17 @@ Cần checkout `thingblock-editor` có gói `thingblock-sim` (nhánh `feat/sim-m
 
 ```
 npm install
-npm run dev        # http://localhost:5190
-npm run build      # trang tĩnh ở dist/ (Vercel: framework "Vite")
+npm run dev        # http://localhost:5190/mo-phong/
+npm run build      # trang tĩnh ở dist/mo-phong/
 ```
+
+Đưa lên: phải build tại máy (Vercel không có checkout ThingBlock), rồi gửi bản đã build:
+
+```
+vercel build --prod && vercel deploy --prebuilt --prod
+```
+
+Kiểm bản đang chạy: `SIM_URL=https://robot.edu.vn/mo-phong/ npm run smoke`.
 
 Checkout ở chỗ khác: `THINGBLOCK_EDITOR=/đường/dẫn npm run dev`.
 
@@ -61,4 +71,4 @@ Phần của repo này chỉ là "vỏ": `scene.ts` (mạch 3D dựng từ ảnh
 
 ## Giấy phép
 
-AGPL-3.0 (theo `thingblock-sim`).
+AGPL-3.0 (theo `thingblock-sim`), xem `LICENSE`. Trang có link «Mã nguồn» về repo này.

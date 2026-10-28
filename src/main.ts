@@ -871,6 +871,10 @@ function openLesson(next: Lesson) {
   }
   for (const b of PS2_BUTTONS) pad[b] = false
   document.title = `ThingBot Sim · Bài ${next.no}: ${next.title}`
+  // Địa chỉ luôn chỉ đúng bài đang mở (?bai=6) để giáo viên chép gửi cho học sinh.
+  const url = new URL(location.href)
+  url.searchParams.set('bai', String(next.no))
+  history.replaceState(null, '', url)
   $('#hint').hidden = true
   renderPicker()
   renderCard()
@@ -881,7 +885,9 @@ function openLesson(next: Lesson) {
   } else render(null, IDLE_BUS)
   if (next.arena) requestAnimationFrame(() => arena.draw())
 }
-openLesson(LESSONS.find((l) => l.id === saved.current) ?? LESSONS[0])
+// Link từ trang khóa học (?bai=6) mở thẳng bài đó; không có thì mở bài đang làm dở.
+const asked = Number(new URLSearchParams(location.search).get('bai'))
+openLesson(LESSONS.find((l) => l.no === asked) ?? LESSONS.find((l) => l.id === saved.current) ?? LESSONS[0])
 
 const see = $('#see')
 see.addEventListener('click', () => {

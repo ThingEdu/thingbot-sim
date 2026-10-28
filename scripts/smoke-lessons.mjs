@@ -13,7 +13,7 @@ import { resolve } from 'node:path'
 
 const THINGBLOCK = resolve(process.env.THINGBLOCK_EDITOR ?? resolve(import.meta.dirname, '../../thingblock-editor-sim'))
 const { chromium } = createRequire(resolve(THINGBLOCK, 'package.json'))('playwright')
-const URL = process.env.SIM_URL ?? 'http://localhost:5190/'
+const URL = process.env.SIM_URL ?? 'http://localhost:5190/mo-phong/'
 
 const flow = (page) => page.$$eval('#flow li', (ls) => ls.map((l) => l.innerText.replace(/\n/g, ' ')).join(' / '))
 const state = (page) =>

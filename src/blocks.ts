@@ -56,7 +56,7 @@ export function createBlocks(container: HTMLElement, toolbox: object): BlocksApi
       flyoutOpacity: 1,
       toolboxBackgroundColour: '#ffffff',
     }),
-    media: 'media/',
+    media: `${import.meta.env.BASE_URL}media/`,
     zoom: { controls: true, wheel: false, startScale: 0.675 },
     grid: { spacing: 40, length: 2, colour: '#ddd' },
     trashcan: false,

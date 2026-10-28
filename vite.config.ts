@@ -8,7 +8,15 @@ import { defineConfig } from 'vite'
 const THINGBLOCK = resolve(process.env.THINGBLOCK_EDITOR ?? resolve(__dirname, '../thingblock-editor-sim'))
 const pkg = (p: string) => resolve(THINGBLOCK, 'packages', p)
 
+/**
+ * Web chạy dưới robot.edu.vn/mo-phong/ (robot.edu.vn chuyển tiếp ngầm sang project Vercel này), nên bản
+ * build nằm trong dist/mo-phong/ để đường dẫn tệp giống hệt ở cả hai tên miền.
+ */
+const BASE = '/mo-phong/'
+
 export default defineConfig({
+  base: BASE,
+  build: { outDir: `dist${BASE}`, emptyOutDir: true },
   resolve: {
     alias: {
       '@scratch/scratch-blocks': pkg('scratch-blocks/src/index.ts'),
