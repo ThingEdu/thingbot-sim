@@ -160,5 +160,29 @@ if (!starter && !only.length)
     console.log(`\n== ${name} · ${s.dots}  ${s.status}${s.hint ? `\n    gợi ý: ${s.hint}` : ''}\n    ${ok ? 'ĐẠT' : 'KHÔNG ĐẠT'}${errors.length ? ` LỖI: ${errors[0]}` : ''}`)
     await page.close()
   }
+// Rê chuột vào số trên mạch (bài 1): số phải đứng yên. Lỗi cũ: phóng to khi hover nhân cả tọa độ, số nhảy liên tục.
+if (!starter && !only.length) {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } })
+  await page.addInitScript(() => localStorage.setItem('thingbot-sim:v1', JSON.stringify({ done: [], current: 'bai-1', lessons: {} })))
+  await page.goto(URL)
+  await page.waitForTimeout(1500)
+  const hot = page.locator('.badge.hot:visible')
+  const centre = async (i) => {
+    const r = await hot.nth(i).boundingBox()
+    return [r.x + r.width / 2, r.y + r.height / 2]
+  }
+  let worst = 0
+  for (let i = 0; i < (await hot.count()); i++) {
+    const [x, y] = await centre(i)
+    await page.mouse.move(x, y)
+    await page.waitForTimeout(300)
+    const [x2, y2] = await centre(i)
+    worst = Math.max(worst, Math.hypot(x2 - x, y2 - y))
+  }
+  const ok = (await hot.count()) > 0 && worst <= 2
+  if (!ok) bad++
+  console.log(`\n== bài 1 rê chuột vào số · lệch nhiều nhất ${worst.toFixed(1)} px\n    ${ok ? 'ĐẠT' : 'KHÔNG ĐẠT'}`)
+  await page.close()
+}
 await browser.close()
 process.exit(bad ? 1 : 0)

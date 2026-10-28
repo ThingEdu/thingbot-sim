@@ -4,7 +4,7 @@
  */
 import type { RuleResult } from '@thingblock/thingblock-sim/checker'
 import type { ArenaLayout, CarState } from '../arena'
-import type { PartName, PropName } from '../scene'
+import type { BadgeName, PartName, PropName } from '../scene'
 
 export interface Card {
   title: string
@@ -81,8 +81,8 @@ export interface Lesson {
   parts?: Part[]
   /** Kiểu dải dòng chảy dưới mạch; `explore` là bài không code. */
   flow: FlowKind
-  /** Nhãn số trên mạch, theo thứ tự ô của dải dòng chảy. */
-  badges: PartName[]
+  /** Số 1, 2, 3… trên mạch, cùng thứ tự với dải dòng chảy; null = bước đó không có chỗ để gắn số. */
+  badges: (BadgeName | null)[]
   controls?: Control[]
   /** Linh kiện gắn ngoài hiện trên mạch 3D. */
   props?: PropName[]

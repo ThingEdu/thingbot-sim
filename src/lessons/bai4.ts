@@ -80,7 +80,7 @@ export const BAI_4: Lesson = {
   rules: RULES,
   flow: 'oled',
   props: ['oled'],
-  badges: ['esp', 'pca'],
+  badges: ['esp', 'i2c', 'oled'],
   done: ['hello', 'two'],
   createGrader: makeGrader({
     checks: {

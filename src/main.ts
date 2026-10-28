@@ -813,7 +813,7 @@ function placeBadges() {
       part.at.map((at) => scene.addHotspot(at.px, at.py, at.label ?? `${i + 1}`, () => pick(part, at), part.under)),
     )
   })
-  lesson.badges.forEach((p, i) => scene.addBadge(p === 'l1' && activeLed === 'L2' ? 'l2' : p, `${i + 1}`))
+  lesson.badges.forEach((p, i) => p && scene.addBadge(p === 'l1' && activeLed === 'L2' ? 'l2' : p, `${i + 1}`))
 }
 
 function openLesson(next: Lesson) {

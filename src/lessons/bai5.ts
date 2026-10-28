@@ -64,7 +64,7 @@ export const BAI_5: Lesson = {
   flow: 'servo',
   controls: ['power'],
   props: ['servo'],
-  badges: ['esp', 'pca'],
+  badges: ['esp', 'pca', 'servo'],
   done: ['r90', 'r180', 'sweep'],
   createGrader: makeGrader({
     track(o, run) {

@@ -59,7 +59,7 @@ export const BAI_7: Lesson = {
   flow: 'motor',
   controls: ['power'],
   props: ['motor'],
-  badges: ['esp', 'pca'],
+  badges: ['esp', 'pca', null, 'wheel'],
   done: ['fwd', 'both'],
   createGrader: makeGrader({
     track(o, run) {

@@ -13,6 +13,8 @@ import * as THREE from 'three'
 export type TraceName = 'io3' | 'sda' | 'scl' | 'ch15' | 'ch13'
 export type PartName = 'sw' | 'esp' | 'pca' | 'l1' | 'l2'
 export type PropName = 'oled' | 'servo' | 'motor' | 'sonar'
+/** Chỗ đặt số thứ tự trên mạch: bộ phận trên bo, cổng I2C, hoặc linh kiện gắn ngoài. */
+export type BadgeName = PartName | 'i2c' | 'sonar' | 'oled' | 'servo' | 'wheel'
 
 export interface SceneApi {
   setSwitch(pressed: boolean): void
@@ -21,7 +23,7 @@ export interface SceneApi {
   pulse(trace: TraceName, color: string): void
   setTrace(trace: TraceName, color: string | null): void
   highlight(parts: PartName[]): void
-  addBadge(part: PartName, html: string): HTMLElement
+  addBadge(part: BadgeName, html: string): HTMLElement
   /** Gỡ mọi nhãn số và điểm bấm (khi đổi bài). */
   clearBadges(): void
   /**
@@ -188,12 +190,20 @@ const CHIPS: [number, number, number, number][] = [
   [632, 485, 80, 90],
   [764, 618, 126, 76],
 ]
-const BADGE_AT: Record<PartName, [number, number]> = {
+/** px ảnh, và độ cao (đơn vị 3D) cho chỗ không nằm sát mặt mạch — linh kiện gắn ngoài đặt trên thân nó. */
+const BADGE_AT: Record<BadgeName, [number, number, number?]> = {
   sw: [1205, 735],
   esp: [590, 420],
   pca: [764, 565],
   l1: [1085, 905],
   l2: [482, 905],
+  i2c: [1110, 630, 7],
+  // mép trên module OLED, ngoài vùng màn hình để không che chữ
+  oled: [1440, 430, 3],
+  servo: [150, 420, 13],
+  wheel: [316, 1215, 36],
+  // giữa hai "mắt" cảm biến
+  sonar: [860, 1140, 12],
 }
 const RING: Record<PartName, number> = { sw: 4.6, esp: 5, pca: 3.6, l1: 3.6, l2: 3.6 }
 
@@ -442,7 +452,7 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
       rings[name].position.set(x, heightAt(px, py) + 0.1, z)
     }
     for (const b of badges) {
-      b.at.y = heightAt(b.px, b.py) + 1
+      b.at.y = b.y ?? heightAt(b.px, b.py) + 1
       if (b.under) b.el.hidden = !seeThrough
     }
     placeFocus()
@@ -475,7 +485,7 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
     focusRing.position.set(x, heightAt(...focusAt) + 0.1, z)
   }
 
-  const badges: { el: HTMLElement; at: THREE.Vector3; px: number; py: number; under?: boolean }[] = []
+  const badges: { el: HTMLElement; at: THREE.Vector3; px: number; py: number; y?: number; under?: boolean }[] = []
   buildWires()
 
 
@@ -644,11 +654,13 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
   const [bx1, bz1] = W(TX0 + TW, TY0 + TH)
   let corners: THREE.Vector3[] = []
   const box = new THREE.Box3()
+  const cornersOf = ({ min, max }: THREE.Box3) =>
+    [min.x, max.x].flatMap((x) => [min.y, max.y].flatMap((y) => [min.z, max.z].map((z) => new THREE.Vector3(x, y, z))))
+  // Góc của từng vật (mạch, rồi từng linh kiện gắn ngoài), không phải góc của một hộp bao chung: hộp chung
+  // ôm cả các góc trống (ví dụ OLED bên phải × vật cản phía dưới) làm mạch bị thu nhỏ trên màn thấp.
   const fitBounds = () => {
-    box.set(new THREE.Vector3(bx0, -2, bz0), new THREE.Vector3(bx1, 12, bz1))
-    for (const g of Object.values(propGroups)) if (g.visible) box.expandByObject(g)
-    const { min, max } = box
-    corners = [min.x, max.x].flatMap((x) => [min.y, max.y].flatMap((y) => [min.z, max.z].map((z) => new THREE.Vector3(x, y, z))))
+    corners = cornersOf(box.set(new THREE.Vector3(bx0, -2, bz0), new THREE.Vector3(bx1, 12, bz1)))
+    for (const g of Object.values(propGroups)) if (g.visible) corners.push(...cornersOf(box.setFromObject(g)))
   }
   fitBounds()
   const tmp = new THREE.Vector3()
@@ -718,7 +730,10 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
     const { clientWidth: w, clientHeight: h } = container
     for (const b of badges) {
       projected.copy(b.at).project(camera)
-      b.el.style.transform = `translate(${((projected.x + 1) / 2) * w}px, ${((1 - projected.y) / 2) * h}px)`
+      // Đặt bằng left/top, không bằng transform: CSS áp `scale` (phóng to khi rê chuột) TRƯỚC `transform`,
+      // nên tọa độ trong transform cũng bị nhân lên — số nhảy khỏi con trỏ, hết hover lại nhảy về, lặp mãi.
+      b.el.style.left = `${((projected.x + 1) / 2) * w}px`
+      b.el.style.top = `${((1 - projected.y) / 2) * h}px`
     }
     requestAnimationFrame(frame)
   }
@@ -764,9 +779,9 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
       el.className = 'badge'
       el.innerHTML = html
       badgeLayer.appendChild(el)
-      const [px, py] = BADGE_AT[name]
+      const [px, py, y] = BADGE_AT[name]
       const [x, z] = W(px, py)
-      badges.push({ el, at: new THREE.Vector3(x, heightAt(px, py) + 1, z), px, py })
+      badges.push({ el, at: new THREE.Vector3(x, y ?? heightAt(px, py) + 1, z), px, py, y })
       return el
     },
     clearBadges() {

@@ -72,7 +72,7 @@ export const BAI_6: Lesson = {
   flow: 'sonar',
   controls: ['sonar'],
   props: ['sonar', 'oled'],
-  badges: ['esp', 'pca', 'l1'],
+  badges: ['sonar', 'esp', 'pca', 'l1'],
   done: ['near', 'far'],
   createGrader: makeGrader({
     track(o, run) {
