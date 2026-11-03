@@ -1,0 +1,1173 @@
+<title>Sân 3D Thanh Hỏa</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@500;700;800&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Bố cục: khung 3D lớn bên trái, bảng cổng ThingBot bên phải; trên điện thoại xếp dọc. */
+:root {
+  --bg: #eef2ee; --panel: #ffffff; --ink: #17241c; --muted: #5b6a61; --line: #d3dcd5;
+  --accent: #0e8f9c; --ok: #2f7a43; --bad: #d0492a; --scene: #dfe6e1;
+  --display: 'Be Vietnam Pro', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1612; --panel: #16201a; --ink: #e4ebe5; --muted: #98a79d; --line: #2a382f;
+  --accent: #3fc3cf; --ok: #63b878; --bad: #f07a5a; --scene: #1b2520; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f1612; --panel: #16201a; --ink: #e4ebe5; --muted: #98a79d; --line: #2a382f;
+  --accent: #3fc3cf; --ok: #63b878; --bad: #f07a5a; --scene: #1b2520; color-scheme: dark }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--display); }
+.wrap { max-width: 1280px; margin: 0 auto; padding-block: 18px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 14px; }
+header { display: grid; gap: 4px; }
+h1 { margin: 0; font-size: clamp(24px, 4vw, 34px); font-weight: 800; text-wrap: balance; }
+h2 { margin: 0; font-size: 16px; font-weight: 800; }
+p { margin: 0; max-width: 72ch; }
+.eyebrow { font: 700 12px/1 var(--display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+.muted { color: var(--muted); }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: start; }
+@media (max-width: 900px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.view { position: relative; background: var(--scene); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; aspect-ratio: 16 / 10; max-width: 100%; }
+@media (max-width: 600px) { .view { aspect-ratio: 1 / 1.05; } }
+.view canvas { display: block; width: 100%; height: 100%; }
+.board { position: absolute; left: 10px; bottom: 10px; right: 10px; background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; gap: 4px; font-size: 13px; }
+.board .row { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.board .t { font: 500 26px/1 var(--mono); font-variant-numeric: tabular-nums; }
+.board .ph { font: 700 11px/1 var(--display); letter-spacing: .08em; text-transform: uppercase; padding: 4px 7px; border-radius: 4px; background: var(--line); }
+.board .ph[data-end="true"] { background: var(--bad); color: var(--panel); }
+.board .tot { font: 800 22px/1 var(--display); margin-left: auto; }
+.board .bk { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); }
+.board .bk b { color: var(--ink); font-family: var(--mono); font-weight: 500; }
+.mlog { font-size: 12px; line-height: 1.45; max-height: 200px; overflow: auto; display: grid; gap: 2px; }
+.mlog span { color: var(--muted); font-family: var(--mono); }
+.hud { position: absolute; left: 10px; top: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; }
+.hud > * { pointer-events: auto; }
+button, select { font: 600 13px var(--display); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+button:hover, select:hover { border-color: var(--accent); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.side { display: grid; gap: 12px; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 10px; }
+.robots { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.robots button { text-align: left; display: grid; gap: 2px; }
+.robots button small { font-weight: 500; color: var(--muted); }
+.robots button[aria-pressed="true"] small { color: var(--panel); }
+.port { display: grid; grid-template-columns: 34px minmax(0, 1fr) 46px; gap: 8px; align-items: center; font-size: 13px; }
+.port b { font-family: var(--mono); font-weight: 500; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; text-align: center; padding: 1px 0; }
+.port label { display: grid; gap: 2px; min-width: 0; }
+.port input { width: 100%; accent-color: var(--accent); }
+.port output { font: 500 12px var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+.checks { display: grid; gap: 4px; font-size: 13px; }
+.chk { display: flex; gap: 8px; align-items: baseline; }
+.chk i { font-style: normal; font: 700 11px var(--display); padding: 2px 6px; border-radius: 4px; flex: none; }
+.chk i.ok { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.chk i.bad { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
+.code { font: 500 12px/1.55 var(--mono); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; overflow-x: auto; white-space: pre; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.notes .card p { font-size: 14px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">FANROC 2026–2027 · Thanh Hỏa · bản dựng thử</div>
+    <h1>Sân 3D Thanh Hỏa</h1>
+    <p class="muted">Sân 2,4 × 2,4 m, 4 Ngọn Núi Xanh, Hộp Phân Phối với 300 bóng và 4 robot mẫu. Mọi thứ dựng theo ảnh và số đo trong luật, chưa có CAD. Kéo để xoay, cuộn để phóng to. Chọn robot để thử từng cổng M1–M4, S1–S3 như khi lập trình bằng ThingBlock.</p>
+  </header>
+
+  <div class="main">
+    <div class="view" id="view">
+      <div class="hud">
+        <button id="vField" type="button">Toàn sân</button>
+        <button id="vRobot" type="button">Robot đang chọn</button>
+        <button id="vMtn" type="button">Ngọn Núi</button>
+        <button id="dump" type="button">Xả bóng</button>
+        <button id="seed" type="button" aria-pressed="false">Bày bóng mẫu lên núi</button>
+        <button id="box" type="button" aria-pressed="false">Khung 300 × 300</button>
+      </div>
+      <div class="board" id="board" hidden><div class="row"><span class="t" id="mclock">0:10</span><span class="ph" id="mphase" data-end="false">Xả bóng</span><span class="tot" id="mtotal">0 điểm</span></div><div class="bk" id="mbk"></div></div>
+    </div>
+
+    <div class="side">
+      <div class="card">
+        <h2>Robot mẫu</h2>
+        <div class="robots" id="robots"></div>
+        <p class="muted" id="rdesc" style="font-size:13px"></p>
+        <label style="display:grid;gap:4px;font-size:13px">Đế bánh<select id="drive"></select></label>
+        <label style="display:grid;gap:4px;font-size:13px">Cơ cấu M3 / M4 chạy bằng<select id="act"><option value="tt">Động cơ TT (chỉnh được tốc độ)</option><option value="s360">Servo MG996R 360° (tiến / dừng / lùi)</option></select></label>
+      </div>
+      <div class="card">
+        <h2>Cổng ThingBot</h2>
+        <div id="ports" style="display:grid;gap:8px"></div>
+        <button id="demo" type="button" aria-pressed="false">Chạy thử cơ cấu</button>
+      </div>
+      <div class="card">
+        <h2>Kiểm tra theo luật</h2>
+        <div class="checks" id="checks"></div>
+      </div>
+      <div class="card">
+        <h2>Trận đấu</h2>
+        <p class="muted" style="font-size:13px">4 agent lái 4 robot mẫu theo luật FANROC: 10 giây xả bóng, 3 phút thi đấu, 30 giây cuối là End Game. Cả 4 đội chung một điểm trận.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:6px"><button id="play" type="button">Chơi một trận</button><button id="again" type="button" disabled>Trận khác</button>
+        <select id="mspeed" aria-label="Tốc độ xem"><option value="1">Tốc độ thật</option><option value="3" selected>Nhanh ×3</option><option value="8">Nhanh ×8</option></select><button id="skip" type="button" disabled>Xem kết quả ngay</button>
+        <select id="skill" aria-label="Mức lái của agent"><option value="easy">Agent: Dễ</option><option value="medium" selected>Agent: Vừa</option><option value="hard">Agent: Khó</option></select></div>
+        <div class="checks" id="mteams"></div>
+        <div class="mlog" id="mlog" aria-live="polite"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="card"><h2>Bảng cổng chung cho mọi robot mẫu</h2>
+      <p><b>Đế 2 bánh:</b> M1 bánh trái, M2 bánh phải, M3 con lăn hút bóng, M4 cơ cấu nâng; S1 nâng tay, S2 kẹp, S3 cửa xả. <b>Đế 4 bánh đa hướng:</b> M1–M4 là 4 bánh (trước trái, trước phải, sau trái, sau phải), con lăn và cơ cấu nâng chuyển sang servo 360 ở S4, S5. Chương trình dưới đây đổi theo robot đang chọn và dùng đúng chữ trên khối ThingBlock.</p>
+      <div class="code" id="snippet"></div></div>
+    <div class="card"><h2>Lấy số đo từ đâu</h2>
+      <p>Sân, vùng và Ngọn Núi theo luật FANROC (mục B.2) và Hình 1, 7, 8. Hộp Phân Phối theo ảnh thật (Hình 11). Mẫu Maker theo ảnh Onshape "Bộ thingbot mới": khung 240 × 245 mm, bánh Ø65, cao 216 mm; thanh trượt rút ngắn từ 300 còn 250 mm (CAD gốc dài 315 mm, vượt R01). Ba mẫu còn lại là thiết kế đơn giản cho mô phỏng.</p></div>
+    <div class="card"><h2>Chưa chắc chắn</h2>
+      <p>Chiều cao các tầng núi lấy theo phần chữ (15 / 50 / 95 / 130 / 160 mm) vì hình mặt cắt cộng ra 205 mm. Vị trí vùng ước lượng theo Hình 1. Khi có CAD sân và STEP robot, phần hình sẽ được thay, cổng và cách điều khiển giữ nguyên.</p></div>
+  </div>
+</div>
+
+<script>
+// FANROC 2026 "Thanh Hỏa" — mô hình trận 2D dạng tác tử (bản thử bỏ đi).
+// Đơn vị mm và giây. Gốc toạ độ ở góc dưới-trái, y = 0 là thành sân phía Khu vực Điều khiển.
+// Toạ độ các vùng ước lượng theo Hình 1 của luật (chưa có CAD sân). Robot không va chạm vật lý;
+// cơ cấu nhận/thả bóng là thời gian + xác suất thành công. Chạy được cả trong Node lẫn trình duyệt.
+(function (root) {
+  'use strict';
+
+  const F = 2400;
+  const ZONES = {
+    start: { red: [500, 1200, 0, 300], blue: [1200, 1900, 0, 300] },
+    load: { red: [0, 375, 0, 375], blue: [2025, 2400, 0, 375] },
+    safe: { red: [0, 375, 1050, 1425], blue: [2025, 2400, 1050, 1425] },
+    fire: [[0, 600, 1800, 2400], [1800, 2400, 1800, 2400]],
+  };
+  const MOUNTAINS = [[840, 850], [1560, 850], [840, 1550], [1560, 1550]];
+  const M_HALF = 200;
+  const TIER_CAP = [25, 13, 8];
+  const TIER_PTS = [5, 10, 15];
+  const MATCH_S = 180, START_S = 10, ENDGAME_S = 30, DT = 0.1;
+
+  // Thông số robot mẫu. speed: mm/s khi đi thẳng; turn: s mất thêm mỗi lần đổi hướng.
+  const TYPES = {
+    maker: { name: 'Mẫu Maker', w: 240, l: 315, speed: 450, turn: 0.7, intake: 'select', pick: 3.2, cap: 6,
+      hpLoad: true, flag: true, flagT: 6, fireDrop: 0.8, mtn: [0.92, 0.85, 0.7], mtnDrop: [1.4, 1.8, 2.6] },
+    ui: { name: 'Xe Ủi', w: 180, l: 240, speed: 500, turn: 0.5, intake: 'bulk', pick: 0.8, cap: 15,
+      hpLoad: false, flag: false, fireDrop: 0.3, mtn: null },
+    co: { name: 'Xe Cắm Cờ', w: 185, l: 280, speed: 420, turn: 0.7, intake: 'none', cap: 12,
+      hpLoad: true, flag: true, flagT: 4, fireDrop: 0.6, mtn: [0.95, 0.92, 0.85], mtnDrop: [1.0, 1.2, 1.5] },
+    sort: { name: 'Xe Phân Loại', w: 240, l: 260, speed: 430, turn: 0.7, intake: 'sort', pick: 2.0, cap: 5,
+      hpLoad: false, flag: false, fireDrop: 0.5, mtn: [0.88, 0.65, 0], mtnDrop: [1.2, 1.8, 9] },
+  };
+  // Mức người lái / agent.
+  const SKILLS = {
+    easy: { name: 'Dễ', dead: 0.25, stuck: 0.06, speed: 0.6, time: 1.6, succ: -0.15, err: 0.15, roll: 0.2, flagOk: 0.65, hpT: 1.2, pen: 0.6 },
+    medium: { name: 'Vừa', dead: 0.12, stuck: 0.04, speed: 0.8, time: 1.25, succ: -0.06, err: 0.07, roll: 0.12, flagOk: 0.85, hpT: 0.95, pen: 0.3 },
+    hard: { name: 'Khó', dead: 0.04, stuck: 0.02, speed: 1.0, time: 1.0, succ: 0, err: 0.02, roll: 0.06, flagOk: 0.95, hpT: 0.75, pen: 0.1 },
+  };
+
+  function rng(seed) {
+    let a = seed >>> 0;
+    return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  const inRect = (x, y, r) => x >= r[0] && x <= r[1] && y >= r[2] && y <= r[3];
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const inFire = (x, y) => ZONES.fire.findIndex(r => inRect(x, y, r));
+  const inMountain = (x, y, pad = 0) => MOUNTAINS.findIndex(([cx, cy]) => Math.abs(x - cx) <= M_HALF + pad && Math.abs(y - cy) <= M_HALF + pad);
+
+  // ---- Tính điểm: hàm thuần theo bảng điểm B.4.2, kiểm bằng 3 ví dụ của luật ----
+  // s = { fire: {o, g}, mtn: [[{g, o} ×3] ×4], flags: [bool ×4], parks: {red: ['full'|'partial'|null ×2], blue: [...]}, wrongOnMtn }
+  function scoreSummary(s) {
+    const b = { fire: s.fire.o * 5, r1: 0, r2: 0, r3: 0, flag: 0, park: 0, wrong: 0 };
+    let wrong = s.fire.g;
+    s.mtn.forEach((tiers, m) => {
+      b.r1 += tiers[0].g * 5; b.r2 += tiers[1].g * 10; b.r3 += tiers[2].g * 15;
+      wrong += tiers[0].o + tiers[1].o + tiers[2].o;
+      if (s.flags[m]) b.flag += tiers.every(t => t.g > 0) ? 40 : 20;
+    });
+    for (const a of ['red', 'blue']) {
+      const p = s.parks[a];
+      for (const x of p) b.park += x === 'full' ? 10 : x === 'partial' ? 5 : 0;
+      if (p.length === 2 && p.every(x => x === 'full')) b.park += 10;
+    }
+    b.wrong = -3 * wrong;
+    b.total = b.fire + b.r1 + b.r2 + b.r3 + b.flag + b.park + b.wrong;
+    return b;
+  }
+  /** Điểm của một đội: điểm trận − phạt của đội, thấp nhất 0; thẻ đỏ = 0 (B.4.3). */
+  const teamScore = (match, pen) => (pen.red ? 0 : Math.max(0, match - 5 * pen.minor - 10 * pen.yellow));
+
+  // ---- Trận đấu ----
+  function createMatch(lineup, opts = {}) {
+    const R = rng(opts.seed ?? 1);
+    const gauss = () => { let u = 0, v = 0; while (!u) u = R(); while (!v) v = R(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+    const balls = [];
+    const mtn = MOUNTAINS.map(() => [0, 1, 2].map(() => ({ g: 0, o: 0 })));
+    const flags = MOUNTAINS.map(() => null);
+    // Hộp Phân Phối ở giữa thành sân phía trên: bóng lăn ra khắp sân, dày ở nửa trên.
+    for (let i = 0; i < 300; i++) {
+      const c = i < 100 ? 'o' : 'g';
+      let x = clamp(1200 + gauss() * 750, 25, F - 25), y = clamp(F - 150 - Math.abs(gauss()) * 1100, 25, F - 25);
+      const ball = { c, x, y, st: 'field', by: null };
+      const m = inMountain(x, y);
+      if (m >= 0) {
+        if (R() < 0.25 && mtn[m][0][c] + mtn[m][0][c === 'g' ? 'o' : 'g'] < TIER_CAP[0]) { ball.st = 'mtn'; ball.m = m; ball.tier = 0; mtn[m][0][c]++; }
+        else { const [cx, cy] = MOUNTAINS[m]; const a = Math.atan2(y - cy, x - cx); ball.x = cx + Math.cos(a) * 300; ball.y = cy + Math.sin(a) * 300; }
+      }
+      balls.push(ball);
+    }
+    const startPos = { red: [[720, 160], [980, 160]], blue: [[1420, 160], [1680, 160]] };
+    const robots = lineup.map((d, i) => {
+      const alliance = i < 2 ? 'red' : 'blue';
+      const T = TYPES[d.type], S = SKILLS[d.skill];
+      const [x, y] = startPos[alliance][i % 2];
+      return { id: i, team: d.team ?? `Đội ${i + 1}`, alliance, type: d.type, skill: d.skill, T, S, x, y, heading: Math.PI / 2,
+        carried: [], hasFlag: true, task: null, busy: 0, parked: null, idle: 0, log: [],
+        flagFirst: d.flagFirst ?? opts.flagFirst ?? true, parkLead: d.parkLead ?? opts.parkLead ?? null, tierPolicy: d.tierPolicy ?? opts.tierPolicy ?? 'best' };
+    });
+    const hp = { red: { o: 0, g: 0, t: 0, busyUntil: 0 }, blue: { o: 0, g: 0, t: 0, busyUntil: 0 } };
+    const hpSkill = a => { const rs = robots.filter(r => r.alliance === a); return rs.reduce((s, r) => s + r.S.hpT, 0) / rs.length; };
+    const st = { t: -START_S, balls, mtn, flags, robots, hp, events: [], R, done: false, opts };
+
+    const ev = (r, text) => { st.events.push({ t: st.t, r: r?.id ?? null, text }); };
+    const free = b => b.st === 'field';
+    const mtnCount = (m, tier) => mtn[m][tier].g + mtn[m][tier].o;
+
+    // Đường đi: thẳng, hoặc vòng qua 1 góc núi nếu bị chặn.
+    function blocked(ax, ay, bx, by, pad) {
+      for (const [cx, cy] of MOUNTAINS) {
+        const h = M_HALF + pad;
+        for (let k = 0; k <= 20; k++) { const x = ax + (bx - ax) * k / 20, y = ay + (by - ay) * k / 20; if (Math.abs(x - cx) < h && Math.abs(y - cy) < h) return true; }
+      }
+      return false;
+    }
+    function route(r, tx, ty) {
+      const pad = r.T.w / 2;
+      if (!blocked(r.x, r.y, tx, ty, pad - 5)) return [[tx, ty]];
+      let best = null;
+      for (const [cx, cy] of MOUNTAINS) for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+        const wx = clamp(cx + sx * (M_HALF + pad + 25), pad, F - pad), wy = clamp(cy + sy * (M_HALF + pad + 25), pad, F - pad);
+        if (blocked(r.x, r.y, wx, wy, pad - 10) || blocked(wx, wy, tx, ty, pad - 10)) continue;
+        const d = Math.hypot(wx - r.x, wy - r.y) + Math.hypot(tx - wx, ty - wy);
+        if (!best || d < best.d) best = { d, p: [[wx, wy], [tx, ty]] };
+      }
+      return best ? best.p : [[tx, ty]];
+    }
+    const travel = (r, tx, ty) => { const p = route(r, tx, ty); let d = 0, x = r.x, y = r.y; for (const [a, b] of p) { d += Math.hypot(a - x, b - y); x = a; y = b; } return d / (r.T.speed * r.S.speed) + p.length * r.T.turn * r.S.time; };
+    const go = (r, kind, tx, ty, extra = {}) => { r.task = { kind, path: route(r, tx, ty), turnLeft: r.T.turn * r.S.time, ...extra }; };
+
+    function mountainApproach(r, m) {
+      const [cx, cy] = MOUNTAINS[m], d = M_HALF + r.T.l / 2 + 10;
+      const opts = [[cx, cy - d], [cx, cy + d], [cx - d, cy], [cx + d, cy]].filter(([x, y]) => x > r.T.w / 2 && x < F - r.T.w / 2 && y > r.T.w / 2 && y < F - r.T.w / 2 && inMountain(x, y, r.T.w / 2 - 20) < 0);
+      opts.sort((a, b) => Math.hypot(a[0] - r.x, a[1] - r.y) - Math.hypot(b[0] - r.x, b[1] - r.y));
+      return opts[0] ?? [cx, cy - d];
+    }
+    function fireTarget(r) {
+      let best = null;
+      ZONES.fire.forEach((z, i) => { const x = clamp(r.x, z[0] + 150, z[1] - 150), y = clamp(r.y, z[2] + 150, z[3] - 150); const d = Math.hypot(x - r.x, y - r.y); if (!best || d < best.d) best = { d, x, y, i }; });
+      return best;
+    }
+    // Giá trị kỳ vọng của việc thả 1 bóng xanh lên (m, tier) đối với robot r.
+    function tierValue(r, m, tier) {
+      const p = Math.max(0, (r.T.mtn?.[tier] ?? 0) + r.S.succ);
+      if (!p || mtnCount(m, tier) >= TIER_CAP[tier]) return -1;
+      let v = TIER_PTS[tier];
+      const others = [0, 1, 2].filter(k => k !== tier).every(k => mtn[m][k].g > 0);
+      if (mtn[m][tier].g === 0 && others && (flags[m] || (r.hasFlag && r.T.flag))) v += 20; // hoàn thành núi để cờ thành 40
+      return v * p;
+    }
+    function chooseMountain(r) {
+      let best = null;
+      MOUNTAINS.forEach((_, m) => {
+        const tiers = r.tierPolicy === 'low' ? [0] : r.skill === 'easy' ? [0, 1] : r.skill === 'medium' ? [0, 1, 2].filter(k => (r.T.mtn?.[k] ?? 0) >= 0.85 || k < 2) : [0, 1, 2];
+        const v = Math.max(...tiers.map(k => tierValue(r, m, k)));
+        if (v <= 0) return;
+        const [ax, ay] = mountainApproach(r, m);
+        const score = r.skill === 'easy' ? -travel(r, ax, ay) + R() * 3 : v / (3 + travel(r, ax, ay));
+        if (!best || score > best.score) best = { m, score };
+      });
+      return best?.m ?? -1;
+    }
+    function nearestBall(r, filter) {
+      let best = null, bd = Infinity;
+      for (let i = 0; i < balls.length; i++) {
+        const b = balls[i];
+        if (!free(b) || !filter(b)) continue;
+        if (inFire(b.x, b.y) >= 0 && b.c === 'o') continue; // đã ghi điểm
+        if (inRect(b.x, b.y, ZONES.start[r.alliance]) && r.type !== 'maker') continue; // để Human Player nhặt
+        if (b.x < r.T.w / 2 - 10 || b.x > F - r.T.w / 2 + 10) { /* sát rào vẫn gom được */ }
+        let d = Math.hypot(b.x - r.x, b.y - r.y);
+        if (b.c === 'g' && r.skill === 'hard' && inFire(b.x, b.y) >= 0) d -= 700; // gỡ bóng xanh khỏi Khu Chữa Cháy: +3 ngay
+        if (d < bd) { bd = d; best = i; }
+      }
+      return best;
+    }
+
+    function shouldPark(r) {
+      const left = MATCH_S - st.t;
+      if (left > ENDGAME_S + 15) return false;
+      const z = ZONES.safe[r.alliance], tx = (z[0] + z[1]) / 2, ty = (z[2] + z[3]) / 2;
+      const need = travel(r, tx, ty) + 2;
+      if (r.parkLead != null) return r.parkLead >= 0 && left <= Math.max(r.parkLead, need + 1);
+      if (left > ENDGAME_S) return false; // chỉ được tính điểm trong End Game, robot đi từ trước 30 s cũng được nhưng mất việc
+      if (r.skill === 'hard') return left <= need + 3;
+      if (r.skill === 'medium') return left <= Math.max(need + 6, 22);
+      return r.forgetPark ? false : left <= 15;
+    }
+
+    function decide(r) {
+      if (r.parked) return;
+      const T = r.T, S = r.S;
+      if (st.t >= 0 && shouldPark(r)) {
+        const z = ZONES.safe[r.alliance];
+        const mate = robots.find(o => o !== r && o.alliance === r.alliance && (o.task?.kind === 'park' || o.parked));
+        const tx = mate ? (mate.parkX < (z[0] + z[1]) / 2 ? z[1] - T.w / 2 - 4 : z[0] + T.w / 2 + 4) : (z[0] + z[1]) / 2;
+        r.parkX = tx;
+        return go(r, 'park', tx, (z[2] + z[3]) / 2);
+      }
+      const g = r.carried.filter(i => balls[i].c === 'g').length, o = r.carried.length - g;
+      // 1. Cắm cờ trước (nếu có cơ cấu cờ).
+      if (r.hasFlag && T.flag && (r.flagFirst || r.carried.length === 0 && st.t > 60)) {
+        let best = -1, bd = Infinity;
+        flags.forEach((f, m) => { if (f == null) { const [ax, ay] = mountainApproach(r, m); const d = travel(r, ax, ay) + (r.skill === 'easy' ? R() * 4 : 0); if (d < bd) { bd = d; best = m; } } });
+        if (best >= 0) { const [ax, ay] = mountainApproach(r, best); return go(r, 'flag', ax, ay, { m: best }); }
+      }
+      // 2. Đang chở bóng: đi giao.
+      const full = r.carried.length >= T.cap || (T.intake === 'sort' && (g >= T.cap || o >= T.cap));
+      const fieldWanted = balls.filter(b => free(b) && !(b.c === 'o' && inFire(b.x, b.y) >= 0)).length;
+      const deliverNow = full || (r.carried.length > 0 && (T.intake === 'none' || fieldWanted < 15 || r.idle > 3 || MATCH_S - st.t < ENDGAME_S + 10));
+      if (deliverNow) {
+        if (r.type === 'ui') { const z = ZONES.start[r.alliance]; return go(r, 'dumpStart', clamp(r.x, z[0] + 120, z[1] - 120), z[3] + T.l / 2 - 60); }
+        if (r.type === 'sort' && o >= Math.max(1, g)) { const f = fireTarget(r); return go(r, 'dropFire', f.x, f.y); }
+        if (g > 0 && T.mtn) { const m = chooseMountain(r); if (m >= 0) { const [ax, ay] = mountainApproach(r, m); return go(r, 'dropMtn', ax, ay, { m }); } }
+        if (o > 0 || g > 0) { const f = fireTarget(r); return go(r, 'dropFire', f.x, f.y); }
+      }
+      // 3. Nhận bóng ở Khu Tiếp Tế.
+      const tray = hp[r.alliance];
+      if (T.hpLoad && (T.intake === 'none' || (tray.g >= 4 && r.carried.length === 0 && r.type === 'maker' && r.skill !== 'easy'))) {
+        const z = ZONES.load[r.alliance];
+        const want = tray.g > 0 || T.intake !== 'none' ? 'g' : 'o';
+        return go(r, 'load', (z[0] + z[1]) / 2 + (r.alliance === 'red' ? 40 : -40), z[3] + T.l / 2 - 90, { want });
+      }
+      // 4. Gom bóng.
+      if (T.intake !== 'none') {
+        let i;
+        if (T.intake === 'select') i = nearestBall(r, b => b.c === 'g' && (r.skill !== 'easy' || inFire(b.x, b.y) < 0)) ?? nearestBall(r, b => b.c === 'o');
+        else if (T.intake === 'sort') i = nearestBall(r, b => (b.c === 'g' ? g : o) < T.cap && !(b.c === 'g' && inFire(b.x, b.y) >= 0 && false));
+        else i = nearestBall(r, () => true);
+        if (i != null) return go(r, 'pick', balls[i].x, balls[i].y, { ball: i });
+      }
+      r.idle += DT;
+      if (r.carried.length) { const f = fireTarget(r); return go(r, 'dropFire', f.x, f.y); }
+    }
+
+    function finish(r) {
+      const k = r.task.kind, T = r.T, S = r.S;
+      if (k === 'pick') {
+        const take = (i) => { const b = balls[i]; if (!free(b) || r.carried.length >= T.cap) return; b.st = 'robot'; r.carried.push(i); };
+        if (T.intake === 'bulk') {
+          balls.forEach((b, i) => { if (free(b) && Math.hypot(b.x - r.x, b.y - r.y) < 190 && !inRect(b.x, b.y, ZONES.start[r.alliance])) take(i); });
+        } else {
+          take(r.task.ball);
+          if (R() < S.err) { const j = nearestBall(r, b => Math.hypot(b.x - r.x, b.y - r.y) < 160); if (j != null) take(j); }
+        }
+      } else if (k === 'dropFire') {
+        const f = fireTarget(r), z = ZONES.fire[f.i];
+        const keep = r.carried.filter(i => balls[i].c === 'g' && T.intake !== 'bulk' && r.skill !== 'easy' && T.mtn);
+        const drop = r.carried.filter(i => !keep.includes(i));
+        for (const i of drop) {
+          const b = balls[i]; b.st = 'field'; b.by = r.id;
+          b.x = clamp(r.x + (R() - 0.5) * 200, z[0] + 20, z[1] - 20); b.y = clamp(r.y + (R() - 0.5) * 200, z[2] + 20, z[3] - 20);
+          if (R() < S.roll + (T.intake === 'bulk' ? 0.1 : 0)) { b.x = clamp(b.x + (b.x < 1200 ? 1 : -1) * (300 + R() * 200), 25, F - 25); b.y = clamp(b.y - 300 - R() * 200, 25, F - 25); }
+        }
+        ev(r, `thả ${drop.length} bóng vào Khu Chữa Cháy`); r.carried = keep;
+      } else if (k === 'dropMtn') {
+        const m = r.task.m; let placed = 0, rest = [];
+        for (const i of r.carried) {
+          const b = balls[i];
+          if (b.c === 'o' && r.skill !== 'easy') { rest.push(i); continue; } // người lái tốt giữ bóng cam lại
+          const tiers = [0, 1, 2].filter(t => (T.mtn[t] ?? 0) > 0 && mtnCount(m, t) < TIER_CAP[t] && (r.tierPolicy !== 'low' || t === 0)).sort((a, c) => tierValue(r, m, c) - tierValue(r, m, a));
+          let t = tiers[0];
+          if (t == null) { rest.push(i); continue; }
+          if (r.skill === 'easy' && t === 2) t = 1;
+          while (t >= 0 && R() > T.mtn[t] + S.succ) t--; // trượt xuống tầng thấp hơn
+          if (t >= 0 && mtnCount(m, t) < TIER_CAP[t]) { b.st = 'mtn'; b.m = m; b.tier = t; b.by = r.id; mtn[m][t][b.c]++; placed++; }
+          else { const [cx, cy] = MOUNTAINS[m]; const a = R() * Math.PI * 2; b.st = 'field'; b.x = clamp(cx + Math.cos(a) * 280, 25, F - 25); b.y = clamp(cy + Math.sin(a) * 280, 25, F - 25); }
+        }
+        r.carried = rest; ev(r, `đặt ${placed} Mầm Cây lên Núi ${'ABCD'[m]}`);
+      } else if (k === 'flag') {
+        const m = r.task.m;
+        if (flags[m] != null) return; // đội khác cắm trước
+        r.hasFlag = false;
+        if (R() < S.flagOk) { flags[m] = r.id; ev(r, `cắm Lá Cờ lên Núi ${'ABCD'[m]}`); }
+        else ev(r, `làm rơi Lá Cờ ở Núi ${'ABCD'[m]}`);
+      } else if (k === 'dumpStart') {
+        const z = ZONES.start[r.alliance];
+        for (const i of r.carried) { const b = balls[i]; b.st = 'field'; b.feed = r.id; b.x = clamp(r.x + (R() - 0.5) * 260, z[0] + 20, z[1] - 20); b.y = clamp(z[2] + 40 + R() * 200, z[2] + 20, z[3] - 20); }
+        ev(r, `nhả ${r.carried.length} bóng cho Human Player`); r.carried = [];
+      } else if (k === 'park') {
+        const z = ZONES.safe[r.alliance];
+        const fully = [r.x - T.w / 2, r.x + T.w / 2].every(x => x >= z[0] && x <= z[1]) && [r.y - T.l / 2, r.y + T.l / 2].every(y => y >= z[2] && y <= z[3]);
+        const mate = robots.find(o => o !== r && o.parked && o.alliance === r.alliance);
+        let p = fully ? 'full' : 'partial';
+        if (mate && mate.T.w + T.w > 375) p = 'partial'; // hai robot không cùng lọt ô 375
+        r.parked = p; ev(r, `về Vùng Bảo Vệ Xanh (${p === 'full' ? 'toàn phần' : 'một phần'})`);
+      }
+    }
+
+    function actionTime(r) {
+      const k = r.task.kind, T = r.T, S = r.S;
+      if (k === 'pick') return (T.intake === 'bulk' ? T.pick * 4 : T.pick) * S.time;
+      if (k === 'dropFire') return (2 + T.fireDrop * r.carried.length) * S.time;
+      if (k === 'dropMtn') return (3 + r.carried.length * (T.mtnDrop?.[1] ?? 1)) * S.time;
+      if (k === 'flag') return T.flagT * S.time;
+      if (k === 'dumpStart') return 1.2 * S.time;
+      if (k === 'park') return 0.5;
+      return 0;
+    }
+
+    function stepRobot(r) {
+      if (r.parked) return;
+      if (r.dead) return;
+      if (r.busy > 0) { r.busy -= DT; if (r.busy <= 0) { finish(r); r.task = null; } return; }
+      if (!r.task) { decide(r); if (!r.task) return; }
+      const t = r.task;
+      if (t.kind === 'load') return stepLoad(r);
+      if (t.kind === 'pick' && !free(balls[t.ball])) { r.task = null; return; }
+      if (t.turnLeft > 0) { t.turnLeft -= DT; return; }
+      if (st.t >= r.deadAt) { if (!r.dead) { r.dead = true; ev(r, 'trục trặc, đứng yên tới hết trận'); } return; }
+      if (R() < r.S.stuck * DT) { t.turnLeft = 3 + R() * 5; return; } // bóng kẹt dưới bánh, phải lùi gỡ
+      const [tx, ty] = t.path[0];
+      const v = r.T.speed * r.S.speed * DT, d = Math.hypot(tx - r.x, ty - r.y);
+      const reach = t.kind === 'pick' ? r.T.l / 2 : 8;
+      if (d <= Math.max(v, reach)) {
+        if (t.kind !== 'pick') { r.x = tx; r.y = ty; }
+        t.path.shift();
+        if (t.path.length) { t.turnLeft = r.T.turn * r.S.time; return; }
+        r.idle = 0; r.busy = actionTime(r); if (r.busy <= 0) { finish(r); r.task = null; }
+        return;
+      }
+      r.heading = Math.atan2(ty - r.y, tx - r.x);
+      r.x += (tx - r.x) / d * v; r.y += (ty - r.y) / d * v;
+    }
+    function stepLoad(r) {
+      const t = r.task;
+      if (t.path.length) { // đi tới ô
+        const [tx, ty] = t.path[0], v = r.T.speed * r.S.speed * DT, d = Math.hypot(tx - r.x, ty - r.y);
+        if (t.turnLeft > 0) { t.turnLeft -= DT; return; }
+        if (d <= v) { r.x = tx; r.y = ty; t.path.shift(); t.wait = 0; if (t.path.length) t.turnLeft = r.T.turn * r.S.time; }
+        else { r.heading = Math.atan2(ty - r.y, tx - r.x); r.x += (tx - r.x) / d * v; r.y += (ty - r.y) / d * v; }
+        return;
+      }
+      const tray = hp[r.alliance];
+      t.wait += DT;
+      const room = r.T.cap - r.carried.length;
+      const want = tray[t.want] > 0 ? t.want : (tray.g > 0 ? 'g' : tray.o > 0 ? 'o' : null);
+      if (room <= 0 || (!want && (t.wait > 4 || r.carried.length >= 3)) || MATCH_S - st.t < 3) { ev(r, `nhận ${r.carried.length} bóng từ Human Player`); r.task = null; return; }
+      if (!want || st.t < tray.busyUntil) return;
+      // Human Player thả 1 bóng vào robot.
+      const idx = balls.findIndex(b => b.st === 'hp' && b.a === r.alliance && b.c === want);
+      if (idx < 0) return;
+      tray[want]--; balls[idx].st = 'robot'; r.carried.push(idx);
+      tray.busyUntil = st.t + 0.8 * hpSkill(r.alliance);
+      if (want === 'o' && r.carried.length >= 4 && tray.g === 0) { r.task = null; }
+    }
+    function stepHP() {
+      for (const a of ['red', 'blue']) {
+        const tray = hp[a];
+        if (st.t < tray.busyUntil) continue;
+        const idx = balls.findIndex(b => b.st === 'field' && inRect(b.x, b.y, ZONES.start[a]));
+        if (idx < 0) continue;
+        const b = balls[idx]; b.st = 'hp'; b.a = a; tray[b.c]++;
+        tray.busyUntil = st.t + 0.6 * hpSkill(a);
+      }
+    }
+
+    function summary() {
+      const fire = { o: 0, g: 0 }, by = robots.map(() => 0);
+      // Bóng do Xe Ủi gom về cho Human Player: chia đôi công giữa người gom và người ghi.
+      const credit = (b, v) => { if (b.feed != null && b.feed !== b.by) { by[b.feed] += v / 2; by[b.by] += v / 2; } else by[b.by] += v; };
+      for (const b of balls) if (b.st === 'field' && inFire(b.x, b.y) >= 0) { fire[b.c]++; if (b.by != null) credit(b, b.c === 'o' ? 5 : -3); }
+      for (const b of balls) if (b.st === 'mtn' && b.by != null) credit(b, b.c === 'g' ? TIER_PTS[b.tier] : -3);
+      const parks = { red: [], blue: [] };
+      for (const r of robots) parks[r.alliance].push(r.parked);
+      const s = { fire, mtn, flags: flags.map(f => f != null), parks };
+      const sc = scoreSummary(s);
+      flags.forEach((f, m) => { if (f != null) by[f] += mtn[m].every(t => t.g > 0) ? 40 : 20; });
+      for (const r of robots) by[r.id] += r.parked === 'full' ? 10 : r.parked === 'partial' ? 5 : 0;
+      return { ...s, score: sc, contrib: by };
+    }
+
+    function step() {
+      if (st.done) return;
+      st.t += DT;
+      if (st.t < 0) return; // 10 giây khởi động: robot đứng yên
+      stepHP();
+      for (const r of robots) stepRobot(r);
+      if (st.t >= MATCH_S - 1e-9) {
+        st.done = true;
+        const sum = summary();
+        const pens = robots.map(r => { const p = { minor: 0, yellow: 0, red: false }; let L = Math.exp(-r.S.pen), k = 0, q = 1; do { k++; q *= R(); } while (q > L); p.minor = k - 1; p.yellow = R() < r.S.pen / 8 ? 1 : 0; p.red = R() < r.S.pen / 40; return p; });
+        st.result = { ...sum, pens, teams: robots.map((r, i) => ({ team: r.team, type: r.type, skill: r.skill, alliance: r.alliance, score: teamScore(sum.score.total, pens[i]), contrib: sum.contrib[i] })) };
+      }
+    }
+    for (const r of robots) { r.forgetPark = r.skill === 'easy' && R() < 0.35; r.deadAt = R() < r.S.dead ? R() * MATCH_S : Infinity; }
+    st.step = step;
+    st.summary = summary;
+    return st;
+  }
+
+  function runMatch(lineup, opts) { const m = createMatch(lineup, opts); while (!m.done) m.step(); return m.result; }
+
+  const api = { F, ZONES, MOUNTAINS, M_HALF, TIER_CAP, TYPES, SKILLS, MATCH_S, START_S, ENDGAME_S, DT, rng, scoreSummary, teamScore, createMatch, runMatch, inFire };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.FanrocSim = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+</script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const $ = id => document.getElementById(id);
+const MM = 0.001, F = 2400;
+// Toạ độ luật (mm, gốc ở góc sân phía Khu vực Điều khiển) → toạ độ cảnh (m, Y hướng lên).
+const P = (x, y, h = 0) => new THREE.Vector3((x - 1200) * MM, h * MM, (1200 - y) * MM);
+
+const view = $('view');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+view.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(42, 1, 0.01, 50);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.49;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x445544, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+sun.position.set(1.5, 3.5, 2); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -2, right: 2, top: 2, bottom: -2, near: 0.5, far: 8 });
+scene.add(sun);
+
+const mat = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0.05, ...o });
+const M = {
+  wall: mat(0xe8ecea), mtn: mat(0xb8a052, { roughness: 0.6 }), mtnLip: mat(0x9c8740), grass: mat(0x6fae4a),
+  tree: mat(0x2f7a3a), orange: mat(0xff8a1f, { roughness: 0.35 }), green: mat(0x3fdc3a, { roughness: 0.35 }),
+  plate: mat(0xeceeec, { roughness: 0.5 }), grey: mat(0x8a918d), dark: mat(0x232624), tire: mat(0x1b1b1b, { roughness: 0.95 }),
+  hub: mat(0xe0b622), tt: mat(0xf2c21b), pcb: mat(0x1f4fbf), servo: mat(0x2b55d6), black: mat(0x111111),
+  acrylic: new THREE.MeshPhysicalMaterial({ color: 0xffffff, transmission: 0.9, roughness: 0.05, thickness: 0.004, transparent: true, opacity: 0.35 }),
+  stand: mat(0x1f4fa8), alu: mat(0xb9bec0, { metalness: 0.6, roughness: 0.35 }), red: mat(0xda251d), yellow: mat(0xffcd00),
+};
+const box = (w, h, d, m, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; return o; };
+const cyl = (r, h, m, seg = 24) => { const o = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, seg), m); o.castShadow = true; return o; };
+
+// ---------- Sân ----------
+const ZONES = {
+  start: { red: [500, 1200, 0, 300], blue: [1200, 1900, 0, 300] },
+  load: { red: [0, 375, 0, 375], blue: [2025, 2400, 0, 375] },
+  safe: { red: [0, 375, 1050, 1425], blue: [2025, 2400, 1050, 1425] },
+  fire: [[0, 600, 1800, 2400], [1800, 2400, 1800, 2400]],
+};
+const MOUNTAINS = [[840, 850], [1560, 850], [840, 1550], [1560, 1550]];
+function fieldTexture() {
+  const S = 2048, c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d'), k = S / F, X = x => x * k, Y = y => S - y * k;
+  g.fillStyle = '#5f6663'; g.fillRect(0, 0, S, S);
+  g.strokeStyle = 'rgba(0,0,0,0.28)'; g.lineWidth = 3;
+  for (let i = 600; i < F; i += 600) { g.beginPath(); g.moveTo(X(i), 0); g.lineTo(X(i), S); g.moveTo(0, Y(i)); g.lineTo(S, Y(i)); g.stroke(); }
+  const rect = (r, fill, stroke, lw = 14) => { if (fill) { g.fillStyle = fill; g.fillRect(X(r[0]), Y(r[3]), X(r[1] - r[0]), X(r[3] - r[2])); } if (stroke) { g.strokeStyle = stroke; g.lineWidth = lw; g.strokeRect(X(r[0]) + lw / 2, Y(r[3]) + lw / 2, X(r[1] - r[0]) - lw, X(r[3] - r[2]) - lw); } };
+  const label = (t, x, y, c) => { g.fillStyle = c; g.font = '700 46px "Be Vietnam Pro", sans-serif'; g.textAlign = 'center'; g.fillText(t, X(x), Y(y)); };
+  ZONES.fire.forEach(r => { rect(r, '#1a1aa6', null); label('KHU CHỮA CHÁY', (r[0] + r[1]) / 2, r[2] + 60, '#cfd6ff'); });
+  rect([600, 1800, 600, 1800], null, '#2ee38a', 10); label('KHU VỰC RỪNG', 1200, 1830, '#2ee38a');
+  for (const [a, c] of [['red', '#e23b32'], ['blue', '#2f68e0']]) {
+    rect(ZONES.safe[a], null, c); label('BẢO VỆ XANH', (ZONES.safe[a][0] + ZONES.safe[a][1]) / 2, ZONES.safe[a][2] + 50, c);
+    rect(ZONES.load[a], null, '#d9dedb'); label('TIẾP TẾ', (ZONES.load[a][0] + ZONES.load[a][1]) / 2, 170, '#d9dedb');
+    rect(ZONES.start[a], null, c); label('XUẤT PHÁT', (ZONES.start[a][0] + ZONES.start[a][1]) / 2, 230, c);
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+}
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.4), new THREE.MeshStandardMaterial({ map: fieldTexture(), roughness: 0.95 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(12, 12), mat(0x9aa39e, { roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.position.y = -0.002; ground.receiveShadow = true; scene.add(ground);
+for (const [w, d, x, z] of [[2.44, 0.02, 0, -1.21], [2.44, 0.02, 0, 1.21], [0.02, 2.4, -1.21, 0], [0.02, 2.4, 1.21, 0]]) scene.add(box(w, 0.3, d, M.wall, x, 0.15, z));
+// Khu vực Điều khiển
+const ds = box(2.4, 0.004, 0.6, mat(0xf3f4f2), 0, 0.002, 1.52); scene.add(ds);
+for (const [x, c] of [[-0.6, 0xe23b32], [0.6, 0x2f68e0]]) scene.add(box(1.16, 0.006, 0.56, mat(c, { transparent: true, opacity: 0.25 }), x, 0.004, 1.52));
+
+// ---------- Ngọn Núi Xanh ----------
+// Hình bầu dục "vuông vức" có gợn như ảnh in 3D thật; tầng trong lệch dần về phía sau núi.
+function blob(R, seed, n = 72) {
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2, c = Math.abs(Math.cos(a)), s = Math.abs(Math.sin(a));
+    const se = 1 / Math.pow(c ** 4 + s ** 4, 0.25);
+    const r = R * Math.min(se, 1.22) * 0.86 * (1 + 0.06 * Math.sin(3 * a + seed) + 0.035 * Math.sin(2 * a + seed * 1.7));
+    pts.push(new THREE.Vector2(Math.cos(a) * r, Math.sin(a) * r));
+  }
+  return pts;
+}
+function solid(pts, h0, h1, m, ox = 0, oy = 0) {
+  const shape = new THREE.Shape(pts.map(p => new THREE.Vector2(p.x + ox, p.y + oy)));
+  const g = new THREE.ExtrudeGeometry(shape, { depth: h1 - h0, bevelEnabled: false, curveSegments: 4 });
+  g.rotateX(-Math.PI / 2); g.translate(0, h0, 0);
+  const o = new THREE.Mesh(g, m); o.castShadow = o.receiveShadow = true; return o;
+}
+function ring(outer, inner, h0, h1, m) {
+  const shape = new THREE.Shape(outer); shape.holes.push(new THREE.Path([...inner].reverse()));
+  const g = new THREE.ExtrudeGeometry(shape, { depth: h1 - h0, bevelEnabled: false, curveSegments: 4 });
+  g.rotateX(-Math.PI / 2); g.translate(0, h0, 0);
+  const o = new THREE.Mesh(g, m); o.castShadow = o.receiveShadow = true; return o;
+}
+const offset = (pts, d, ox = 0, oy = 0) => pts.map(p => { const L = p.length(); return new THREE.Vector2(p.x * (L - d) / L + ox, p.y * (L - d) / L + oy); });
+const shift = (pts, ox, oy) => pts.map(p => new THREE.Vector2(p.x + ox, p.y + oy));
+// [bán kính tầng, cao độ sàn rãnh (mm), lệch về sau (mm)]: Rãnh 1, tầng trang trí, Rãnh 2, Rãnh 3, đỉnh.
+const TIERS = [[200, 15, 0], [150, 50, 10], [108, 95, 20], [68, 130, 30]];
+const mountainGroups = [];
+function buildMountain(cx, cy, seed) {
+  const grp = new THREE.Group(); grp.position.copy(P(cx, cy)); grp.scale.setScalar(MM);
+  TIERS.forEach(([R, h, off], i) => {
+    const pts = shift(blob(R, seed + i * 0.6), 0, off);
+    grp.add(solid(pts, 0, h, i === 1 ? M.grass : M.mtn));
+    grp.add(ring(pts, offset(pts, 7, 0, 0), h, h + 12, M.mtnLip)); // gờ rãnh giữ bóng
+  });
+  // Đỉnh: trụ có lỗ cắm cờ Ø45 sâu 45.
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(30, 32, 30, 32, 1, true), M.mtnLip); top.position.set(0, 145, -38); grp.add(top);
+  const cap = new THREE.Mesh(new THREE.RingGeometry(22.5, 30, 32), M.mtn); cap.rotation.x = -Math.PI / 2; cap.position.set(0, 160, -38); grp.add(cap);
+  const plug = cyl(31, 130, M.mtn); plug.position.set(0, 65, -38); grp.add(plug);
+  // Cây trang trí trên tầng 2.
+  const R1 = blob(150, seed + 0.6), R2 = blob(108, seed + 1.2);
+  for (let k = 0; k < 9; k++) {
+    const i = Math.floor((k / 9) * R1.length), a = R1[i], b = R2[i];
+    const t = new THREE.Mesh(new THREE.ConeGeometry(9, 30, 7), M.tree);
+    t.position.set((a.x + b.x) / 2, 65, -((a.y + 10 + b.y + 20) / 2)); t.castShadow = true; grp.add(t);
+  }
+  grp.userData = { seed }; scene.add(grp); mountainGroups.push(grp);
+  return grp;
+}
+MOUNTAINS.forEach(([x, y], i) => buildMountain(x, y, i * 1.9 + 0.4));
+// Nhãn A B C D trên sàn cạnh núi
+MOUNTAINS.forEach(([x, y], i) => {
+  const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
+  g.fillStyle = '#ffffff'; g.font = '800 96px "Be Vietnam Pro", sans-serif'; g.textAlign = 'center'; g.fillText('ABCD'[i], 64, 100);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false }));
+  s.scale.set(0.08, 0.08, 1); s.position.copy(P(x - 240, y - 240, 40)); scene.add(s);
+});
+
+// ---------- Bóng (InstancedMesh) ----------
+const BALL_R = 20 * MM, sphere = new THREE.SphereGeometry(BALL_R, 16, 12);
+const orange = new THREE.InstancedMesh(sphere, M.orange, 100), green = new THREE.InstancedMesh(sphere, M.green, 200);
+orange.castShadow = green.castShadow = true; scene.add(orange, green);
+const balls = [];
+// Hộp Phân Phối: chân đế đứng sau thành sân, hộp mica 2 tầng (cam ở trên, xanh ở dưới) như ảnh thật.
+const DISP = P(1200, 2400 + 260);
+const stand = box(0.5, 0.55, 0.36, M.stand, DISP.x, 0.275, DISP.z); scene.add(stand);
+const acr = box(0.52, 0.3, 0.38, M.acrylic, DISP.x, 0.7, DISP.z); acr.castShadow = false; scene.add(acr);
+scene.add(box(0.5, 0.004, 0.36, M.acrylic, DISP.x, 0.7, DISP.z));
+for (const sx of [-1, 1]) for (const sz of [-1, 1]) scene.add(box(0.02, 0.32, 0.02, mat(0x7c9a2a), DISP.x + sx * 0.255, 0.7, DISP.z + sz * 0.185));
+function dispenserSpot(i, c) {
+  const layer = c === 'o' ? 0.715 : 0.565, per = 10, row = c === 'o' ? i : i;
+  const col = row % per, r2 = Math.floor(row / per) % 10, lvl = Math.floor(row / 100);
+  return new THREE.Vector3(DISP.x - 0.2 + col * 0.044, layer + 0.02 + lvl * 0.04, DISP.z - 0.15 + r2 * 0.034);
+}
+for (let i = 0; i < 300; i++) {
+  const c = i < 100 ? 'o' : 'g', k = i < 100 ? i : i - 100;
+  const p = dispenserSpot(k, c);
+  balls.push({ c, k, pos: p.clone(), from: p.clone(), to: p.clone(), t0: 0, t1: 0, home: p.clone() });
+}
+const dummy = new THREE.Object3D();
+function writeBalls() {
+  for (const b of balls) { dummy.position.copy(b.pos); dummy.updateMatrix(); (b.c === 'o' ? orange : green).setMatrixAt(b.k, dummy.matrix); }
+  orange.instanceMatrix.needsUpdate = green.instanceMatrix.needsUpdate = true;
+}
+writeBalls();
+let rngState = 7; const rnd = () => (rngState = (rngState * 1664525 + 1013904223) >>> 0) / 4294967296;
+const gauss = () => { let u = 0, v = 0; while (!u) u = rnd(); while (!v) v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+const inMtn = (x, y) => MOUNTAINS.some(([cx, cy]) => Math.abs(x - cx) < 215 && Math.abs(y - cy) < 215);
+let dumped = false;
+function dump() {
+  const now = performance.now() / 1000;
+  if (dumped) { for (const b of balls) { b.from = b.pos.clone(); b.to = b.home.clone(); b.t0 = now; b.t1 = now + 0.8; } dumped = false; $('dump').textContent = 'Xả bóng'; return; }
+  for (const b of balls) {
+    let x, y; do { x = Math.min(F - 25, Math.max(25, 1200 + gauss() * 750)); y = Math.min(F - 25, Math.max(25, F - 150 - Math.abs(gauss()) * 1100)); } while (inMtn(x, y));
+    b.from = b.pos.clone(); b.to = P(x, y, 20); b.t0 = now + rnd() * 2.5; b.t1 = b.t0 + 0.9 + rnd() * 1.4;
+  }
+  dumped = true; $('dump').textContent = 'Thu bóng về hộp';
+  setSeeded(false);
+}
+function animateBalls(now) {
+  let moving = false;
+  for (const b of balls) {
+    if (now < b.t0 || b.pos.equals(b.to)) continue;
+    const u = Math.min(1, (now - b.t0) / (b.t1 - b.t0)); moving = true;
+    const e = 1 - (1 - u) ** 3;
+    b.pos.lerpVectors(b.from, b.to, e);
+    b.pos.y = THREE.MathUtils.lerp(b.from.y, b.to.y, e) + Math.sin(u * Math.PI) * 0.08 * (1 - u) + Math.abs(Math.sin(u * Math.PI * 3)) * 0.02 * (1 - u);
+    if (u >= 1) b.pos.copy(b.to);
+  }
+  if (moving) writeBalls();
+}
+
+// Bóng mẫu trên các rãnh (giống ảnh Hình 8)
+const seedGroup = new THREE.Group(); scene.add(seedGroup);
+function buildSeedBalls() {
+  const inst = new THREE.InstancedMesh(sphere, M.green, 4 * 60), top = new THREE.InstancedMesh(sphere, M.orange, 4);
+  let n = 0;
+  mountainGroups.forEach((grp, m) => {
+    const seed = grp.userData.seed;
+    [[0, 1, 22], [2, 3, 11], [3, null, 7]].forEach(([iOut, iIn, count]) => {
+      const [Ro, h, offO] = TIERS[iOut];
+      for (let k = 0; k < count; k++) {
+        const ptsO = shift(blob(Ro, seed + iOut * 0.6), 0, offO), idx = Math.floor((k / count) * ptsO.length), a = ptsO[idx];
+        let px, py;
+        if (iIn != null) { const [Ri, , offI] = TIERS[iIn]; const b = shift(blob(Ri, seed + iIn * 0.6), 0, offI)[idx]; px = (a.x * 0.88 + b.x * 1.12) / 2; py = (a.y * 0.88 + b.y * 1.12) / 2; }
+        else { px = a.x * 0.62; py = a.y * 0.62 + offO * 0.4 - 15; }
+        dummy.position.copy(grp.position).add(new THREE.Vector3(px * MM, (h + 20) * MM, -py * MM)); dummy.updateMatrix(); inst.setMatrixAt(n++, dummy.matrix);
+      }
+    });
+    dummy.position.copy(grp.position).add(new THREE.Vector3(0, 0.172, -0.038)); dummy.updateMatrix(); top.setMatrixAt(m, dummy.matrix);
+  });
+  inst.count = n; inst.castShadow = true; seedGroup.add(inst, top);
+  MOUNTAINS.forEach(([x, y]) => { const f = makeFlag(); f.position.copy(P(x, y)).add(new THREE.Vector3(0, 0.16, -0.038)); seedGroup.add(f); });
+}
+function setSeeded(on) { seedGroup.visible = on; $('seed').setAttribute('aria-pressed', String(on)); }
+
+// ---------- Lá Cờ (70–100 mm, tỉ lệ 2:3, cột 120–150 mm) ----------
+function flagTexture() {
+  const c = document.createElement('canvas'); c.width = 300; c.height = 200; const g = c.getContext('2d');
+  g.fillStyle = '#da251d'; g.fillRect(0, 0, 300, 200); g.fillStyle = '#ffcd00'; g.beginPath();
+  for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, r = k % 2 ? 26 : 64; g.lineTo(150 + Math.cos(a) * r, 104 + Math.sin(a) * r); }
+  g.closePath(); g.fill(); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const FLAG_MAT = new THREE.MeshStandardMaterial({ map: flagTexture(), side: THREE.DoubleSide, roughness: 0.8 });
+function makeFlag() {
+  const g = new THREE.Group();
+  const pole = cyl(2.5 * MM, 0.135, M.alu, 8); pole.position.y = 0.0675; g.add(pole);
+  const base = cyl(21 * MM, 0.045, mat(0x8b6b3a), 20); base.position.y = -0.0225; g.add(base);
+  const f = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 0.06), FLAG_MAT); f.position.set(0.045, 0.105, 0); g.add(f);
+  return g;
+}
+buildSeedBalls(); setSeeded(false);
+
+// ---------- Robot mẫu ----------
+// Khung toạ độ robot (mm): +z là mũi xe, +x bên phải, y hướng lên.
+function wheel(r, w, x, z, g, kind = 'plain') {
+  const p = new THREE.Group(); p.position.set(x, r, z);
+  if (kind === 'plain') {
+    const t = cyl(r, w, M.tire, 28); t.rotation.z = Math.PI / 2; p.add(t);
+    const h = cyl(r * 0.62, w + 1, M.hub, 5); h.rotation.z = Math.PI / 2; p.add(h);
+  } else {
+    // Bánh đa hướng: đĩa giữa + con lăn nhỏ quanh vành. Omni: con lăn vuông góc trục; mecanum: nghiêng 45°.
+    const hub = cyl(r * 0.7, w * 0.8, M.hub, 20); hub.rotation.z = Math.PI / 2; p.add(hub);
+    const n = 10, roll = new THREE.CylinderGeometry(5.5, 5.5, w * (kind === 'omni' ? 0.45 : 0.9), 8);
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2, rl = new THREE.Mesh(roll, M.tire);
+      rl.position.set(0, Math.cos(a) * (r - 6), Math.sin(a) * (r - 6));
+      const e = new THREE.Euler(a, 0, 0); rl.quaternion.setFromEuler(e);
+      if (kind === 'omni') rl.rotateX(Math.PI / 2); else { rl.rotateX(Math.PI / 2); rl.rotateZ((x > 0) === (z > 0) ? Math.PI / 4 : -Math.PI / 4); }
+      p.add(rl);
+    }
+  }
+  g.add(p); return p;
+}
+function railCage(g, pts, n, rad, m) {
+  const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(...p)));
+  for (let k = 0; k < n; k++) {
+    const a = (k / n) * Math.PI * 2, rail = [];
+    for (let i = 0; i <= 24; i++) {
+      const u = i / 24, p = curve.getPoint(u), t = curve.getTangent(u), side = new THREE.Vector3(1, 0, 0), nrm = new THREE.Vector3().crossVectors(t, side).normalize();
+      rail.push(p.clone().addScaledVector(side, Math.cos(a) * rad).addScaledVector(nrm, Math.sin(a) * rad));
+    }
+    const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(rail), 30, 2.2, 6), m); tube.castShadow = true; g.add(tube);
+  }
+  return curve;
+}
+const DRIVES = {
+  diff2: { name: '2 bánh động cơ + bánh đỡ', motors: 2 },
+  omni: { name: '4 bánh đa hướng (omni, xếp chữ X)', motors: 4 },
+  mecanum: { name: '4 bánh mecanum', motors: 4 },
+};
+// Đế bánh: luôn dùng động cơ TT gắn thẳng vào mạch ThingBot (RE03).
+function buildDrive(def, drive, g, parts) {
+  const { track, z } = def.base, ws = {};
+  if (drive === 'diff2') {
+    ws.M1 = [wheel(32.5, 25, -track, z[1], g)]; ws.M2 = [wheel(32.5, 25, track, z[1], g)];
+    for (const sx of [-1, 1]) g.add(box(65, 22, 19, M.tt, sx * (track - 45), 33, z[1]));
+    if (def.base.passive === 'omni') ws.free = [wheel(32.5, 25, -track, z[0], g, 'omni'), wheel(32.5, 25, track, z[0], g, 'omni')];
+    else { const c = new THREE.Mesh(new THREE.SphereGeometry(10, 12, 8), M.alu); c.position.set(0, 10, z[0]); g.add(c); }
+  } else {
+    const k = drive === 'omni' ? 'omni' : 'mecanum';
+    ws.M1 = [wheel(32.5, 25, -track, z[0], g, k)]; ws.M2 = [wheel(32.5, 25, track, z[0], g, k)];
+    ws.M3 = [wheel(32.5, 25, -track, z[1], g, k)]; ws.M4 = [wheel(32.5, 25, track, z[1], g, k)];
+    for (const sx of [-1, 1]) for (const zz of z) g.add(box(65, 22, 19, M.tt, sx * (track - 45), 33, zz));
+  }
+  parts.wheels = ws;
+}
+const ROBOT_DEFS = {
+  maker: {
+    name: 'Mẫu Maker', size: [240, 216, 300], drives: ['diff2', 'omni', 'mecanum'], base: { track: 107, z: [80, -80], passive: 'omni' },
+    mech: { M3: 'Tay vòng xúc bóng', M4: 'Thanh trượt nâng / vươn' },
+    desc: 'Robot mẫu của Maker Việt cho các đội: tay vòng xúc bóng, ống cong đưa bóng lên cao, cửa xả trên đỉnh và thanh trượt răng vươn ra cắm cờ. Bản 2 bánh: M1, M2 kéo 2 bánh sau, 2 bánh trước là bánh đa hướng bị động. Thanh trượt rút ngắn còn 250 mm để robot dài đúng 300 mm khi xuất phát, vươn thêm tối đa 130 mm (430 mm, dưới giới hạn 500).',
+    build(g, parts) {
+      g.add(box(184, 4, 245, M.plate, 0, 50, 0), box(184, 4, 230, M.plate, 0, 82, -6));
+      for (const sx of [-1, 1]) g.add(box(4, 36, 245, M.plate, sx * 92, 66, 0));
+      g.add(box(68, 10, 52, M.pcb, 0, 60, -30), box(78, 20, 40, M.black, 0, 94, -92));
+      g.add(box(120, 132, 4, M.plate, 10, 150, -58), box(4, 132, 90, M.plate, 70, 150, -15));
+      const curve = railCage(g, [[-20, 38, 128], [-20, 92, 98], [-20, 146, 52], [-20, 178, 8]], 6, 30, M.plate);
+      const top = new THREE.Mesh(new THREE.TorusGeometry(34, 4, 8, 32), M.grey); top.position.copy(curve.getPoint(1)); top.rotation.x = Math.PI / 2; g.add(top);
+      const arm = new THREE.Group(); arm.position.set(-20, 62, 92); g.add(arm);
+      arm.add(box(6, 6, 52, M.grey, -34, 0, 22));
+      const hoop = new THREE.Mesh(new THREE.TorusGeometry(26, 4, 8, 28), M.grey); hoop.position.set(-20, -18, 44); hoop.rotation.y = Math.PI / 2; arm.add(hoop);
+      parts.actBox = (s360) => { const b = box(20, 40, 40, s360 ? M.black : M.tt, -78, 70, 92); g.add(b); };
+      parts.M3 = v => { arm.rotation.x += v * 0.0012; };
+      const slide = new THREE.Group(); slide.position.set(-62, 206, -40); g.add(slide);
+      slide.add(box(26, 6, 250, M.alu, 0, 0, 30)); // rút ngắn 300 → 250 mm để cả robot gọn trong 300 mm khi xuất phát
+      for (let i = 0; i < 11; i++) slide.add(box(14, 3, 6, M.grey, 0, 4, -85 + i * 20));
+      parts.M4 = v => { slide.userData.e = THREE.MathUtils.clamp((slide.userData.e ?? 0) + v, 0, 130); slide.position.z = -40 + slide.userData.e; };
+      parts.extend = () => slide.userData.e ?? 0;
+      const claw = new THREE.Group(); claw.position.set(0, -6, 158); slide.add(claw);
+      const jawL = box(4, 22, 16, M.grey, -8, -10, 0), jawR = box(4, 22, 16, M.grey, 8, -10, 0); claw.add(jawL, jawR);
+      const flag = makeFlag(); flag.scale.setScalar(1000); flag.position.set(0, 10, 0); claw.add(flag); parts.flag = flag;
+      parts.S2 = a => { const d = 4 + (a / 180) * 12; jawL.position.x = -d; jawR.position.x = d; };
+      parts.S1 = a => { claw.rotation.x = -((a - 90) / 90) * 0.5; };
+      const gate = new THREE.Group(); gate.position.set(30, 196, -40); g.add(gate);
+      gate.add(box(23, 22, 12, M.servo, 0, 0, 0));
+      const flap = box(44, 3, 40, M.alu, 22, 12, 6); gate.add(flap);
+      parts.S3 = a => { flap.rotation.z = (a / 180) * 1.3; };
+    },
+  },
+  ui: {
+    name: 'Xe Ủi', size: [180, 150, 240], drives: ['diff2'], base: { track: 77, z: [50, -60] }, mech: {},
+    desc: 'Gàu hớt phía trước gom cả hai màu, mang về Khu Xuất Phát cho Human Player phân loại. Nhỏ gọn để 2 robot cùng đỗ toàn phần trong Vùng Bảo Vệ Xanh. Chỉ cần 2 động cơ và 1 servo.',
+    build(g, parts) {
+      g.add(box(130, 4, 200, M.plate, 0, 52, -10), box(60, 10, 48, M.pcb, 0, 62, -40), box(70, 18, 38, M.black, 0, 76, -80));
+      const bucket = new THREE.Group(); bucket.position.set(0, 70, 70); g.add(bucket);
+      bucket.add(box(176, 3, 60, M.plate, 0, -55, 30), box(176, 60, 3, M.plate, 0, -27, 0));
+      for (const sx of [-1, 1]) bucket.add(box(3, 60, 60, M.plate, sx * 87, -27, 30));
+      bucket.add(box(20, 26, 12, M.servo, -70, 8, -8));
+      parts.S1 = a => { bucket.rotation.x = -(a / 180) * 0.9; };
+    },
+  },
+  co: {
+    name: 'Xe Cắm Cờ', size: [185, 250, 280], drives: ['diff2', 'omni'], base: { track: 80, z: [90, -70] }, mech: { M4: 'Nâng thùng bóng' },
+    desc: 'Nhận Mầm Cây từ Human Player vào thùng, nâng thùng lên rồi mở cửa xả đổ lên Rãnh 2–3. Tay kẹp phía trước cắm Lá Cờ.',
+    build(g, parts) {
+      g.add(box(134, 4, 270, M.plate, 0, 52, 0), box(60, 10, 48, M.pcb, 0, 62, -60));
+      for (const sx of [-1, 1]) g.add(box(4, 170, 20, M.alu, sx * 55, 140, -20));
+      const lift = new THREE.Group(); g.add(lift);
+      const hop = new THREE.Group(); hop.position.set(0, 120, -20); lift.add(hop);
+      hop.add(box(104, 3, 100, M.plate, 0, 0, 0));
+      for (const [w, d, x, z] of [[104, 3, 0, -50], [3, 100, -52, 0], [3, 100, 52, 0]]) hop.add(box(w, 60, d, M.acrylic, x, 30, z));
+      const door = box(104, 60, 3, M.alu, 0, 30, 50); hop.add(door);
+      parts.actBox = (s360) => g.add(box(20, 40, 40, s360 ? M.black : M.tt, 0, 170, -40));
+      parts.M4 = v => { lift.userData.e = THREE.MathUtils.clamp((lift.userData.e ?? 0) + v, 0, 80); lift.position.y = lift.userData.e; };
+      parts.S3 = a => { door.rotation.x = (a / 180) * 1.2; door.position.y = 30 + Math.sin(door.rotation.x) * 25; door.position.z = 50 + Math.sin(door.rotation.x) * 28; };
+      const arm = new THREE.Group(); arm.position.set(70, 80, 110); g.add(arm);
+      arm.add(box(6, 6, 50, M.grey, 0, 0, 20), box(20, 26, 12, M.servo, 0, 0, -8));
+      const claw = new THREE.Group(); claw.position.set(0, 0, 46); arm.add(claw);
+      const jL = box(4, 18, 14, M.grey, -7, 0, 0), jR = box(4, 18, 14, M.grey, 7, 0, 0); claw.add(jL, jR);
+      const flag = makeFlag(); flag.scale.setScalar(1000); flag.position.set(0, 12, 0); claw.add(flag); parts.flag = flag;
+      parts.S1 = a => { arm.rotation.x = -((a - 90) / 90) * 0.7; };
+      parts.S2 = a => { const d = 4 + (a / 180) * 10; jL.position.x = -d; jR.position.x = d; };
+    },
+  },
+  sort: {
+    name: 'Xe Phân Loại', size: [240, 160, 260], drives: ['diff2', 'mecanum', 'omni'], base: { track: 107, z: [70, -60] }, mech: { M3: 'Con lăn hút bóng' },
+    desc: 'Con lăn hút mọi bóng, cảm biến màu đọc từng quả, cánh gạt chia vào 2 ngăn: cam đổ ở Khu Chữa Cháy, xanh đặt lên Rãnh 1. Bản mecanum đi ngang được để căn mép Khu Chữa Cháy.',
+    build(g, parts) {
+      g.add(box(184, 4, 230, M.plate, 0, 52, -10), box(60, 10, 48, M.pcb, 0, 62, -70));
+      const roller = new THREE.Group(); roller.position.set(0, 40, 120); g.add(roller);
+      const rc = cyl(14, 170, M.dark, 16); rc.rotation.z = Math.PI / 2; roller.add(rc);
+      for (let k = 0; k < 6; k++) { const fin = box(170, 22, 2, mat(0x2ea84f), 0, 0, 0); fin.rotation.x = (k / 6) * Math.PI; roller.add(fin); }
+      parts.actBox = (s360) => g.add(box(40, 22, 20, s360 ? M.black : M.tt, -100, 40, 120));
+      parts.M3 = v => { roller.rotation.x -= v * 0.004; };
+      g.add(box(16, 10, 16, mat(0xdddddd), 0, 92, 70));
+      for (const sx of [-1, 1]) {
+        const bin = new THREE.Group(); bin.position.set(sx * 50, 56, -10); g.add(bin);
+        for (const [w, d, x, z] of [[90, 3, 0, -70], [90, 3, 0, 70], [3, 140, -45, 0], [3, 140, 45, 0]]) bin.add(box(w, 70, d, M.acrylic, x, 35, z));
+      }
+      const flap = new THREE.Group(); flap.position.set(0, 100, 40); g.add(flap);
+      flap.add(box(3, 40, 70, M.alu, 0, 0, -20), box(20, 22, 12, M.servo, 0, 26, 0));
+      parts.S3 = a => { flap.rotation.y = ((a - 90) / 90) * 0.6; };
+    },
+  },
+};
+const START = { red: [[720, 160], [980, 160]], blue: [[1420, 160], [1680, 160]] };
+const SERVO_NAMES = { S1: 'Nâng tay', S2: 'Kẹp', S3: 'Cửa xả bóng' };
+
+// Cổng của robot theo đế bánh và loại động cơ cơ cấu.
+//  - 2 bánh: M1 trái, M2 phải; cơ cấu M3 / M4 bằng động cơ TT, hoặc S4 / S5 bằng servo 360.
+//  - 4 bánh đa hướng: M1 trước trái, M2 trước phải, M3 sau trái, M4 sau phải; cơ cấu buộc dùng servo 360 (S4 / S5).
+function portsOf(r) {
+  const d = r.def, list = [];
+  if (r.drive === 'diff2') list.push({ id: 'M1', name: 'Bánh trái', kind: 'motor', wheel: 'M1' }, { id: 'M2', name: 'Bánh phải', kind: 'motor', wheel: 'M2' });
+  else list.push(...[['M1', 'Bánh trước trái'], ['M2', 'Bánh trước phải'], ['M3', 'Bánh sau trái'], ['M4', 'Bánh sau phải']].map(([id, name]) => ({ id, name, kind: 'motor', wheel: id })));
+  const s360 = r.drive !== 'diff2' || r.act === 's360';
+  for (const [mid, alt] of [['M3', 'S4'], ['M4', 'S5']]) {
+    if (!d.mech[mid]) continue;
+    list.push(s360 ? { id: alt, name: d.mech[mid] + ' (servo 360)', kind: 's360', mech: mid } : { id: mid, name: d.mech[mid], kind: 'motor', mech: mid });
+  }
+  for (const s of ['S1', 'S2', 'S3']) if (r.parts[s]) list.push({ id: s, name: SERVO_NAMES[s], kind: 'servo', servo: s });
+  return list;
+}
+function buildRobot(r) {
+  if (r.g) scene.remove(r.g);
+  const def = r.def, g = new THREE.Group(), body = new THREE.Group(), parts = {};
+  body.scale.setScalar(MM); g.add(body);
+  def.build(body, parts); buildDrive(def, r.drive, body, parts);
+  const s360 = r.drive !== 'diff2' || r.act === 's360';
+  if (Object.keys(def.mech).length) parts.actBox?.(s360);
+  body.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  const band = box(def.size[0] * MM + 0.004, 0.012, def.size[2] * MM * 0.6, mat(r.al === 'red' ? 0xe23b32 : 0x2f68e0, { transparent: true, opacity: 0.85 }), 0, 0.045, 0); g.add(band);
+  const [x, y] = START[r.al][r.slot]; g.position.copy(P(x, y + 150 - def.size[2] / 2 + 1)); g.rotation.y = Math.PI;
+  const frame = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(0.3, 0.85, 0.3)), new THREE.LineBasicMaterial({ color: 0x0e8f9c }));
+  frame.position.y = 0.425; frame.visible = $('box').getAttribute('aria-pressed') === 'true'; g.add(frame);
+  scene.add(g);
+  Object.assign(r, { g, parts, frame, val: { S1: 90, S2: 90, S3: 0 } });
+  ['S1', 'S2', 'S3'].forEach(s => parts[s]?.(r.val[s]));
+}
+const robots = [['maker', 'red', 0], ['sort', 'red', 1], ['ui', 'blue', 0], ['co', 'blue', 1]].map(([type, al, slot]) => {
+  const r = { type, al, slot, def: ROBOT_DEFS[type], drive: 'diff2', act: 'tt' };
+  buildRobot(r); return r;
+});
+let sel = 0;
+
+// ---------- Bảng cổng ----------
+function renderRobots() {
+  const r = robots[sel];
+  $('robots').innerHTML = robots.map((x, i) => `<button type="button" aria-pressed="${i === sel}" data-i="${i}">${x.def.name}<small>Liên minh ${x.al === 'red' ? 'Đỏ' : 'Xanh'} · ${DRIVES[x.drive].name.split(' (')[0]}</small></button>`).join('');
+  $('robots').querySelectorAll('button').forEach(b => b.onclick = () => { sel = +b.dataset.i; renderRobots(); renderPorts(); focusRobot(); });
+  $('rdesc').textContent = r.def.desc;
+  $('drive').innerHTML = r.def.drives.map(k => `<option value="${k}"${k === r.drive ? ' selected' : ''}>${DRIVES[k].name}</option>`).join('');
+  $('drive').disabled = r.def.drives.length < 2;
+  const hasMech = Object.keys(r.def.mech).length > 0;
+  $('act').value = r.drive === 'diff2' ? r.act : 's360';
+  $('act').disabled = r.drive !== 'diff2' || !hasMech;
+}
+$('drive').onchange = e => { const r = robots[sel]; r.drive = e.target.value; buildRobot(r); renderRobots(); renderPorts(); };
+$('act').onchange = e => { const r = robots[sel]; r.act = e.target.value; buildRobot(r); renderRobots(); renderPorts(); };
+const S360 = ['Lùi', 'Dừng', 'Tiến'];
+function renderPorts() {
+  const r = robots[sel];
+  $('ports').innerHTML = portsOf(r).map(p => {
+    const v = r.val[p.id] ?? (p.kind === 'servo' ? 90 : 0);
+    const range = p.kind === 'motor' ? 'min="-100" max="100" step="1"' : p.kind === 's360' ? 'min="-1" max="1" step="1"' : 'min="0" max="180" step="1"';
+    const out = p.kind === 'motor' ? `${v}%` : p.kind === 's360' ? S360[v + 1] : `${v}°`;
+    return `<div class="port"><b>${p.id}</b><label for="p-${p.id}">${p.name}<input id="p-${p.id}" type="range" ${range} value="${v}"></label><output id="o-${p.id}">${out}</output></div>`;
+  }).join('');
+  for (const p of portsOf(r)) {
+    const el = $('p-' + p.id);
+    el.oninput = () => {
+      const v = +el.value; r.val[p.id] = v;
+      $('o-' + p.id).textContent = p.kind === 'motor' ? `${v}%` : p.kind === 's360' ? S360[v + 1] : `${v}°`;
+      if (p.servo) r.parts[p.servo]?.(v);
+    };
+  }
+  renderChecks(); renderSnippet();
+}
+function renderChecks() {
+  const r = robots[sel], d = r.def, ports = portsOf(r);
+  const dc = ports.filter(p => p.kind === 'motor').length, servos = ports.filter(p => p.kind !== 'motor').length;
+  const lenNow = d.size[2] + (r.parts.extend?.() ?? 0);
+  const rows = [
+    [d.size[0] <= 300 && d.size[2] <= 300 && d.size[1] <= 850, `Khi xuất phát ${d.size[0]} × ${d.size[2]} × ${d.size[1]} mm, giới hạn 300 × 300 × 850 (R01)`],
+    [lenNow <= 500, `Đang mở rộng dài ${Math.round(lenNow)} mm, tối đa 500 mm một chiều`],
+    [dc <= 4, `Động cơ TT: ${dc} / 4 (RE02)`],
+    [servos <= 5, `Servo SG90 / MG996R: ${servos} / 5`],
+    [true, 'Bánh đa hướng, mecanum, omni được phép (RC01)'],
+  ];
+  if (ports.some(p => p.kind === 's360')) rows.push(['note', 'Servo 360 chỉ có Tiến / Dừng / Lùi ở một tốc độ: muốn nhanh hay chậm phải đổi tỉ số truyền (bánh răng, puly)']);
+  $('checks').innerHTML = rows.map(([ok, t]) => `<div class="chk"><i class="${ok === 'note' ? 'ok' : ok ? 'ok' : 'bad'}">${ok === 'note' ? 'Lưu ý' : ok ? 'Đạt' : 'Vượt'}</i><span>${t}</span></div>`).join('');
+}
+// Chương trình mẫu viết bằng đúng chữ trên khối ThingBlock thật.
+function renderSnippet() {
+  const r = robots[sel], ports = portsOf(r), L = [];
+  L.push('khi Arduino khởi động', '  init ThingBot', '  init PS2 on ThingBot', 'vòng lặp Arduino', '    read PS2 receiver data');
+  if (r.drive === 'diff2') {
+    L.push('    // lái kiểu xe tăng: cần trái → M1, cần phải → M2 (giá trị 0..255, giữa là 128)',
+      '    nếu (PS2 get joystick PSS_LY) < 120 thì set motor M1 go forward at ((128 − LY) × 2)',
+      '    nếu không, nếu (PS2 get joystick PSS_LY) > 136 thì set motor M1 go backward at ((LY − 128) × 2)',
+      '    nếu không thì set motor M1 go forward at 0', '    … M2 làm tương tự với PSS_RY');
+  } else {
+    L.push(`    // ${r.drive === 'mecanum' ? 'mecanum' : 'omni chữ X'}: tiến = Y, ngang = X, xoay = RX`,
+      '    tiến ← 128 − PSS_LY,  ngang ← PSS_LX − 128,  xoay ← PSS_RX − 128',
+      '    M1 (trước trái)  ← tiến + ngang + xoay', '    M2 (trước phải)  ← tiến − ngang − xoay',
+      '    M3 (sau trái)    ← tiến − ngang + xoay', '    M4 (sau phải)    ← tiến + ngang − xoay',
+      '    mỗi bánh: set motor Mn go forward/backward at |giá trị|');
+  }
+  for (const p of ports.filter(p => p.mech)) {
+    if (p.kind === 'motor') L.push(`    nếu <PS2 PSB_R1 button is pressed?> thì set motor ${p.id} go forward at 80, nếu không thì … at 0   // ${p.name}`);
+    else L.push(`    nếu <PS2 PSB_R1 button is pressed?> thì set servo ${p.id} to angle 180 degrees, nếu không thì … 90 degrees   // ${p.name}: 180 tiến, 90 dừng, 0 lùi`);
+  }
+  if (r.parts.S3) L.push('    nếu <PS2 PSB_CIRCLE button is pressed?> thì set servo S3 to angle 120 degrees, nếu không thì … 0 degrees   // cửa xả');
+  if (r.parts.S2) L.push('    nếu <PS2 PSB_SQUARE button is pressed?> thì set servo S2 to angle 30 degrees   // kẹp cờ');
+  $('snippet').textContent = L.join('\n');
+}
+
+// ---------- Camera ----------
+let camGoal = null;
+function frameView(target, dist, polar = 0.9, az = 0) {
+  const pos = new THREE.Vector3(target.x + Math.sin(az) * Math.sin(polar) * dist, target.y + Math.cos(polar) * dist, target.z + Math.cos(az) * Math.sin(polar) * dist);
+  camGoal = { pos, target: target.clone() };
+}
+const focusRobot = () => { const r = robots[sel]; frameView(r.g.position.clone().add(new THREE.Vector3(0, 0.1, 0)), 0.7, 1.0, Math.PI - 0.55); };
+$('vField').onclick = () => frameView(new THREE.Vector3(0, 0, 0.1), 3.6, 0.85, 0);
+$('vRobot').onclick = focusRobot;
+$('vMtn').onclick = () => { setSeeded(true); frameView(P(840, 850, 60), 0.7, 0.95, Math.PI - 0.5); };
+$('dump').onclick = dump;
+$('seed').onclick = () => setSeeded(!seedGroup.visible);
+$('box').onclick = () => { const on = $('box').getAttribute('aria-pressed') !== 'true'; $('box').setAttribute('aria-pressed', String(on)); robots.forEach(r => r.frame.visible = on); };
+let demo = false;
+$('demo').onclick = () => { demo = !demo; $('demo').setAttribute('aria-pressed', String(demo)); $('demo').textContent = demo ? 'Dừng chạy thử' : 'Chạy thử cơ cấu'; };
+camera.position.set(0, 2.9, 3.3); controls.target.set(0, 0, 0.1);
+
+function resize() {
+  const w = view.clientWidth, h = view.clientHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(view);
+function applyTheme() { scene.background = new THREE.Color(css('--scene') || '#dfe6e1'); }
+applyTheme();
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
+new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+
+// ---------- Trận đấu: 4 agent lái 4 robot mẫu, dùng cùng bộ máy với Sân Thử 2D ----------
+const S = window.FanrocSim;
+const TIER_N = [25, 13, 8];
+// Chỗ đặt bóng trên từng rãnh của từng núi (toạ độ cảnh).
+const SLOTS = mountainGroups.map(grp => {
+  const seed = grp.userData.seed;
+  return [[0, 1], [2, 3], [3, null]].map(([iOut, iIn], tier) => {
+    const [Ro, h, offO] = TIERS[iOut], out = [];
+    const ptsO = shift(blob(Ro, seed + iOut * 0.6), 0, offO);
+    for (let k = 0; k < TIER_N[tier]; k++) {
+      const idx = Math.floor(((k * 7) % TIER_N[tier]) / TIER_N[tier] * ptsO.length), a = ptsO[idx];
+      let px, py;
+      if (iIn != null) { const [Ri, , offI] = TIERS[iIn]; const b = shift(blob(Ri, seed + iIn * 0.6), 0, offI)[idx]; px = (a.x * 0.88 + b.x * 1.12) / 2; py = (a.y * 0.88 + b.y * 1.12) / 2; }
+      else { px = a.x * 0.62; py = a.y * 0.62 + offO * 0.4 - 15; }
+      out.push(grp.position.clone().add(new THREE.Vector3(px * MM, (h + 20) * MM, -py * MM)));
+    }
+    return out;
+  });
+});
+const mFlags = MOUNTAINS.map(([x, y]) => { const f = makeFlag(); f.position.copy(P(x, y)).add(new THREE.Vector3(0, 0.16, -0.038)); f.visible = false; scene.add(f); return f; });
+const SIM_TYPE = { maker: 'maker', ui: 'ui', co: 'co', sort: 'sort' };
+const TEAM = ['Dế Xanh', 'Chuồn Chuồn', 'Kiến Lửa', 'Ong Vàng'];
+let match = null, acc = 0, shown = 0, lastSum = -1, matchSeed = 11;
+const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+function startMatch() {
+  if (S.TYPES.maker) S.TYPES.maker.l = 300; // thanh trượt đã rút ngắn
+  match = S.createMatch(robots.map((r, i) => ({ type: SIM_TYPE[r.type], skill: $('skill').value, team: TEAM[i] })), { seed: matchSeed });
+  acc = 0; shown = 0; lastSum = -1;
+  setSeeded(false); dumped = false; $('dump').textContent = 'Xả bóng'; $('dump').disabled = true;
+  robots.forEach(r => { r.parts.flag && (r.parts.flag.visible = true); r.trail = r.g.position.clone(); });
+  mFlags.forEach(f => f.visible = false);
+  $('mlog').innerHTML = ''; $('mteams').innerHTML = ''; $('board').hidden = false;
+  $('play').textContent = 'Dừng trận'; $('again').disabled = false; $('skip').disabled = false;
+  frameView(new THREE.Vector3(0, 0, 0.15), 3.3, 0.8, 0);
+}
+function stopMatch() {
+  match = null; $('play').textContent = 'Chơi một trận'; $('skip').disabled = true; $('dump').disabled = false; $('board').hidden = true;
+  for (const b of balls) { b.pos.copy(b.home); b.to = b.home.clone(); }
+  writeBalls(); mFlags.forEach(f => f.visible = false);
+  robots.forEach(r => { r.parts.flag && (r.parts.flag.visible = true); const [x, y] = START[r.al][r.slot]; r.g.position.copy(P(x, y + 150 - r.def.size[2] / 2 + 1)); r.g.rotation.y = Math.PI; });
+}
+$('play').onclick = () => (match ? stopMatch() : startMatch());
+$('skip').onclick = () => { if (!match) return; let n = 0; while (!match.done && n < 4000) { match.step(); n++; } drawMatch(); };
+$('again').onclick = () => { matchSeed = Math.floor(Math.random() * 1e6); startMatch(); };
+function drawMatch() {
+  const st = match, t = st.t;
+  // Robot: vị trí và hướng từ mô phỏng; bánh quay theo quãng đường đi được.
+  st.robots.forEach((sr, i) => {
+    const r = robots[i], p = P(sr.x, sr.y);
+    const moved = r.g.position.distanceTo(p);
+    r.g.position.copy(p); r.g.rotation.y = Math.atan2(Math.cos(sr.heading), -Math.sin(sr.heading));
+    const ws = r.parts.wheels; Object.values(ws).flat().forEach(w => w.rotation.x += moved / 0.0325);
+    if (r.parts.flag) r.parts.flag.visible = sr.hasFlag;
+    const k = sr.task?.kind, busy = sr.busy > 0;
+    if (busy && k === 'pick') r.parts.M3?.(40);
+    r.parts.S3?.(busy && (k === 'dropMtn' || k === 'dropFire' || k === 'dumpStart') ? 150 : 0);
+    if (r.parts.M4 && (k === 'dropMtn' || k === 'flag')) r.parts.M4(busy ? 3 : 0); else r.parts.M4?.(-3);
+  });
+  // Bóng
+  const cnt = MOUNTAINS.map(() => [0, 0, 0]), inBot = st.robots.map(() => 0), tray = { red: 0, blue: 0 };
+  st.balls.forEach((b, i) => {
+    const vb = balls[i]; let p;
+    if (b.st === 'field') {
+      p = P(b.x, b.y, 20);
+      if (t < 0) { const d = (i % 37) / 37 * 7, u = THREE.MathUtils.clamp((t + 10 - d) / 1.3, 0, 1); p = vb.home.clone().lerp(p, 1 - (1 - u) ** 3); p.y += Math.sin(u * Math.PI) * 0.12; }
+    } else if (b.st === 'mtn') { const n = cnt[b.m][b.tier]++; p = SLOTS[b.m][b.tier][n % TIER_N[b.tier]]; }
+    else if (b.st === 'robot') { const ri = st.robots.findIndex(r => r.carried.includes(i)), n = inBot[ri]++; p = robots[ri].g.position.clone().add(new THREE.Vector3(((n % 3) - 1) * 0.042, 0.23 + Math.floor(n / 3) * 0.042, 0)); }
+    else if (b.st === 'hp') { const n = tray[b.a]++; p = P(b.a === 'red' ? 160 + (n % 8) * 44 : 2240 - (n % 8) * 44, -140 - Math.floor(n / 8) * 44, 20); }
+    else p = vb.home;
+    vb.pos.copy(p);
+  });
+  writeBalls();
+  st.flags.forEach((f, m) => mFlags[m].visible = f != null);
+  // Bảng điểm
+  $('mclock').textContent = t < 0 ? mmss(-t) : mmss(Math.max(0, S.MATCH_S - t));
+  const left = S.MATCH_S - t;
+  $('mphase').textContent = t < 0 ? 'Xả bóng · robot đứng yên' : st.done ? 'Hết giờ' : left <= S.ENDGAME_S ? 'End Game' : 'Thi đấu';
+  $('mphase').dataset.end = String(t >= 0 && left <= S.ENDGAME_S && !st.done);
+  if (st.done || t - lastSum > 0.5) {
+    lastSum = t;
+    const sc = st.done ? st.result.score : st.summary().score;
+    $('mtotal').textContent = `${sc.total} điểm`;
+    $('mbk').innerHTML = [['fire', 'Điểm Cháy'], ['r1', 'Rãnh 1'], ['r2', 'Rãnh 2'], ['r3', 'Rãnh 3'], ['flag', 'Lá Cờ'], ['park', 'Bảo Vệ Xanh'], ['wrong', 'Sai vị trí']]
+      .map(([k, n]) => `<span>${n} <b>${sc[k] > 0 ? '+' : ''}${sc[k]}</b></span>`).join('');
+  }
+  for (; shown < st.events.length; shown++) {
+    const e = st.events[shown], div = document.createElement('div');
+    div.innerHTML = `<span>${mmss(Math.max(0, S.MATCH_S - e.t))}</span> ${e.r != null ? `${TEAM[e.r]} (${robots[e.r].def.name})` : ''} ${e.text}`;
+    $('mlog').prepend(div);
+  }
+  if (st.done && !$('mteams').innerHTML) {
+    const res = st.result;
+    $('mteams').innerHTML = res.teams.map((tm, i) => { const pn = res.pens[i]; const pen = pn.red ? 'thẻ đỏ' : [pn.minor ? `${pn.minor} lỗi` : '', pn.yellow ? 'thẻ vàng' : ''].filter(Boolean).join(', ') || 'không phạt';
+      return `<div class="chk"><i class="ok">${tm.score}</i><span><b>${tm.team}</b> · ${robots[i].def.name} · tự ghi ${Math.round(tm.contrib)} · ${pen}</span></div>`; }).join('');
+    $('play').textContent = 'Về sân trống';
+  }
+}
+function stepMatch(dt) {
+  if (!match) return;
+  if (!match.done) { acc += dt * Number($('mspeed').value); let n = 0; while (acc >= S.DT && !match.done && n < 2000) { match.step(); acc -= S.DT; n++; } }
+  drawMatch();
+}
+
+renderRobots(); renderPorts(); resize(); controls.update(); renderer.render(scene, camera);
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let last = performance.now();
+renderer.setAnimationLoop(now => {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  animateBalls(now / 1000);
+  for (const r of robots) {
+    const ports = portsOf(r), t = now / 1000, live = demo && r === robots[sel];
+    for (const p of ports) {
+      let v = r.val[p.id] ?? 0;
+      if (live) { if (p.wheel) v = 35; if (p.mech) v = p.kind === 's360' ? (p.mech === 'M4' ? Math.sign(Math.sin(t * 0.9)) : 1) : (p.mech === 'M4' ? Math.sin(t * 0.9) * 80 : 70); }
+      const speed = p.kind === 's360' ? v * 70 : v;
+      if (p.wheel) r.parts.wheels[p.wheel]?.forEach(w => w.rotation.x += speed * dt * 0.12);
+      if (p.mech === 'M3' && speed) r.parts.M3?.(speed * dt * 60);
+      if (p.mech === 'M4' && speed) { r.parts.M4?.(speed * dt * 0.9 * (reduce ? 0.5 : 1)); if (r === robots[sel]) renderChecks(); }
+    }
+    if (live) { r.parts.S1?.(90 + Math.sin(t * 1.3) * 60); r.parts.S2?.(90 + Math.sin(t * 2) * 80); r.parts.S3?.(60 + Math.sin(t * 0.7) * 60); }
+    const ws = r.parts.wheels;
+    if (ws.free) { const a = ((r.val.M1 ?? 0) + (r.val.M2 ?? 0) + (live ? 70 : 0)) / 2; ws.free.forEach(w => w.rotation.x += a * dt * 0.12); }
+  }
+  stepMatch(dt);
+  if (camGoal) {
+    camera.position.lerp(camGoal.pos, 0.08); controls.target.lerp(camGoal.target, 0.08);
+    if (camera.position.distanceTo(camGoal.pos) < 0.005) camGoal = null;
+  }
+  controls.update(); renderer.render(scene, camera);
+});
+</script>
+
