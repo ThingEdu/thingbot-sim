@@ -35,3 +35,16 @@ export function generate(state: object): { sim: string; arduino: string; error?:
 export function known(type: string): boolean {
   return type in ScratchBlocks.Blocks
 }
+
+/** Opcode của mọi khối thật (không tính bóng) sau khi nạp vào vùng khối không giao diện, theo thứ tự đã sắp. */
+export function blockTypes(state: object): string[] {
+  ScratchBlocks.Events.disable()
+  const workspace = new ScratchBlocks.Workspace()
+  try {
+    ScratchBlocks.serialization.workspaces.load(state, workspace)
+    return workspace.getAllBlocks(false).filter((b) => !b.isShadow()).map((b) => b.type).sort()
+  } finally {
+    workspace.dispose()
+    ScratchBlocks.Events.enable()
+  }
+}

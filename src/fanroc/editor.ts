@@ -10,6 +10,7 @@ import { NEUTRAL, type PortValues } from './ports.ts'
 import type { Ps2State } from './gamepad.ts'
 import { ROBOTS, type Actuator, type Drive, type RobotConfig, type RobotType } from './robots.ts'
 import { sample, TOOLBOX } from './programs.ts'
+import { tbFileName, toTb } from './tb.ts'
 
 export interface Editors {
   /** Thẻ đang mở. */
@@ -82,6 +83,14 @@ const select = (options: [string, string][], value: string, onChange: (v: string
   s.value = value
   s.onchange = () => onChange(s.value)
   return s
+}
+
+/** Tải chương trình của thẻ về dạng .tb để mở bằng ThingBlock desktop và nạp lên ThingBot thật. */
+async function download(robot: RobotType, program: object): Promise<void> {
+  const url = URL.createObjectURL(await toTb(program))
+  const a = Object.assign(document.createElement('a'), { href: url, download: tbFileName(robot) })
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
 /** Một bo ThingBot ảo: Worker + RobotLink. */
@@ -186,6 +195,7 @@ export function createEditors(container: HTMLElement, robots: { label: string; c
         for (const cb of runCbs) cb(i)
       }, 'fe-run'),
       btn('■ Dừng', () => api.stop(i)),
+      btn('Tải về để nạp', () => void download(t.cfg.type, api.program(i))),
     )
     drive.replaceChildren(...ROBOTS[t.cfg.type].drives.map((d) => Object.assign(el('option', undefined, DRIVE_NAME[d]), { value: d })))
     drive.value = t.cfg.drive
