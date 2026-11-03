@@ -31,8 +31,10 @@ const MTN_FRICTION = 0.7
 /** Bóng có tâm vượt mặt ngoài rào (hoặc rơi dưới OUT_Y) bị loại vĩnh viễn (luật P03/P08). */
 const OUT_EDGE = FIELD / 2 + WALL_T
 const OUT_Y = -0.1
-/** Bóng ra trong khe ±0.18 m (khe CAD 0.404 trừ bán kính), xanh (tầng dưới) trước rồi cam. */
-const OUTLET_HALF = 0.18
+/** Bóng ra trong khe của Hộp Phân Phối (tâm bóng cách mép khe ít nhất BALL_R), xanh (tầng dưới) trước rồi cam. */
+const OUTLET_HALF = DISPENSER.width / 2 - BALL_R
+/** Tâm bóng khi ra: cách mặt trong rào phía xa (z = −FIELD/2) một bán kính + khe hở nhỏ. */
+const OUTLET_Z = Math.max(DISPENSER.z, -FIELD / 2) + BALL_R + 0.002
 /** Mọi bóng ra khỏi hộp trước thời điểm này của giai đoạn xả (giây). */
 const RELEASE_END = 8
 /** Hai bóng ra liền nhau cách nhau ít nhất chừng này theo x để không đè lên nhau. */
@@ -40,6 +42,9 @@ const SPAWN_GAP = 2.2 * BALL_R
 /** Cửa sổ cao độ để coi bóng nằm trên một tầng núi (luật chấm: tâm trong ±12 mm của đáy rãnh + bán kính). */
 const TIER_TOL = 0.012
 const FIRE_MAX_Y = 0.03
+/** Tia dò thứ bóng đang tựa lên: dài đủ để bóng kẹt cao nhất còn trong cửa sổ TIER_TOL vẫn chạm đáy rãnh. */
+const REST_RAY = BALL_R + TIER_TOL + 0.002
+const DOWN = { x: 0, y: -1, z: 0 }
 
 /** PRNG mulberry32: cùng seed thì cùng chuỗi số. */
 function mulberry32(seed: number): () => number {
@@ -63,6 +68,8 @@ export class FanrocWorld {
   /** Thứ tự ra khỏi hộp: hết xanh (tầng dưới) rồi tới cam (tầng trên đổ xuống). */
   private readonly releaseOrder: number[]
   private released = 0
+  /** Collider của 4 núi, để biết bóng đang tựa lên núi hay lên sàn. */
+  private readonly mountainColliders = new Set<number>()
   private lastSpawnX = Number.NaN
 
   private constructor(seed: number) {
@@ -76,6 +83,7 @@ export class FanrocWorld {
     for (let i = 0; i < BALL_COUNT.o; i++) this.releaseOrder.push(i)
     this.buildField()
     MOUNTAINS.forEach((m) => this.buildMountain(m))
+    this.rapier.updateSceneQueries() // tally dò tia được cả trước bước vật lý đầu tiên
   }
 
   static async create(seed: number): Promise<FanrocWorld> {
@@ -83,8 +91,8 @@ export class FanrocWorld {
     return new FanrocWorld(seed)
   }
 
-  private fixed(desc: RAPIER.ColliderDesc, friction = MTN_FRICTION): void {
-    this.rapier.createCollider(desc.setFriction(friction).setRestitution(0.3))
+  private fixed(desc: RAPIER.ColliderDesc, friction = MTN_FRICTION): RAPIER.Collider {
+    return this.rapier.createCollider(desc.setFriction(friction).setRestitution(0.3))
   }
 
   private buildField(): void {
@@ -102,7 +110,7 @@ export class FanrocWorld {
     const desc = RAPIER.ColliderDesc.trimesh(MESH_VERTICES, MESH_INDICES)
       .setTranslation(m.x, 0, m.z)
       .setRotation({ x: 0, y: Math.sin(m.yaw / 2), z: 0, w: Math.cos(m.yaw / 2) })
-    this.fixed(desc)
+    this.mountainColliders.add(this.fixed(desc).handle)
   }
 
   step(dt: number): void {
@@ -132,7 +140,7 @@ export class FanrocWorld {
       this.lastSpawnX = x
       this.placeBall(
         i,
-        { x, y: DISPENSER.y + BALL_R, z: DISPENSER.z + BALL_R },
+        { x, y: DISPENSER.y + BALL_R, z: OUTLET_Z },
         { x: (r() - 0.5) * 1.2, y: 0, z: 0.5 + r() * 1.5 },
       )
     }
@@ -202,12 +210,13 @@ export class FanrocWorld {
 
   /**
    * Đếm bóng theo luật hình học: Khu Chữa Cháy (bóng chạm vạch cũng tính) và 3 rãnh của từng núi.
-   * Rãnh của từng tầng lấy từ TIER_GROOVE (tầng decor gộp vào Rãnh 1). Bóng trong `robotsHolding` hoặc không ở 'field' không tính.
+   * Bóng chỉ thuộc một tầng khi tia ngắn từ tâm bóng xuống chạm núi trước tiên (không phải sàn, robot hay bóng khác)
+   * và tâm bóng trong ±TIER_TOL của đáy rãnh + BALL_R; rãnh tính điểm lấy từ TIER_GROOVE (decor gộp vào Rãnh 1).
+   * Bóng trong `robotsHolding` hoặc không ở 'field' không tính.
    */
   tally(robotsHolding: Set<number>): Omit<FieldTally, 'flags' | 'parks'> {
     const fire = { o: 0, g: 0 }
     const mtn = MOUNTAINS.map(() => [0, 1, 2].map(() => ({ g: 0, o: 0 })))
-    // TIERS[0] và tầng trang trí TIERS[1] → Rãnh 1; TIERS[2] → Rãnh 2; TIERS[3] → Rãnh 3.
     this.balls.forEach((b, i) => {
       if (b.st !== 'field' || !b.body || robotsHolding.has(i)) return
       const p = b.body.translation()
@@ -217,8 +226,14 @@ export class FanrocWorld {
       }
       const m = this.inMountain(p.x, p.z)
       if (m < 0) return
-      const k = TIERS.findIndex((t) => Math.abs(p.y - (t.floor + BALL_R)) <= TIER_TOL)
-      if (k >= 0) mtn[m][TIER_GROOVE[k]][b.color]++
+      let k = -1
+      TIERS.forEach((t, j) => {
+        const d = Math.abs(p.y - (t.floor + BALL_R))
+        if (d <= TIER_TOL && (k < 0 || d < Math.abs(p.y - (TIERS[k].floor + BALL_R)))) k = j
+      })
+      if (k < 0) return
+      const hit = this.rapier.castRay(new RAPIER.Ray(p, DOWN), REST_RAY, true, undefined, undefined, undefined, b.body)
+      if (hit && this.mountainColliders.has(hit.collider.handle)) mtn[m][TIER_GROOVE[k]][b.color]++
     })
     return { fire, mtn }
   }

@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import RAPIER from '@dimforge/rapier3d-compat'
 import { FanrocWorld, PHYSICS_DT, type Vec3 } from './world.ts'
-import { BALL_R, FIELD, MOUNTAINS, PEAK_Y, TIERS, TIER_GROOVE, WALL_T, ZONES, fromMountain } from './layout.ts'
+import { BALL_R, DISPENSER, FIELD, MOUNTAINS, PEAK_Y, TIERS, TIER_GROOVE, WALL_T, ZONES, fromMountain } from './layout.ts'
 
 const run = (w: FanrocWorld, seconds: number) => {
   for (let k = 0; k < Math.round(seconds / PHYSICS_DT); k++) w.step(PHYSICS_DT)
@@ -67,6 +67,26 @@ test('xả 10 s + 3 s: ≥ 280 bóng trên sân, không bóng nào lọt dưới
   assert.ok(field.filter((b) => b.body!.translation().z > 0).length >= 30, 'bóng không lăn tới nửa sân gần')
 })
 
+test('bóng ra ở lối ra Hộp Phân Phối: trong khe, không chồng vào rào phía xa', async () => {
+  const w = await FanrocWorld.create(1)
+  const seen = new Set<number>()
+  let maxX = 0
+  for (let k = 0; k < 600; k++) {
+    w.release(k * PHYSICS_DT)
+    w.balls.forEach((b, i) => {
+      if (!b.body || seen.has(i)) return
+      seen.add(i)
+      const p = b.body.translation()
+      assert.ok(p.z - BALL_R > -FIELD / 2, `bóng ${i} chồng vào rào, z = ${p.z}`)
+      assert.ok(Math.abs(p.x - DISPENSER.x) + BALL_R <= DISPENSER.width / 2 + 1e-9, `bóng ${i} ngoài khe, x = ${p.x}`)
+      maxX = Math.max(maxX, Math.abs(p.x - DISPENSER.x))
+    })
+    w.step(PHYSICS_DT)
+  }
+  assert.equal(seen.size, 300)
+  assert.ok(maxX > DISPENSER.width / 2 - BALL_R - 0.01, 'bóng không trải hết khe')
+})
+
 test('xả bóng tất định theo seed', async () => {
   const snap = async (seed: number) => {
     const w = await FanrocWorld.create(seed)
@@ -106,6 +126,19 @@ test('bóng xanh trên tầng trang trí tính vào Rãnh 1 (mtn[m][0].g)', asyn
   const t = w.tally(new Set())
   assert.equal(t.mtn[1][0].g, 1, `y = ${pos(w, GREEN).y.toFixed(3)}`)
   assert.equal(t.mtn[1][1].g + t.mtn[1][2].g, 0)
+})
+
+test('bóng nằm trên sàn ở góc hình bao chân núi (ngoài chân thật) không tính Rãnh 1', async () => {
+  const w = await FanrocWorld.create(1)
+  for (const [m, lx, lz] of [[0, 0.19, 0.19], [0, -0.19, -0.19], [2, 0.19, -0.19]] as const) {
+    const p = fromMountain(MOUNTAINS[m], lx, lz)
+    w.placeBall(GREEN + m + (lx < 0 ? 1 : 0), { x: p.x, y: BALL_R + 0.001, z: p.z })
+    assert.equal(w.inMountain(p.x, p.z), m)
+  }
+  run(w, 2)
+  for (const i of [GREEN, GREEN + 1, GREEN + 2]) assert.ok(Math.abs(pos(w, i).y - BALL_R) < 0.003, `bóng ${i} không nằm trên sàn`)
+  const t = w.tally(new Set())
+  assert.deepEqual([t.mtn[0][0].g, t.mtn[2][0].g], [0, 0])
 })
 
 test('bóng thả trên đỉnh núi (ngoài lỗ) lăn xuống chứ không lơ lửng', async () => {
