@@ -1,16 +1,14 @@
 // Trận đấu FANROC: 10 s xả bóng (robot đứng yên) → 180 s thi đấu (End Game = 30 s cuối) → hết giờ (G12, robot đóng băng).
+// Luyện tập (ruling R31): 10 s xả bóng chạy tua ngay lúc tạo trận (không vẽ, robot đứng yên), trận bắt đầu ở t = 0, không hết giờ.
 // Chấm điểm một lần lúc t = 180 từ thế giới vật lý; trọng tài tự động chỉ ghi các lỗi máy thấy được (spec §4.5, §4.7, §5).
 // Không đồ hoạ: chạy được trong Node.
-import type { FanrocWorld } from './world.ts'
+import { PHYSICS_DT, type FanrocWorld } from './world.ts'
 import type { RobotBody, Vec2 } from './robot.ts'
-import { FIELD, ZONES, mountainAt, type Phase, type Rect } from './layout.ts'
+import { ENDGAME_S, FIELD, MATCH_S, RELEASE_S, ZONES, mountainAt, type Phase, type Rect } from './layout.ts'
 import { NEUTRAL, type PortValues } from './ports.ts'
 import { scoreTally, teamScore, type FieldTally, type Park, type ScoreBreakdown } from './scoring.ts'
 
 // ---------- Thời gian trận và ngưỡng trọng tài (gom một chỗ) ----------
-const RELEASE_S = 10
-const MATCH_S = 180
-const ENDGAME_S = 30
 const EPS = 1e-9
 /** Lỗi chỉ được tính lại khi điều kiện đã hết ít nhất chừng này giây (một đợt). */
 const REARM_S = 1
@@ -138,7 +136,8 @@ export class Match {
   private readonly world: FanrocWorld
   private readonly robots: RobotBody[]
   private readonly teams: string[]
-  private readonly practice: boolean
+  /** Luyện tập: không hết giờ, không phạt, không có giai đoạn xả bóng nhìn thấy được. */
+  readonly practice: boolean
   private final: { tally: FieldTally; score: ScoreBreakdown } | null = null
   private readonly climbWarned: boolean[]
   private readonly climb: Episode[]
@@ -168,6 +167,13 @@ export class Match {
         this.log(`Robot ${i + 1} cắm cờ Núi ${MOUNTAIN_NAME[m]}`, i)
       }
     })
+    if (this.practice) this.skipRelease()
+  }
+
+  /** Luyện tập: tua hết 10 s xả bóng ngay (bóng rơi xong, robot đứng yên) để chương trình chạy được từ t = 0. */
+  private skipRelease(): void {
+    while (this.phase === 'release') this.step(PHYSICS_DT, [])
+    this.t = 0 // cộng dồn dt lệch ~1e-13
   }
 
   /** Ghi một sự kiện (trọng tài, cờ, Human Player qua onEvent…) kèm thời điểm trận. */
@@ -204,7 +210,7 @@ export class Match {
   private syncPhase(): void {
     if (this.phase === 'release' && this.t >= -EPS) {
       this.phase = 'play'
-      this.log('Hết 10 giây xả bóng — bắt đầu thi đấu')
+      this.log(this.practice ? 'Luyện tập: bóng đã xả xong — robot chạy được ngay' : 'Hết 10 giây xả bóng — bắt đầu thi đấu')
     }
   }
 

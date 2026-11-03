@@ -9,6 +9,7 @@ import type { RobotConfig } from './robots.ts'
 const MAKER: RobotConfig = { type: 'maker', drive: 'diff2', actuator: 'tt' }
 const CO: RobotConfig = { type: 'co', drive: 'diff2', actuator: 'tt' }
 const SORT: RobotConfig = { type: 'sort', drive: 'diff2', actuator: 'tt' }
+const UI: RobotConfig = { type: 'ui', drive: 'diff2', actuator: 'tt' }
 
 const mid = (r: { x0: number; x1: number; z0: number; z1: number }) => ({ x: (r.x0 + r.x1) / 2, z: (r.z0 + r.z1) / 2 })
 const ball = (w: FanrocWorld, i: number, x: number, z: number) => w.placeBall(i, { x, y: BALL_R, z })
@@ -132,6 +133,29 @@ test('load: hai robot trong khu => robot đầu tiên theo thứ tự ctx.robots
   assert.equal(hp.press('load', ctx(w, [b, a])), null)
   assert.equal(b.stored.length, 1)
   assert.equal(a.stored.length, 0)
+})
+
+test('load (R33): Xe Ủi không có cửa xả ⇒ từ chối "Robot không có cửa xả"; đồng đội có S3 trong khu vẫn nhận', async () => {
+  const w = await FanrocWorld.create(1)
+  const hp = new HumanPlayer('red')
+  const s = mid(ZONES.start.red)
+  for (let k = 0; k < 2; k++) ball(w, k, s.x + k * 0.05, s.z)
+  hp.press('pick', ctx(w, []))
+  hp.press('pick', ctx(w, []))
+  const ui = new RobotBody(w, UI, 'red', 0)
+  inLoad(ui)
+  assert.equal(hp.press('load', ctx(w, [ui])), 'Robot không có cửa xả')
+  assert.equal(ui.stored.length, 0)
+  assert.deepEqual(hp.tray, { o: 2, g: 0 })
+  // Tự động cũng không nạp cho Xe Ủi.
+  hp.auto(ctx(w, [ui]), 0.8)
+  assert.equal(ui.stored.length, 0)
+  // Mẫu Maker (có S3) cùng trong khu, đứng sau trong danh sách ⇒ Maker nhận.
+  const mk = new RobotBody(w, MAKER, 'red', 1)
+  inLoad(mk)
+  assert.equal(hp.press('load', ctx(w, [ui, mk])), null)
+  assert.equal(mk.stored.length, 1)
+  assert.equal(ui.stored.length, 0)
 })
 
 test('Xe Phân Loại: bóng vào đúng ngăn theo màu', async () => {

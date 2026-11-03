@@ -296,6 +296,23 @@ test('luyện tập: không hết giờ, không phạt (sự kiện ghi "luyện
   assert.equal(m.phase, 'play')
 })
 
+test('luyện tập (R31): tạo trận là đã xả xong bóng, t = 0 pha thi đấu, robot vẫn ở ô xuất phát', async () => {
+  const w = await FanrocWorld.create(1)
+  const robots = [MAKER, MAKER, MAKER, MAKER].map((c, i) => new RobotBody(w, c, i < 2 ? 'red' : 'blue', (i % 2) as 0 | 1))
+  const start = robots.map((r) => ({ ...r.pose }))
+  const m = new Match(w, robots, TEAMS, { seed: 1, practice: true })
+  assert.equal(m.phase, 'play')
+  assert.equal(m.t, 0)
+  assert.equal(w.balls.filter((b) => b.st === 'box').length, 0, 'còn bóng trong hộp')
+  robots.forEach((r, i) => assert.ok(Math.hypot(r.pose.x - start[i].x, r.pose.z - start[i].z) < 0.005, `Robot ${i + 1} trôi khỏi ô xuất phát`))
+  assert.ok(m.events.some((e) => e.text.startsWith('Luyện tập: bóng đã xả xong')))
+  // Trận thường không tua.
+  const w2 = await FanrocWorld.create(1)
+  const m2 = new Match(w2, [MAKER, MAKER, MAKER, MAKER].map((c, i) => new RobotBody(w2, c, i < 2 ? 'red' : 'blue', (i % 2) as 0 | 1)), TEAMS, { seed: 1 })
+  assert.equal(m2.phase, 'release')
+  assert.equal(m2.t, -10)
+})
+
 test('log(text, robot) ghi sự kiện kèm thời điểm (để nối HumanPlayer.onEvent)', async () => {
   const { m } = await setup()
   m.log('Human Player nhặt bóng cam')

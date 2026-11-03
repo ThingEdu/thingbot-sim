@@ -94,6 +94,15 @@ test('Maker 6 bóng + S3 = 150 ⇒ sau 2 s hết bóng, 6 bóng về sân', asyn
   for (let i = 0; i < 6; i++) assert.equal(w.balls[i].st, 'field')
 })
 
+test('Xe Ủi không có cửa xả S3 (R33): lệnh S3 = 150 không xả bóng đang giữ', async () => {
+  const { w, r } = await corridor({ type: 'ui', drive: 'diff2', actuator: 'tt' })
+  w.placeBall(0, { x: 1, y: BALL_R, z: 0 })
+  assert.ok(r.take(0))
+  drive(w, r, { S3: 150 }, 2)
+  assert.deepEqual(r.stored, [0])
+  assert.equal(w.balls[0].st, 'held')
+})
+
 test('Nâng/vươn M4 = 100: extend tăng 0.08 m/s, kẹp ở maxExtend, footprint dài thêm', async () => {
   const { w, r } = await corridor()
   drive(w, r, { M4: 100 }, 1)

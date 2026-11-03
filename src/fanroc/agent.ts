@@ -3,12 +3,12 @@
 // Chiến thuật theo bản thử 2D (docs/superpowers/specs/fanroc-spike/sim.js, decide()): cắm cờ trước, chọn rãnh theo giá trị
 // kỳ vọng, gỡ bóng xanh khỏi Khu Chữa Cháy (khó), về đỗ sát giờ, không nhận bóng khi không còn đủ giờ đi giao.
 // Không đồ hoạ: chạy được trong Node.
-import type { FanrocWorld } from './world.ts'
+import { mulberry32, type FanrocWorld } from './world.ts'
 import type { RobotBody, Vec2 } from './robot.ts'
 import { DEAD_ZONE, V_MAX, ttFraction } from './robot.ts'
 import type { Match } from './match.ts'
 import type { HumanPlayer } from './human.ts'
-import { FIELD, MOUNTAINS, MOUNTAIN_FOOT, ZONES, toMountain, type Rect } from './layout.ts'
+import { FIELD, MATCH_S, MOUNTAINS, MOUNTAIN_FOOT, ZONES, toMountain, type Rect } from './layout.ts'
 import { NEUTRAL, type PortValues } from './ports.ts'
 import { portMap, type PortMap, type RobotConfig } from './robots.ts'
 
@@ -62,7 +62,6 @@ const SKILLS: Record<Skill, SkillDef> = {
 }
 
 // ---------- Số đo lái và chiến thuật ----------
-const MATCH_S = 180
 /** Lệnh động cơ khi chạy đường dài ở mức khó, khi tiến sát mục tiêu, và khi quay tại chỗ. */
 const CMD_CRUISE = 100
 const CMD_SLOW = 45
@@ -123,18 +122,6 @@ const PARK_LOOK_S = 60
 const PARK_PRE = 0.35
 const PARK_DOCK_S = 6
 const PARK_GO_MAX_S = 20
-
-// ---------- PRNG ----------
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0
-    let t = a
-    t = Math.imul(t ^ (t >>> 15), t | 1)
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
 
 /**
  * Lệnh một bánh sau khi trộn tiến + quay: không bao giờ rơi vào vùng chết của động cơ TT (bánh đứng, xe xoay quanh
@@ -694,7 +681,7 @@ export class Agent {
 
   private wantsLoad(view: AgentView, left: number): boolean {
     const hp = view.humans.find((h) => h.alliance === this.robot.alliance)
-    if (!hp) return false
+    if (!hp || this.robot.def.servos.S3 === undefined) return false // R33: không có cửa xả thì Human Player không nạp
     const spot = this.loadSpot()
     if (!this.loadAllowed(left - this.travel(spot) - LOAD_WAIT_S, spot)) return false
     if (!this.hasIntake) return hp.tray.o + hp.tray.g >= 2

@@ -7,6 +7,11 @@ export type Phase = 'release' | 'play' | 'end'
 export type Pose = { x: number; z: number; yaw: number }
 export type Rect = { x0: number; x1: number; z0: number; z1: number }
 
+/** Thời gian trận (giây): 10 s xả bóng, 180 s thi đấu, End Game = 30 s cuối. Dùng chung cho trận, bảng điểm, agent. */
+export const RELEASE_S = 10
+export const MATCH_S = 180
+export const ENDGAME_S = 30
+
 // Mọi số đo sân lấy từ CAD "Lắp sân.step" (user gửi 03/11/2026); CAD thắng cả số trong văn bản luật (ruling R11).
 
 export const FIELD = 2.4

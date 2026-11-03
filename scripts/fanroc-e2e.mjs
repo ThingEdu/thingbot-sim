@@ -2,7 +2,7 @@
  * Phép thử đầu-cuối của sân FANROC trên trình duyệt thật (Playwright, lấy từ checkout ThingBlock như ftc-e2e.mjs
  * của nhánh spike/ursim).
  *
- *   npm run e2e:fanroc                 # tự bật Vite dev trên một cổng trống, chạy E1–E9, tắt Vite
+ *   npm run e2e:fanroc                 # tự bật Vite dev trên một cổng trống, chạy E1–E10, tắt Vite
  *   FANROC_URL=http://localhost:5191/mo-phong/fanroc.html npm run e2e:fanroc   # dùng trang đang chạy sẵn
  *   npm run e2e:fanroc -- E3 E5        # chỉ chạy các phép thử có tên bắt đầu như vậy
  *
@@ -147,7 +147,10 @@ async function run(page, i) {
   await page.waitForFunction((i) => window.__fanroc.editors.state(i) === 'running', i, { timeout: 15000 })
   await page.waitForTimeout(300) // bo ảo khởi động, gửi ảnh chụp PWM đầu
 }
-/** Luyện tập, robot khác đứng yên, đã qua xả bóng; tay cầm cắm trước để gắn đúng ghế. */
+/**
+ * Luyện tập, robot khác đứng yên; tay cầm cắm trước để gắn đúng ghế. Luyện tập không có 10 s xả bóng (ruling R31:
+ * tua sẵn lúc tạo trận) nên trận mới mở ra đã ở pha thi đấu, t = 0.
+ */
 async function practice(page, pads = 1) {
   await open(page)
   for (let i = 0; i < pads; i++) {
@@ -155,9 +158,12 @@ async function practice(page, pads = 1) {
     await page.waitForTimeout(150) // mỗi tay một khung để gắn ghế theo thứ tự cắm
   }
   await quietOthers(page)
+  await page.evaluate(() => (window.__oldMatch = window.__fanroc.match))
   await bar(page, 'Luyện tập').click() // trận mới: Human Player chốt theo số tay cầm lúc này
-  await page.waitForFunction(() => window.__fanroc.match.phase === 'release' && window.__fanroc.match.t < -9)
-  await skipRelease(page)
+  await page.waitForFunction(() => {
+    const m = window.__fanroc.match
+    return m !== window.__oldMatch && m.practice && m.phase === 'play' && m.t < 1
+  }, null, { timeout: 30000 })
 }
 
 // ---------- Các tình huống ----------
@@ -174,7 +180,16 @@ async function main() {
     expect(title.includes('FANROC Thanh Hỏa'), `tiêu đề "${title}"`)
     expect(/Xả bóng/.test(hud) && /điểm/.test(hud) && /Chữa Cháy/.test(hud), `HUD: ${hud.slice(0, 80)}`)
     expect((await page.locator('.fe-tabs button').first().innerText()).startsWith('Robot 1'), 'thiếu thẻ khối Robot 1')
-    return `"${title}" · HUD: ${hud.split('\n').slice(0, 2).join(' ')}`
+    // Bấm "Trận mới" ba lần liền (cùng một khung): các lần dựng trận không chồng nhau, không giải phóng một thế giới
+    // Rapier hai lần (lỗi JS sẽ làm phép thử trượt), trận cuối vẫn chạy.
+    await page.evaluate(() => {
+      const again = [...document.querySelectorAll('.fr-bar button')].find((b) => b.textContent === 'Trận mới')
+      for (let k = 0; k < 3; k++) again.click()
+    })
+    await page.waitForTimeout(2000)
+    const t = await page.evaluate(() => window.__fanroc.match.t)
+    expect(t > -9.5, `sau 3 lần Trận mới đồng hồ đứng ở t = ${t.toFixed(2)}`)
+    return `"${title}" · HUD: ${hud.split('\n').slice(0, 2).join(' ')} · 3 lần Trận mới liền: t = ${t.toFixed(1)} s`
   })
 
   await test('E2 mẫu TeleOp + đẩy 2 cần lên 2 s ⇒ Robot 1 tiến về phía núi', async (page) => {
@@ -356,15 +371,21 @@ async function main() {
     const blocksH = () => page.locator('#blocks').evaluate((e) => e.getBoundingClientRect().height)
     const menu = bar(page, '☰')
     expect(await noScrollX(), 'trang cuộn ngang')
+    const expanded = () => menu.getAttribute('aria-expanded')
+    expect((await menu.getAttribute('aria-label')) === 'Vùng khối lệnh', `☰ aria-label "${await menu.getAttribute('aria-label')}"`)
     const h0 = await blocksH()
+    const x0 = await expanded()
     await menu.tap()
     await page.waitForTimeout(300)
     const h1 = await blocksH()
+    const x1 = await expanded()
     expect(await noScrollX(), 'trang cuộn ngang khi hiện vùng khối')
     await menu.tap()
     await page.waitForTimeout(300)
     const h2 = await blocksH()
+    const x2 = await expanded()
     expect(h0 === 0 && h1 > 200 && h2 === 0, `vùng khối cao ${h0} → ☰ ${h1} → ☰ ${h2}`)
+    expect(x0 === 'false' && x1 === 'true' && x2 === 'false', `aria-expanded ${x0} → ${x1} → ${x2}`)
     // Sân vẫn vẽ: ảnh chụp canvas có nhiều màu (không trắng / đen trơn).
     const png = (await page.locator('#arena canvas').screenshot()).toString('base64')
     const colors = await page.evaluate(async (b64) => {
@@ -378,13 +399,16 @@ async function main() {
       return seen.size
     }, png)
     expect(colors > 20, `canvas chỉ có ${colors} màu`)
-    return `vùng khối ${h0} → ${Math.round(h1)} → ${h2} px · canvas ${colors} màu`
+    return `vùng khối ${h0} → ${Math.round(h1)} → ${h2} px (aria-expanded ${x0} → ${x1} → ${x2}) · canvas ${colors} màu`
   }, { width: 390, height: 844 })
 
   await test('E9 đồ hoạ Thấp: khung hình trung bình 5 s trận ≥ 30 fps', async (page) => {
     await open(page)
     await seat(page, 0, 'agent-medium')
     await bar(page, 'Đồ hoạ thấp').click()
+    const low = await bar(page, 'Đồ hoạ thấp').getAttribute('aria-pressed')
+    const high = await bar(page, 'Đồ hoạ cao').getAttribute('aria-pressed')
+    expect(low === 'true' && high === 'false', `đồ hoạ thấp chưa bật (thấp ${low}, cao ${high})`)
     await bar(page, 'Trận mới').click()
     await page.waitForFunction(() => window.__fanroc.match.t < -9)
     await skipRelease(page)
@@ -405,7 +429,27 @@ async function main() {
     const phase = await page.evaluate(() => window.__fanroc.match.phase)
     expect(phase === 'play', `pha ${phase}`)
     expect(fps >= 30, `${fps.toFixed(1)} fps`)
-    return `${fps.toFixed(1)} fps (${frames} khung / 5 s, Chromium headless + ANGLE Metal)`
+    return `${fps.toFixed(1)} fps (${frames} khung / 5 s, đồ hoạ thấp, Chromium headless + ANGLE Metal)`
+  })
+
+  await test('E10 Luyện tập: bấm ▶ Mẫu Auto ngay ⇒ Robot 1 rời ô xuất phát trong 2 s', async (page) => {
+    // Không dùng practice(): chỉ chờ trận luyện tập mới được dựng (pha nào cũng được), rồi chạy ngay.
+    await open(page)
+    await quietOthers(page)
+    await page.evaluate(() => (window.__oldMatch = window.__fanroc.match))
+    await bar(page, 'Luyện tập').click()
+    await page.waitForFunction(() => window.__fanroc.match !== window.__oldMatch && window.__fanroc.match.practice, null, { timeout: 30000 })
+    const a = await pose(page)
+    await tab(page, 0).click()
+    await panel(page).locator('button', { hasText: 'Mẫu Auto' }).click()
+    await run(page, 0) // gồm 0.3 s chờ bo ảo khởi động
+    await page.waitForTimeout(1700)
+    const b = await pose(page)
+    const m = await page.evaluate(() => ({ phase: window.__fanroc.match.phase, t: window.__fanroc.match.t }))
+    const clock = await page.locator('.fr-clock').innerText()
+    expect(dist(a, b) > 0.1, `sau 2 s Robot 1 chỉ đi ${dist(a, b).toFixed(3)} m (pha ${m.phase}, t = ${m.t.toFixed(2)} s)`)
+    expect(/^Luyện tập · \d+:\d\d$/.test(clock), `đồng hồ "${clock}"`)
+    return `đi ${dist(a, b).toFixed(3)} m trong 2 s · pha ${m.phase}, t = ${m.t.toFixed(1)} s · đồng hồ "${clock}"`
   })
 }
 

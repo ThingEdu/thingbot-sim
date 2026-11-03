@@ -91,7 +91,9 @@ const select = (options: [string, string][], value: string, onChange: (v: string
 async function download(robot: RobotType, program: object): Promise<void> {
   const url = URL.createObjectURL(await toTb(program))
   const a = Object.assign(document.createElement('a'), { href: url, download: tbFileName(robot) })
+  document.body.append(a)
   a.click()
+  a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 

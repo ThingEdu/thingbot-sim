@@ -3,9 +3,13 @@
 import type { Match } from '../match.ts'
 import type { RobotBody } from '../robot.ts'
 import { ROBOTS, ruleChecks, type RobotConfig } from '../robots.ts'
+import { MATCH_S, RELEASE_S } from '../layout.ts'
+import { DEAD_ZONE } from '../robot.ts'
+import type { PortValues } from '../ports.ts'
 
 export interface Hud {
-  update(match: Match, robots: RobotBody[], cfgs: RobotConfig[]): void
+  /** `ports`: lệnh cổng của từng robot ở bước vừa chạy (để báo lệnh động cơ rơi vào vùng chết). */
+  update(match: Match, robots: RobotBody[], cfgs: RobotConfig[], ports: PortValues[]): void
   /** Thêm một dòng vào nhật ký (ngoài các sự kiện của trận). */
   log(text: string): void
   /** Robot đang chọn (ô kiểm tra luật). */
@@ -14,8 +18,6 @@ export interface Hud {
   onSelect?: (i: number) => void
 }
 
-const RELEASE_S = 10
-const MATCH_S = 180
 /** Điểm trận tính lại tối đa chừng này lần mỗi giây (tally dò tia trên 300 bóng). */
 const SCORE_HZ = 4
 const ALLIANCE = { red: 'Đỏ', blue: 'Xanh' } as const
@@ -65,6 +67,31 @@ const mmss = (s: number) => {
 }
 /** Đồng hồ theo thời điểm trận: xả bóng đếm 0:10 → 0:00, thi đấu đếm 3:00 → 0:00. */
 const clockAt = (t: number) => (t < 0 ? mmss(-t) : mmss(MATCH_S - t))
+/** Luyện tập không hết giờ: đếm lên thời gian đã chạy. */
+const elapsed = (t: number) => {
+  const c = Math.max(0, Math.floor(t + 1e-6))
+  return `${Math.floor(c / 60)}:${String(c % 60).padStart(2, '0')}`
+}
+/** Chữ đồng hồ: trận đếm ngược, luyện tập "Luyện tập · m:ss" đếm lên (ruling R31 bỏ hết giờ của luyện tập). */
+export function clockText(t: number, practice: boolean): string {
+  return practice ? `Luyện tập · ${elapsed(t)}` : clockAt(t)
+}
+/** Giờ ghi ở đầu dòng nhật ký. */
+const stamp = (t: number, practice: boolean) => (practice ? elapsed(t) : clockAt(t))
+
+const MOTORS = ['M1', 'M2', 'M3', 'M4'] as const
+/** "10", "−12,5": số phần trăm kiểu Việt, cắt (không làm tròn) còn một chữ số thập phân để 19,96 không thành "20 % < 20 %". */
+const pct = (v: number) => String(Math.trunc(v * 10) / 10).replace('-', '−').replace('.', ',')
+/**
+ * Ruling R32: mỗi động cơ có lệnh trong (0, 20) % (cả hai chiều) một dòng "M1 = 10 % < 20 %: động cơ TT không quay" —
+ * động cơ TT có vùng chết 20 %, lệnh nhỏ hơn không làm bánh quay.
+ */
+export function deadZoneLines(ports: PortValues | undefined): string[] {
+  if (!ports) return []
+  return MOTORS.filter((m) => ports[m] !== 0 && Math.abs(ports[m]) < DEAD_ZONE).map(
+    (m) => `${m} = ${pct(ports[m])} % < ${DEAD_ZONE} %: động cơ TT không quay`,
+  )
+}
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] => {
   const e = document.createElement(tag)
@@ -123,9 +150,9 @@ export function createHud(root: HTMLElement): Hud {
       return selected
     },
     log(text) {
-      addLine(match0 ? clockAt(match0.t) : '', text)
+      addLine(match0 ? stamp(match0.t, match0.practice) : '', text)
     },
-    update(match, robots, cfgs) {
+    update(match, robots, cfgs, ports) {
       if (match0 !== match) {
         match0 = match
         shownEvents = 0
@@ -134,7 +161,7 @@ export function createHud(root: HTMLElement): Hud {
         lastScore = -Infinity
       }
       // Đồng hồ và pha.
-      clock.textContent = clockAt(match.t)
+      clock.textContent = clockText(match.t, match.practice)
       const end = match.phase === 'end'
       const endgame = match.phase === 'play' && match.endgame
       phase.textContent = match.phase === 'release' ? 'Xả bóng · robot đứng yên' : end ? 'Hết giờ' : endgame ? 'End Game' : 'Thi đấu'
@@ -181,7 +208,8 @@ export function createHud(root: HTMLElement): Hud {
       const cfg = cfgs[selected] ?? r?.cfg
       if (r && cfg) {
         const list = ruleChecks(cfg, r.forwardExtension)
-        const key = JSON.stringify(list) + r.stored.length + r.hasFlag + (r.lastMessage ?? '')
+        const dead = deadZoneLines(ports[selected])
+        const key = JSON.stringify(list) + r.stored.length + r.hasFlag + (r.lastMessage ?? '') + dead.join()
         if (key !== lastChecks) {
           lastChecks = key
           sub.textContent = `${ROBOTS[cfg.type].name} · liên minh ${ALLIANCE[r.alliance]} · chở ${r.stored.length} bóng${r.hasFlag ? ' · đang giữ cờ' : ''}`
@@ -192,6 +220,11 @@ export function createHud(root: HTMLElement): Hud {
               row.append(el('i', tag, c.ok === 'note' ? 'Lưu ý' : c.ok ? 'Đạt' : 'Vượt'), el('span', undefined, c.text))
               return row
             }),
+            ...dead.map((text) => {
+              const row = el('div', 'fr-chk fr-dead')
+              row.append(el('i', 'bad', 'Vùng chết'), el('span', undefined, text))
+              return row
+            }),
             ...(r.lastMessage ? [Object.assign(el('div', 'fr-chk'), { textContent: r.lastMessage })] : []),
           )
         }
@@ -200,7 +233,7 @@ export function createHud(root: HTMLElement): Hud {
       // Nhật ký: sự kiện mới của trận.
       for (; shownEvents < match.events.length; shownEvents++) {
         const e = match.events[shownEvents]
-        addLine(clockAt(e.t), e.text)
+        addLine(stamp(e.t, match.practice), e.text)
       }
 
       // Bảng đội cuối trận.

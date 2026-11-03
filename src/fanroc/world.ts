@@ -46,8 +46,8 @@ const FIRE_MAX_Y = 0.03
 const REST_RAY = BALL_R + TIER_TOL + 0.002
 const DOWN = { x: 0, y: -1, z: 0 }
 
-/** PRNG mulberry32: cùng seed thì cùng chuỗi số. */
-function mulberry32(seed: number): () => number {
+/** PRNG mulberry32: cùng seed thì cùng chuỗi số (dùng chung cho thế giới và agent). */
+export function mulberry32(seed: number): () => number {
   let a = seed >>> 0
   return () => {
     a = (a + 0x6d2b79f5) >>> 0

@@ -59,7 +59,7 @@ export const ROBOTS: Record<RobotType, RobotDef> = {
     size: { w: 0.185, l: 0.28, h: 0.25 },
     drives: ['diff2', 'omni'],
     mech: { M4: 'Nâng thùng' },
-    servos: { S1: 'Nâng tay kẹp', S2: 'Kẹp cờ', S3: 'Cửa thùng' },
+    servos: { S1: 'Vươn tay cờ', S2: 'Kẹp cờ', S3: 'Cửa thùng' },
     storage: 12, hpLoad: true, flag: true,
     release: { y: 0.2, reach: 0.05 }, maxExtend: 0.08,
     arm: { reach: 0.14, up: 0 },

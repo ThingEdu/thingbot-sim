@@ -73,10 +73,13 @@ export class HumanPlayer {
       const allParked = mine.length > 0 && mine.every(parked)
       return inZone.length > 0 || allParked ? 'Robot đã về Vùng Bảo Vệ' : 'Robot chưa vào Khu Tiếp Tế'
     }
+    // Ruling R33: robot không có cửa xả (S3, vd. Xe Ủi) không nhận bóng — nhận rồi cũng không đưa ra được.
+    const gated = eligible.filter((r) => r.def.servos.S3 !== undefined)
+    if (gated.length === 0) return 'Robot không có cửa xả'
     const c = this.color
     const i = this.held[c][0]
     if (i === undefined) return `Khay hết bóng ${NAME[c]}`
-    const robot = eligible.find((r) => r.take(i, c))
+    const robot = gated.find((r) => r.take(i, c))
     if (!robot) return 'Robot đầy bóng'
     this.held[c].shift()
     this.tray[c]--
@@ -96,7 +99,9 @@ export class HumanPlayer {
     this.loadWait -= AUTO_EVERY
     const zone = ZONES.load[this.alliance]
     const robot = ctx.robots.find(
-      (r) => r.alliance === this.alliance && !(ctx.endgame && r.parked) && r.footprint().some((p) => cornerIn(zone, p)),
+      (r) =>
+        r.alliance === this.alliance && r.def.servos.S3 !== undefined && !(ctx.endgame && r.parked) &&
+        r.footprint().some((p) => cornerIn(zone, p)),
     )
     if (!robot) return
     const { o, g } = this.tray

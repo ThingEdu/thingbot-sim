@@ -10,7 +10,7 @@
  * "Agent Dễ/Vừa/Khó", hoặc "Chương trình của Robot N" (Robot 3 / 4, bo ảo riêng, tay cầm trung tính). Mặc định
  * Robot 1 = Chương trình, Robot 2–4 = Agent Vừa. Ghế "Chương trình" không bao giờ do agent lái: chưa chạy, ■ Dừng hay
  * lỗi đều là đứng yên (Review Focus 2). Đổi người lái chỉ bắt đầu trận mới khi robot phải đổi kiểu / đế.
- * Trận: chương trình chạy khi hết 10 s xả bóng; Luyện tập: chạy ngay. Tay cầm gắn ghế theo lần cắm đầu (R26).
+ * Trận: chương trình chạy khi hết 10 s xả bóng; Luyện tập: xả bóng tua sẵn lúc tạo trận (R31), chương trình chạy ngay. Tay cầm gắn ghế theo lần cắm đầu (R26).
  * Có chương trình khối đang chạy thì tốc độ xem khoá ở ×1 (R24).
  *
  * Vòng lặp bước cố định: cộng dồn thời gian thật × tốc độ xem, chạy vật lý theo PHYSICS_DT (tối đa 4 bước cho mỗi
@@ -182,15 +182,30 @@ async function start(): Promise<void> {
     }
   }
 
-  /** Trận mới (đổi chế độ, đổi robot, bấm "Trận mới"): mọi chương trình dừng, robot về ô xuất phát. */
+  /**
+   * Trận mới (đổi chế độ, đổi robot, bấm "Trận mới"): mọi chương trình dừng, robot về ô xuất phát. Chỉ một lần dựng
+   * trận chạy một lúc (không giải phóng một thế giới Rapier hai lần); yêu cầu đến giữa chừng dồn thành một lần dựng
+   * lại ngay sau đó, theo lựa chọn mới nhất.
+   */
+  let restarting = false
+  let restartAgain = false
   const restart = async () => {
-    editors.stopAll()
-    const old = game
-    game = await newGame(++seed, [0, 1, 2, 3].map(cfgFor), [0, 1, 2, 3].map(skillOf), practice, twoPeople())
-    old.world.rapier.free()
-    game.match.log(practice ? 'Luyện tập: chương trình chạy ngay khi bấm ▶ Chạy, không hết giờ' : 'Trận mới: chương trình chạy khi hết 10 giây xả bóng')
-    game.match.log(hpNote(game.manualHp))
-    expose()
+    if (restarting) return void (restartAgain = true)
+    restarting = true
+    try {
+      do {
+        restartAgain = false
+        editors.stopAll()
+        const old = game
+        game = await newGame(++seed, [0, 1, 2, 3].map(cfgFor), [0, 1, 2, 3].map(skillOf), practice, twoPeople())
+        old.world.rapier.free()
+        game.match.log(practice ? 'Luyện tập: không xả bóng, không hết giờ — chương trình chạy ngay khi bấm ▶ Chạy' : 'Trận mới: chương trình chạy khi hết 10 giây xả bóng')
+        game.match.log(hpNote(game.manualHp))
+        expose()
+      } while (restartAgain)
+    } finally {
+      restarting = false
+    }
   }
   editors.onConfig(() => void restart())
   expose()
@@ -254,9 +269,13 @@ async function start(): Promise<void> {
   const again = button('Trận mới', () => void restart())
   // Nút ☰: ẩn/hiện vùng khối (mẫu ftc.html). Điện thoại mặc định ẩn để sân đủ lớn.
   const codeBtn = button('☰', () => setCodeHidden(!document.body.classList.contains('fr-nocode')))
+  codeBtn.setAttribute('aria-label', 'Vùng khối lệnh')
+  codeBtn.setAttribute('aria-controls', 'blocks')
+  // aria-expanded = vùng khối đang hiện; nút tô đậm (aria-pressed) cũng khi vùng khối đang hiện.
   const setCodeHidden = (hidden: boolean) => {
     document.body.classList.toggle('fr-nocode', hidden)
-    codeBtn.setAttribute('aria-pressed', String(hidden))
+    codeBtn.setAttribute('aria-expanded', String(!hidden))
+    codeBtn.setAttribute('aria-pressed', String(!hidden))
     codeBtn.title = hidden ? 'Hiện vùng khối lệnh' : 'Ẩn vùng khối lệnh'
     if (!hidden) editors.resize()
   }
@@ -328,7 +347,7 @@ async function start(): Promise<void> {
     }
     if (n === max || performance.now() - t0 >= STEP_BUDGET_MS || game.match.phase === 'end') acc = 0
     scene.sync(game.world, game.robots, game.match, game.ports)
-    hud.update(game.match, game.robots, game.cfgs)
+    hud.update(game.match, game.robots, game.cfgs, game.ports)
     requestAnimationFrame(frame)
   }
   requestAnimationFrame(frame)

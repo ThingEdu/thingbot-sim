@@ -289,7 +289,8 @@ export class RobotBody {
   }
 
   private release(ports: PortValues, dt: number): void {
-    if ((ports.S3 ?? 0) < SERVO_ON) {
+    // Ruling R33: chỉ robot có cửa xả S3 mới xả bóng theo lệnh S3 (Xe Ủi không có S3).
+    if (this.def.servos.S3 === undefined || (ports.S3 ?? 0) < SERVO_ON) {
       this.releaseWait = 0
       return
     }
