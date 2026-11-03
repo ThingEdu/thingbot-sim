@@ -211,3 +211,17 @@ test('hiệu năng: 190 s vật lý với 300 bóng < 60 s thời gian máy', as
   console.log(`190 s vật lý, ${w.balls.filter((b) => b.st === 'field').length} bóng trên sân: ${s.toFixed(1)} s thời gian máy`)
   assert.ok(s < 60, `chậm: ${s.toFixed(1)} s`)
 })
+
+test('trayBall: bóng trên sân vào khay (xoá body); bóng ở trạng thái khác thì không đổi', async () => {
+  const w = await FanrocWorld.create(1)
+  w.placeBall(0, { x: 0, y: 0.02, z: 0 })
+  w.trayBall(0)
+  assert.equal(w.balls[0].st, 'tray')
+  assert.equal(w.balls[0].body, null)
+  w.trayBall(1) // còn trong hộp
+  assert.equal(w.balls[1].st, 'box')
+  w.placeBall(2, { x: 0, y: 0.02, z: 0 })
+  w.removeBall(2)
+  w.trayBall(2) // đang giữ trong robot
+  assert.equal(w.balls[2].st, 'held')
+})

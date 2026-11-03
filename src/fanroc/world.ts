@@ -165,6 +165,14 @@ export class FanrocWorld {
     b.st = 'held'
   }
 
+  /** Human Player nhặt bóng vào khay: bóng thành 'tray', xoá body. Chỉ bóng đang trên sân mới nhặt được. */
+  trayBall(i: number): void {
+    const b = this.balls[i]
+    if (b.st !== 'field') return
+    this.freeBody(b)
+    b.st = 'tray'
+  }
+
   /** Đặt (lại) bóng vào sân tại `pos` với vận tốc `vel`. */
   placeBall(i: number, pos: Vec3, vel: Vec3 = { x: 0, y: 0, z: 0 }): void {
     const b = this.balls[i]
