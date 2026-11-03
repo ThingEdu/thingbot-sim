@@ -68,7 +68,7 @@ test('worker báo lỗi ⇒ cổng trung tính, báo lỗi tiếng Việt, dừn
   link.receive({ type: 'error', run, message: 'boom' } as Message)
   assert.deepEqual(link.ports(), NEUTRAL)
   assert.equal(link.state, 'error')
-  assert.deepEqual(errors, ['Chương trình dừng vì lỗi: boom'])
+  assert.deepEqual(errors, ['Chương trình dừng vì lỗi (boom)'], 'lỗi lạ: giữ nguyên trong ngoặc')
   assert.equal(sent.at(-1)!.type, 'stop')
   link.receive(snap(run, pwm({ 3: 4095 })))
   assert.deepEqual(link.ports(), NEUTRAL, 'snapshot muộn sau lỗi không làm robot chạy lại')

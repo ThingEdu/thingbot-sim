@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { padState, PadFeed, PS2_NEUTRAL, readPads } from './gamepad.ts'
+import { padState, PadFeed, PadSeats, PS2_NEUTRAL } from './gamepad.ts'
 
 /** Tay giả theo bố cục chuẩn: `axes` −1…1, `pressed` là số nút đang giữ. */
 const fake = (axes = [0, 0, 0, 0], pressed: number[] = [], over: object = {}) => ({
@@ -27,12 +27,38 @@ test('padState: tay không theo bố cục chuẩn hoặc đã ngắt ⇒ null',
   assert.equal(padState(null), null)
 })
 
-test('readPads: theo thứ tự cắm, bỏ chỗ trống của tay đã rút; tay không chuẩn giữ chỗ bằng null', () => {
-  const pads = readPads(() => [null, fake([0, -1, 0, 0]), fake([], [], { mapping: '' }), fake([0, 1, 0, 0])])
-  assert.equal(pads.length, 3)
-  assert.equal(pads[0]!.ps2_PSS_LY, 0)
-  assert.equal(pads[1], null)
-  assert.equal(pads[2]!.ps2_PSS_LY, 255)
+const at = (index: number, ly: number, over: object = {}) => ({ ...fake([0, ly, 0, 0]), index, id: `pad ${index}`, ...over })
+
+test('R26: [A, B] → [null, B] ⇒ Robot 1 trung tính, Robot 2 vẫn nhận B; cắm lại A ⇒ A về Robot 1', () => {
+  const seats = new PadSeats()
+  const A = at(0, -1)
+  const B = at(1, 1)
+  const first = seats.read(() => [A, B])
+  assert.deepEqual([first.pads[0]!.ps2_PSS_LY, first.pads[1]!.ps2_PSS_LY], [0, 255])
+  const lost = seats.read(() => [null, B])
+  assert.equal(lost.pads[0], null)
+  assert.equal(lost.pads[1]!.ps2_PSS_LY, 255)
+  assert.deepEqual(lost.status, ['lost', 'ok'])
+  // Tay khác cắm vào lúc ghế 1 mất tay: không lấy ghế 1, không dồn ghế 2.
+  const C = at(2, 0.5)
+  const other = seats.read(() => [null, B, C])
+  assert.equal(other.pads[0], null)
+  assert.equal(other.pads[1]!.ps2_PSS_LY, 255)
+  const back = seats.read(() => [A, B, C])
+  assert.deepEqual([back.pads[0]!.ps2_PSS_LY, back.pads[1]!.ps2_PSS_LY], [0, 255])
+  assert.deepEqual(back.status, ['ok', 'ok'])
+})
+
+test('PadSeats: ghế theo thứ tự cắm (không theo index); ghế chưa có tay là none; tay không chuẩn giữ ghế, null', () => {
+  const seats = new PadSeats()
+  assert.deepEqual(seats.read(() => []).status, ['none', 'none'])
+  const late = at(3, 1)
+  assert.equal(seats.read(() => [null, null, null, late]).pads[0]!.ps2_PSS_LY, 255)
+  assert.deepEqual(seats.read(() => [null, null, null, late]).status, ['ok', 'none'], 'một tay chỉ giữ một ghế')
+  const odd = at(0, -1, { mapping: '' })
+  const r = seats.read(() => [odd, null, null, late])
+  assert.deepEqual(r.status, ['ok', 'nonstandard'])
+  assert.equal(r.pads[1], null)
 })
 
 test('PadFeed: lần đầu gửi đủ mọi khoá, sau đó chỉ khoá đổi; tay rút (null) ⇒ gửi đủ mọi khoá về trung tính (Review Focus 1)', () => {

@@ -35,16 +35,43 @@ export function padState(gp: PadLike): Ps2State | null {
   return s
 }
 
+type SeatPad = NonNullable<PadLike> & Pick<Gamepad, 'index' | 'id'>
+const browserPads = (): ArrayLike<SeatPad | null> =>
+  typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : []
+
+/** Tình trạng tay cầm của một ghế người lái. */
+export type SeatStatus = 'none' | 'ok' | 'nonstandard' | 'lost'
+
 /**
- * Các tay đang cắm theo thứ tự cắm (bỏ chỗ trống của tay đã rút): phần tử thứ i là bộ thu của robot người lái i + 1.
- * Tay không chuẩn vẫn giữ chỗ nhưng là null.
+ * Gắn tay cầm vào ghế người lái theo lần cắm đầu tiên (ruling R26): tay cắm đầu tiên → Robot 1, tay kế → Robot 2,
+ * nhớ theo `Gamepad.index` (giữ cả `id` để hiện). Tay của một ghế rút ra ⇒ ghế đó null (trung tính, Review Focus 1),
+ * ghế khác giữ nguyên tay của mình; tay cắm lại đúng index đó thì về đúng ghế cũ. Không bao giờ dồn ghế.
  */
-export function readPads(
-  get: () => ArrayLike<PadLike> = () => (typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : []),
-): (Ps2State | null)[] {
-  return Array.from(get())
-    .filter((p): p is NonNullable<PadLike> => !!p && p.connected)
-    .map(padState)
+export class PadSeats {
+  private readonly latched: ({ index: number; id: string } | null)[]
+
+  constructor(seats = 2) {
+    this.latched = Array.from({ length: seats }, () => null)
+  }
+
+  read(get: () => ArrayLike<SeatPad | null> = browserPads): { pads: (Ps2State | null)[]; status: SeatStatus[]; ids: (string | null)[] } {
+    const live = Array.from(get()).filter((p): p is SeatPad => !!p && p.connected)
+    for (const p of live) {
+      if (this.latched.some((l) => l?.index === p.index)) continue
+      const free = this.latched.indexOf(null)
+      if (free >= 0) this.latched[free] = { index: p.index, id: p.id }
+    }
+    const pads: (Ps2State | null)[] = []
+    const status: SeatStatus[] = []
+    for (const l of this.latched) {
+      const p = l ? live.find((q) => q.index === l.index) : undefined
+      if (p && l) l.id = p.id
+      const state = p ? padState(p) : null
+      pads.push(state)
+      status.push(!l ? 'none' : !p ? 'lost' : state ? 'ok' : 'nonstandard')
+    }
+    return { pads, status, ids: this.latched.map((l) => l?.id ?? null) }
+  }
 }
 
 /**

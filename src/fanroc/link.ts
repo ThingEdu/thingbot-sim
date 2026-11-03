@@ -15,8 +15,13 @@ const TRAPS: Record<string, string> = {
   IntegerDivideByZero: 'chia một số nguyên cho 0',
 }
 
-export function vietError(message: string): string {
-  return TRAPS[message] ?? message
+/**
+ * Câu báo lỗi cho học sinh: lỗi đã biết thì dịch, lỗi lạ (thường là chữ tiếng Anh của trình chạy) thì giữ nguyên
+ * trong ngoặc. `vietnamese` = lời đã là tiếng Việt (bộ sinh mã của ThingBlock).
+ */
+export function errorText(message: string, vietnamese = false): string {
+  const known = TRAPS[message] ?? (vietnamese ? message : null)
+  return known !== null ? `Chương trình dừng vì lỗi: ${known}` : `Chương trình dừng vì lỗi (${message})`
 }
 
 export class RobotLink {
@@ -42,7 +47,7 @@ export class RobotLink {
   load(code: string, error?: string): boolean {
     this.pwm = null
     if (error) {
-      this.fail(error)
+      this.fail(error, true)
       return false
     }
     this.code = code
@@ -94,10 +99,10 @@ export class RobotLink {
     for (const [k, v] of Object.entries(this.feed.next(this.pad))) this.post({ type: 'input', key: `adc${k}`, value: v })
   }
 
-  private fail(message: string): void {
+  private fail(message: string, vietnamese = false): void {
     if (this.state === 'loaded' || this.state === 'running') this.post({ type: 'stop' })
     this.pwm = null
-    this.error = `Chương trình dừng vì lỗi: ${vietError(message)}`
+    this.error = errorText(message, vietnamese)
     this.set('error')
     this.onError?.(this.error)
   }

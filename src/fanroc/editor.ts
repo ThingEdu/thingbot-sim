@@ -27,10 +27,14 @@ export interface Editors {
   onError(cb: (i: number, msg: string) => void): void
   /** Người dùng đổi robot mẫu / đế / cơ cấu của thẻ i. */
   onConfig(cb: (i: number, cfg: RobotConfig) => void): void
-  /** Chương trình được phép chạy lúc này không (Trận: chỉ sau 10 s xả bóng). */
-  setGate(gate: () => boolean): void
-  /** Gọi mỗi khung: chương trình đã nạp và đang chờ thì chạy khi cổng mở. */
+  /** Chương trình được phép chạy lúc này không (Trận: chỉ sau 10 s xả bóng), và dòng trạng thái lúc đang chờ. */
+  setGate(gate: () => boolean, waiting: () => string): void
+  /** Gọi mỗi khung: chương trình đã nạp và đang chờ thì chạy khi cổng mở (hoặc cập nhật dòng chờ). */
   release(): void
+  /** Có chương trình học sinh nào đã nạp hoặc đang chạy (kể cả bo ảo của robot đồng đội). */
+  anyActive(): boolean
+  /** Người dùng bấm ▶ Chạy ở thẻ i. */
+  onRun(cb: (i: number) => void): void
   /** Dừng mọi chương trình (trận mới). */
   stopAll(): void
   /** Một bo ảo nữa chạy theo chương trình của thẻ `src` (robot đồng đội): nạp / chạy / dừng cùng thẻ đó, tay cầm trung tính. */
@@ -96,6 +100,8 @@ export function createEditors(container: HTMLElement, robots: { label: string; c
 
   let active = 0
   let gate: () => boolean = () => true
+  let waiting = () => STATUS.loaded
+  const runCbs: ((i: number) => void)[] = []
   const errorCbs: ((i: number, msg: string) => void)[] = []
   const configCbs: ((i: number, cfg: RobotConfig) => void)[] = []
   const followers: { src: number; link: RobotLink }[] = []
@@ -175,7 +181,10 @@ export function createEditors(container: HTMLElement, robots: { label: string; c
       label('Cơ cấu M3/M4 chạy bằng', act),
       btn('Mẫu TeleOp', () => api.load(i, sample(t.cfg, 'teleop'))),
       btn('Mẫu Auto', () => api.load(i, sample(t.cfg, 'auto'))),
-      btn('▶ Chạy', () => api.run(i), 'fe-run'),
+      btn('▶ Chạy', () => {
+        api.run(i)
+        for (const cb of runCbs) cb(i)
+      }, 'fe-run'),
       btn('■ Dừng', () => api.stop(i)),
     )
     drive.replaceChildren(...ROBOTS[t.cfg.type].drives.map((d) => Object.assign(el('option', undefined, DRIVE_NAME[d]), { value: d })))
@@ -234,12 +243,23 @@ export function createEditors(container: HTMLElement, robots: { label: string; c
     onConfig(cb) {
       configCbs.push(cb)
     },
-    setGate(g) {
+    setGate(g, w) {
       gate = g
+      waiting = w
     },
     release() {
-      for (const t of tabs) startIfOpen(t.link)
+      for (const t of tabs) {
+        startIfOpen(t.link)
+        if (t.link.state === 'loaded') {
+          const text = waiting()
+          if (t.status.textContent !== text) t.status.textContent = text
+        }
+      }
       for (const f of followers) startIfOpen(f.link)
+    },
+    anyActive: () => [...tabs.map((t) => t.link), ...followers.map((f) => f.link)].some((l) => l.state === 'loaded' || l.state === 'running'),
+    onRun(cb) {
+      runCbs.push(cb)
     },
     stopAll() {
       tabs.forEach((_, i) => api.stop(i))
