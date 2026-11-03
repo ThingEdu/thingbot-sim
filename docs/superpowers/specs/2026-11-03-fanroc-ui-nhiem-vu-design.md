@@ -60,6 +60,7 @@ giải thích giao diện, và muốn chơi tiếp tới trận đấu.
 | Trận đấu | Lái bằng **bàn phím**, đấu với **máy**, hết trận **hiện điểm** |
 | Phím | Bàn phím lái robot (W/A/S/D chạy, phím khác cho servo); **Human Player tự động nạp bóng**; tay PS2 cắm vào vẫn lái được |
 | Tổng thể (04/11) | **Như một game kiểu FIFA** cuốn hút trẻ: các chế độ **Thi đấu**, **Đấu tập**, **Lập trình** (sửa, nâng cấp chương trình điều khiển robot); không lập trình thì robot dùng **chương trình mặc định theo hướng dẫn** |
+| Khối của em có tham số (04/11) | ThingBlock hiện sinh khối tự tạo **không tham số** (cả mô phỏng lẫn Arduino). Anh Tuấn chốt: **sửa trước trên mô phỏng** (ghi đè bộ sinh mã mô phỏng ngay trong kho này, không sửa `thingblock-editor-sim`); `.tb` có khối của em có tham số **chưa nạp được ThingBot thật** cho tới khi ThingBlock gốc hỗ trợ — trang phải báo rõ khi tải `.tb` (ngoại lệ tạm thời của anti-goal "khối chỉ chạy trong mô phỏng") |
 | Vệt robot (04/11) | **Chỉ có trong nhiệm vụ con rùa**, không có ở Thi đấu / Đấu tập |
 
 Thay đổi so với spec trước: trước đây "bàn phím = Human Player, tay PS2 = lái". Nay bàn phím lái;
