@@ -31,7 +31,13 @@ const PS2_STATE = [
   'function ps2Read() {',
   '  if (!ps2.ready) return;',
   '  for (const k of PS2_KEYS) ps2.button[k] = $.analogRead("ps2_" + k) > 0;',
-  '  for (const k of PS2_ANALOG) ps2.analog[k] = $.analogRead("ps2_" + k) || 128;',
+  // Trang chưa gửi cần (bài học chỉ có nút) thì bo ảo đọc 0 ⇒ coi là giữa 128; trang đặt ps2_PRESENT thì 0 là cần
+  // đẩy hết cỡ, phải giữ nguyên (sân FANROC, ruling R23).
+  '  const present = $.analogRead("ps2_PRESENT") > 0;',
+  '  for (const k of PS2_ANALOG) {',
+  '    const v = $.analogRead("ps2_" + k);',
+  '    ps2.analog[k] = present ? v : v || 128;',
+  '  }',
   '}',
 ].join('\n')
 
@@ -62,6 +68,9 @@ export function registerExtraSimGenerators(generator: Generator, Order: typeof S
     ps2()
     return [`(ps2.button.${field(block, 'BUTTON', 'PSB_PAD_UP')} === true)`, Order.ATOMIC]
   }
+  // Kiểu C++ như PS2X: nút là bool, cần là số nguyên 0…255 (không có thì bộ sinh mã coi là double và cảnh báo).
+  generator.typeFor.ps2_getButton = () => 'bool'
+  generator.typeFor.ps2_GetJoystick = () => 'int'
   generator.forBlock.ps2_GetJoystick = (block) => {
     ps2()
     return [`(ps2.analog.${field(block, 'JOYSTICK', 'PSS_LX')} ?? 128)`, Order.ATOMIC]

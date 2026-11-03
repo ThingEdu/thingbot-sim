@@ -35,8 +35,8 @@ export interface BlocksApi {
 
 let registered = false
 
-export function createBlocks(container: HTMLElement, toolbox: object): BlocksApi {
-  ScratchBlocks.ScratchMsgs.setLocale('vi')
+/** Đăng ký khối + bộ sinh mã (Arduino và mô phỏng) một lần; tách riêng để phép thử Node dùng được mà không cần vùng khối. */
+export function registerThingBlocks(): void {
   if (!registered) {
     // Khối ThingBot và ba ngoại vi các bài dùng: màn OLED, cảm biến siêu âm, tay cầm PS2.
     for (const register of [registerBlocks, registerOledBlocks, registerSonarBlocks, registerPs2Blocks]) register(ScratchBlocks)
@@ -47,6 +47,11 @@ export function createBlocks(container: HTMLElement, toolbox: object): BlocksApi
     registerExtraSimGenerators(ScratchBlocks.simGenerator, ScratchBlocks.ArduinoOrder)
     registered = true
   }
+}
+
+export function createBlocks(container: HTMLElement, toolbox: object): BlocksApi {
+  ScratchBlocks.ScratchMsgs.setLocale('vi')
+  registerThingBlocks()
 
   const workspace = ScratchBlocks.inject(container, {
     toolbox,

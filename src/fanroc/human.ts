@@ -80,7 +80,7 @@ export class HumanPlayer {
     if (!robot) return 'Robot đầy bóng'
     this.held[c].shift()
     this.tray[c]--
-    this.onEvent?.(`Robot ${robot.slot + 1} nhận bóng ${NAME[c]}`)
+    this.onEvent?.(`Robot ${ctx.robots.indexOf(robot) + 1} nhận bóng ${NAME[c]}`) // số như trên bảng điểm (thứ tự robot của trận)
     return null
   }
 
