@@ -138,6 +138,11 @@ test('R16: lỗ cờ đang có bóng ⇒ không cắm, lastMessage báo, robot v
   assert.deepEqual(got, [])
   assert.equal(r.lastMessage, 'Lỗ cờ đang có bóng')
   assert.equal(r.hasFlag, true)
+  w.removeBall(150) // bóng được lấy khỏi lỗ: bước sau cắm được, thông báo tắt
+  r.apply({ ...NEUTRAL, S2: 30 }, PHYSICS_DT)
+  assert.deepEqual(got, [0])
+  assert.equal(r.lastMessage, null)
+  assert.equal(r.hasFlag, false)
 })
 
 test('Cờ mở chỗ khác ⇒ rơi xuống sàn thành vật dynamic; kẹp đóng lại gần cờ ⇒ nhặt lại', async () => {
@@ -183,8 +188,48 @@ test('Lao vào rào và vào núi: bị chặn, không leo lên (thân vẫn sá
   drive(w, r, { M1: 100, M2: 100 }, 3)
   const y = r.body.translation().y
   assert.ok(Math.abs(y) < 0.01, `thân lên tới y ${y}`)
-  assert.ok(r.pose.z > 0.65, `xuyên vào núi tới z ${r.pose.z}`)
+  assert.ok(r.pose.z > 0.70, `xuyên vào núi tới z ${r.pose.z}`)
   r.setPose({ x: 0, z: 0.9, yaw: Math.PI }) // quay lưng về núi, mũi hướng +z ra rào gần
   drive(w, r, { M1: 100, M2: 100 }, 2)
   assert.ok(r.pose.z < 1.2 - ROBOTS.maker.size.l / 2 + 0.01, `xuyên rào tới z ${r.pose.z}`)
+})
+
+for (const type of ['maker', 'co'] as const) {
+  test(`Cờ (${ROBOTS[type].name}): lái thẳng vào Núi A theo trục lỗ, vươn + tay S1, mở kẹp ⇒ onFlag(0) (không dịch chuyển tức thời)`, async () => {
+    const w = await FanrocWorld.create(1)
+    const r = new RobotBody(w, { type, drive: 'diff2', actuator: 'tt' }, 'red', 0)
+    const h = w.holeCentres()[0]
+    r.setPose({ x: h.x, z: 0.9, yaw: 0 })
+    const got: number[] = []
+    r.onFlag = (m) => got.push(m)
+    drive(w, r, { M1: 100, M2: 100, M4: 100, S1: 180, S2: 150 }, 4)
+    assert.equal(r.hasFlag, true)
+    const g = r.gripPoint()
+    assert.ok(g.y > PEAK_Y, `điểm kẹp thấp hơn đỉnh núi: ${g.y}`)
+    drive(w, r, { S1: 180, S2: 30 }, 0.1)
+    assert.deepEqual(got, [0], `điểm kẹp cách lỗ ${Math.hypot(g.x - h.x, g.z - h.z).toFixed(3)} m`)
+  })
+}
+
+test('Tay S1 của Xe Cắm Cờ vươn tới trước: footprint dài thêm arm.reach, S1 null giữ nguyên', async () => {
+  const { w, r } = await corridor({ type: 'co', drive: 'diff2', actuator: 'tt' })
+  drive(w, r, { S1: 180 }, 0.05)
+  drive(w, r, {}, 0.05)
+  const zs = r.footprint().map((c) => c.z)
+  const len = Math.max(...zs) - Math.min(...zs)
+  assert.ok(Math.abs(len - (ROBOTS.co.size.l + ROBOTS.co.arm!.reach)) < 0.005, `dài ${len}`)
+})
+
+test('Khoá lật: đâm chéo vào cạnh núi, thân không nghiêng (quaternion x, z ≈ 0)', async () => {
+  const w = await FanrocWorld.create(1)
+  const r = new RobotBody(w, MAKER, 'red', 0)
+  r.setPose({ x: -0.05, z: 0.85, yaw: 0.6 }) // mũi hướng chéo về góc Núi A
+  let tilt = 0
+  for (let k = 0; k < 180; k++) {
+    r.apply({ ...NEUTRAL, M1: 100, M2: 100 }, PHYSICS_DT)
+    w.step(PHYSICS_DT)
+    const q = r.body.rotation()
+    tilt = Math.max(tilt, Math.abs(q.x), Math.abs(q.z))
+  }
+  assert.ok(tilt < 1e-3, `nghiêng ${tilt}`)
 })

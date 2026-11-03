@@ -27,6 +27,11 @@ export interface RobotDef {
   release: { y: number; reach: number }
   /** Mức mở rộng tối đa ra khỏi kích thước xuất phát. */
   maxExtend: number
+  /**
+   * Tay kẹp cờ do S1 điều khiển (ruling R17): ở S1 = 180° điểm kẹp vươn thêm `reach` tới trước và cao thêm `up`
+   * (tuyến tính theo S1 / 180). Không có thì S1 không làm gì.
+   */
+  arm?: { reach: number; up: number }
 }
 
 export const ROBOTS: Record<RobotType, RobotDef> = {
@@ -38,6 +43,7 @@ export const ROBOTS: Record<RobotType, RobotDef> = {
     servos: { S1: 'Nâng tay', S2: 'Kẹp cờ', S3: 'Cửa xả' },
     storage: 6, hpLoad: false, flag: true,
     release: { y: 0.2, reach: 0.05 }, maxExtend: 0.13,
+    arm: { reach: 0, up: 0.06 },
   },
   ui: {
     type: 'ui', name: 'Xe Ủi',
@@ -56,6 +62,7 @@ export const ROBOTS: Record<RobotType, RobotDef> = {
     servos: { S1: 'Nâng tay kẹp', S2: 'Kẹp cờ', S3: 'Cửa thùng' },
     storage: 12, hpLoad: true, flag: true,
     release: { y: 0.2, reach: 0.05 }, maxExtend: 0.08,
+    arm: { reach: 0.14, up: 0 },
   },
   sort: {
     type: 'sort', name: 'Xe Phân Loại',
@@ -100,8 +107,11 @@ export function portMap(cfg: RobotConfig): PortMap {
 
 const mm = (m: number): number => Math.round(m * 1000)
 
-/** Ô "kiểm tra theo luật": kích thước xuất phát, mức mở rộng, số động cơ TT / 4, số servo / 5. */
-export function ruleChecks(cfg: RobotConfig, extendNow: number): { ok: boolean | 'note'; text: string }[] {
+/**
+ * Ô "kiểm tra theo luật": kích thước xuất phát, mức mở rộng, số động cơ TT / 4, số servo / 5.
+ * `armFrac` = S1 / 180 của tay kẹp cờ (0…1); phần tay vươn tới trước tính vào mức mở rộng.
+ */
+export function ruleChecks(cfg: RobotConfig, extendNow: number, armFrac = 0): { ok: boolean | 'note'; text: string }[] {
   const def = ROBOTS[cfg.type]
   const s360 = effectiveActuator(cfg) === 's360'
   const mechCount = Object.keys(def.mech).length
@@ -109,7 +119,7 @@ export function ruleChecks(cfg: RobotConfig, extendNow: number): { ok: boolean |
   const servos = Object.keys(def.servos).length + (s360 ? mechCount : 0)
   const { w, l, h } = def.size
   const startOk = Math.max(w, l) <= 0.3 + 1e-9 && h <= 0.85 + 1e-9
-  const extent = Math.max(w, l) + extendNow
+  const extent = Math.max(w, l) + extendNow + armFrac * (def.arm?.reach ?? 0)
   const out: { ok: boolean | 'note'; text: string }[] = [
     { ok: startOk, text: `R01 kích thước xuất phát: ${mm(w)} × ${mm(l)} × ${mm(h)} mm (giới hạn 300 × 300 × 850 mm)` },
     { ok: extent <= 0.5 + 1e-9, text: `Mở rộng một chiều: ${mm(extent)} mm / 500 mm` },

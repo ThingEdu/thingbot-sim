@@ -77,6 +77,8 @@ export class RobotBody {
   parked = false
   /** Thông báo cho người chơi (vd. R16), null khi không có gì. */
   lastMessage: string | null = null
+  /** Tay kẹp cờ (S1 / 180, 0…1); S1 null giữ giá trị lệnh gần nhất. */
+  armFrac = 0
   onFlag?: (mountain: number) => void
 
   private readonly world: FanrocWorld
@@ -139,20 +141,44 @@ export class RobotBody {
     return LIFT_AXIS[this.def.type] === 'forward' ? this.extend : 0
   }
 
-  /** Điểm xả bóng / điểm kẹp cờ: mũi + reach (+ vươn), cao release.y (+ nâng). */
-  gripPoint(): { x: number; y: number; z: number } {
-    const t = this.body.translation()
-    const { f } = this.axes()
-    const d = this.def.size.l / 2 + this.def.release.reach + this.forwardExtend
-    const up = LIFT_AXIS[this.def.type] === 'up' ? this.extend : 0
-    return { x: t.x + f.x * d, y: t.y + this.def.release.y + up, z: t.z + f.z * d }
+  /** Phần tay kẹp cờ đang vươn tới trước, m. */
+  private get armReach(): number {
+    return this.armFrac * (this.def.arm?.reach ?? 0)
   }
 
-  /** 4 góc hình chữ nhật thân xe (gồm phần vươn tới trước): trước trái, trước phải, sau phải, sau trái. */
+  /** Tổng phần nhô ra trước mũi xe (vươn + tay kẹp), m — đưa vào ruleChecks / đỗ. */
+  get forwardExtension(): number {
+    return this.forwardExtend + this.armReach
+  }
+
+  /** Điểm cách mũi xe thêm `ahead` theo phương ngang và cao `y` so với sàn. */
+  private ahead(ahead: number, y: number): { x: number; y: number; z: number } {
+    const t = this.body.translation()
+    const { f } = this.axes()
+    const d = this.def.size.l / 2 + ahead
+    return { x: t.x + f.x * d, y: t.y + y, z: t.z + f.z * d }
+  }
+
+  private get liftUp(): number {
+    return LIFT_AXIS[this.def.type] === 'up' ? this.extend : 0
+  }
+
+  /** Điểm xả bóng: mũi + reach (+ vươn), cao release.y (+ nâng). */
+  releasePoint(): { x: number; y: number; z: number } {
+    return this.ahead(this.def.release.reach + this.forwardExtend, this.def.release.y + this.liftUp)
+  }
+
+  /** Điểm kẹp cờ: như điểm xả, cộng phần tay kẹp S1 (R17). */
+  gripPoint(): { x: number; y: number; z: number } {
+    const up = this.armFrac * (this.def.arm?.up ?? 0)
+    return this.ahead(this.def.release.reach + this.forwardExtend + this.armReach, this.def.release.y + this.liftUp + up)
+  }
+
+  /** 4 góc hình chữ nhật thân xe (gồm phần vươn và tay kẹp tới trước): trước trái, trước phải, sau phải, sau trái. */
   footprint(): Vec2[] {
     const t = this.body.translation()
     const { f, r } = this.axes()
-    const front = this.def.size.l / 2 + this.forwardExtend
+    const front = this.def.size.l / 2 + this.forwardExtension
     const back = -this.def.size.l / 2
     const half = this.def.size.w / 2
     const at = (a: number, b: number): Vec2 => ({ x: t.x + f.x * a + r.x * b, z: t.z + f.z * a + r.z * b })
@@ -180,6 +206,7 @@ export class RobotBody {
     this.lift(ports, dt)
     this.intake(ports)
     this.release(ports, dt)
+    if (ports.S1 !== null) this.armFrac = Math.max(0, Math.min(1, ports.S1 / 180))
     this.flag(ports)
   }
 
@@ -278,10 +305,11 @@ export class RobotBody {
     this.releaseWait = RELEASE_EVERY
     const { f } = this.axes()
     const v = this.body.linvel()
-    this.world.placeBall(i, this.gripPoint(), { x: v.x + f.x * RELEASE_V, y: 0, z: v.z + f.z * RELEASE_V })
+    this.world.placeBall(i, this.releasePoint(), { x: v.x + f.x * RELEASE_V, y: 0, z: v.z + f.z * RELEASE_V })
   }
 
   private flag(ports: PortValues): void {
+    this.lastMessage = null // chỉ còn khi điều kiện R16 đang xảy ra ở bước này
     if (!this.def.flag) return
     const wasClosed = this.gripClosed
     if (ports.S2 !== null) this.gripClosed = ports.S2 >= SERVO_ON
@@ -296,7 +324,6 @@ export class RobotBody {
       return
     }
     if (!this.hasFlag || this.gripClosed) return
-    this.lastMessage = null
     const holes = this.world.holeCentres()
     const m = holes.findIndex((h) => Math.hypot(h.x - tip.x, h.z - tip.z) <= FLAG_SNAP)
     if (m >= 0) {

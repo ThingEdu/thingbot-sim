@@ -75,3 +75,10 @@ test('ROBOTS: kích thước và kho theo spec 4.3', () => {
   assert.equal(ROBOTS.sort.storage, 10)
   assert.equal(ROBOTS.maker.maxExtend, 0.13)
 })
+
+test('ruleChecks Xe Cắm Cờ: tay S1 vươn hết (armFrac 1) tính vào mở rộng: 280 + 140 = 420 mm đạt', () => {
+  const r = ruleChecks({ type: 'co', drive: 'diff2', actuator: 'tt' }, 0, 1)
+  const c = r.find((x) => /Mở rộng/.test(x.text))
+  assert.equal(c?.text, 'Mở rộng một chiều: 420 mm / 500 mm')
+  assert.equal(c?.ok, true)
+})
