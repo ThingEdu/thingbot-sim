@@ -153,6 +153,8 @@ export interface RobotModel {
   /** Gốc ở tâm xe trên sàn, mũi xe +z. */
   readonly group: THREE.Group
   update(p: RobotPose): void
+  /** Giải phóng geometry của hình và vật liệu riêng của nó (vật liệu dùng chung giữ lại cho robot dựng sau). */
+  dispose(): void
 }
 
 interface Parts {
@@ -358,7 +360,8 @@ export function buildRobotModel(cfg: RobotConfig, alliance: Alliance): RobotMode
   const mech = BUILD[cfg.type](cfg, body)
   const wheels = buildDrive(cfg, body)
   // Dải màu liên minh quanh thân.
-  const band = box(def.size.w + 0.004, 0.012, def.size.l * 0.6, mat(BAND[alliance], { transparent: true, opacity: 0.85 }), 0, 0.045, 0)
+  const bandMat = mat(BAND[alliance], { transparent: true, opacity: 0.85 })
+  const band = box(def.size.w + 0.004, 0.012, def.size.l * 0.6, bandMat, 0, 0.045, 0)
   group.add(band)
   group.traverse((o) => {
     if (o instanceof THREE.Mesh && o.material !== M.acrylic) {
@@ -376,6 +379,14 @@ export function buildRobotModel(cfg: RobotConfig, alliance: Alliance): RobotMode
       // Bánh lăn theo quãng đường của chính nó: bánh bên trái (+x) đi fwd − dyaw·x.
       for (const w of wheels) w.obj.rotation.x += (p.fwd - p.dyaw * w.x) / 0.0325
       mech.update(p, dt)
+    },
+    dispose() {
+      const geos = new Set<THREE.BufferGeometry>()
+      group.traverse((o) => {
+        if (o instanceof THREE.Mesh) geos.add(o.geometry)
+      })
+      for (const g of geos) g.dispose()
+      bandMat.dispose()
     },
   }
 }

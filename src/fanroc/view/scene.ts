@@ -215,6 +215,17 @@ function boxSlot(k: number, color: 'o' | 'g', out: THREE.Vector3): THREE.Vector3
   return out.set(x, lv.y + (BOX.z1 - z) * lv.slope + BALL_R + 0.003 + layer * step * 0.9, z)
 }
 
+/** Giải phóng mỗi geometry / material trong cây một lần (núi dùng chung một lưới và một vật liệu). */
+function disposeTree(root: THREE.Object3D): void {
+  const done = new Set<{ dispose(): void }>()
+  root.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return
+    done.add(o.geometry)
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) done.add(m)
+  })
+  for (const d of done) d.dispose()
+}
+
 interface RobotView {
   model: RobotModel
   last: { x: number; z: number; yaw: number } | null
@@ -299,6 +310,9 @@ export function createScene(el: HTMLElement): FanrocScene {
   for (const b of [orange, green]) {
     b.castShadow = true
     b.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+    // Khối bao của InstancedMesh chỉ tính một lần (lúc mọi bóng còn trong hộp) nên sẽ cắt nhầm cả lưới khi hộp ra
+    // khỏi khung hình; bóng trải khắp sân nên tắt cắt theo khung nhìn.
+    b.frustumCulled = false
     scene.add(b)
   }
   /** Liên minh của khay đang chứa bóng (suy ra từ Khu Xuất Phát nơi bóng được nhặt). */
@@ -362,8 +376,18 @@ export function createScene(el: HTMLElement): FanrocScene {
   setQuality(defaultQuality())
 
   function buildRobots(robots: RobotBody[]): void {
-    for (const v of robotViews) scene.remove(v.model.group)
+    for (const v of robotViews) {
+      scene.remove(v.model.group)
+      v.model.dispose()
+    }
     robotViews.length = 0
+    // Cờ rơi của trận cũ.
+    for (const f of dropped) {
+      if (!f) continue
+      scene.remove(f)
+      disposeTree(f)
+    }
+    dropped.length = 0
     for (const r of robots) {
       const model = buildRobotModel(r.cfg, r.alliance)
       scene.add(model.group)
@@ -477,8 +501,10 @@ export function createScene(el: HTMLElement): FanrocScene {
       const fz = -Math.cos(p.yaw)
       const pos = new THREE.Vector3(p.x - fx * 0.75, 0.55, p.z - fz * 0.75)
       const target = new THREE.Vector3(p.x + fx * 0.35, 0.08, p.z + fz * 0.35)
-      camera.position.lerp(pos, 0.15)
-      controls.target.lerp(target, 0.15)
+      // Ở tốc độ xem cao robot đi xa mỗi khung: bám thẳng khi lệch nhiều, chỉ làm mượt khi lệch ít.
+      const k = camera.position.distanceTo(pos) > 0.12 ? 1 : 0.15
+      camera.position.lerp(pos, k)
+      controls.target.lerp(target, k)
       return
     }
     if (goal) {
@@ -491,8 +517,9 @@ export function createScene(el: HTMLElement): FanrocScene {
   return {
     sync(world, robots, match, ports) {
       if (built !== robots) buildRobots(robots)
-      syncBalls(world, robots)
+      // Robot trước: bóng đang giữ đặt theo matrixWorld của nhóm robot ở khung này (không phải khung trước).
       syncRobots(robots, ports)
+      syncBalls(world, robots)
       match.flags.forEach((on, m) => (planted[m].visible = on))
       // Cửa trước của hộp mở trong 10 s xả bóng.
       const open = match.phase === 'release' && world.balls.some((b) => b.st === 'box')
@@ -518,13 +545,8 @@ export function createScene(el: HTMLElement): FanrocScene {
     dispose() {
       ro.disconnect()
       controls.dispose()
-      scene.traverse((o) => {
-        if (o instanceof THREE.Mesh) {
-          o.geometry.dispose()
-          const ms = Array.isArray(o.material) ? o.material : [o.material]
-          for (const m of ms) m.dispose()
-        }
-      })
+      // Lưới / vật liệu dùng chung (núi, robot, bóng) chỉ giải phóng một lần.
+      disposeTree(scene)
       renderer.dispose()
       renderer.domElement.remove()
     },

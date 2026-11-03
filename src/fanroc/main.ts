@@ -94,8 +94,11 @@ async function start(): Promise<void> {
 
   let speed = 1
   let cam: CameraView = 'field'
+  let speedBtns: HTMLButtonElement[] = []
+  /** Đổi tốc độ xem (cả từ nút lẫn từ window.__fanroc); nút đang chọn luôn khớp tốc độ hiện tại. */
   const setSpeed = (s: number) => {
     speed = Math.max(0, s)
+    speedBtns.forEach((b, k) => b.setAttribute('aria-pressed', String(SPEEDS[k] === speed)))
   }
   const expose = () => {
     ;(window as unknown as { __fanroc: unknown }).__fanroc = {
@@ -115,7 +118,7 @@ async function start(): Promise<void> {
     ],
     0,
   )
-  const speedBtns = group(SPEEDS.map((s) => ({ label: `×${s}`, on: () => setSpeed(s) })), 0)
+  speedBtns = group(SPEEDS.map((s) => ({ label: `×${s}`, on: () => setSpeed(s) })), 0)
   let q: Quality = defaultQuality()
   const qBtns = group(
     [

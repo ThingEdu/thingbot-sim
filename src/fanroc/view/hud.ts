@@ -20,7 +20,7 @@ const MATCH_S = 180
 const SCORE_HZ = 4
 const ALLIANCE = { red: 'Đỏ', blue: 'Xanh' } as const
 const BREAKDOWN: [keyof ReturnType<Match['result']>['score'], string][] = [
-  ['fire', 'Điểm Cháy'], ['r1', 'Rãnh 1'], ['r2', 'Rãnh 2'], ['r3', 'Rãnh 3'], ['flag', 'Lá Cờ'], ['park', 'Bảo Vệ Xanh'], ['wrong', 'Sai vị trí'],
+  ['fire', 'Chữa Cháy'], ['r1', 'Rãnh 1'], ['r2', 'Rãnh 2'], ['r3', 'Rãnh 3'], ['flag', 'Cờ'], ['park', 'Vùng Bảo Vệ'], ['wrong', 'Sai vị trí'],
 ]
 
 const CSS = `
