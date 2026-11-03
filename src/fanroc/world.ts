@@ -1,8 +1,12 @@
-// Thế giới vật lý FANROC (Rapier 3D): sàn, rào, 4 Ngọn Núi có gờ rãnh và lỗ cờ, 300 bóng xả từ Hộp Phân Phối.
+// Thế giới vật lý FANROC (Rapier 3D): sàn, rào, 4 Ngọn Núi (lưới tam giác CAD), 300 bóng xả từ Hộp Phân Phối.
 // Chạy được cả trong Node (phép thử, không đồ hoạ) lẫn trình duyệt. Mọi nhiễu lấy từ PRNG theo `seed`.
 import RAPIER from '@dimforge/rapier3d-compat'
-import { BALL_R, DISPENSER, FIELD, HOLE, MOUNTAINS, MOUNTAIN_HALF, PEAK_Y, TIERS, WALL_H, ZONES, type Rect } from './layout.ts'
+import { BALL_R, DISPENSER, FIELD, HOLE, MOUNTAINS, PEAK_Y, TIERS, TIER_GROOVE, WALL_H, WALL_T, ZONES, fromMountain, mountainAt, type Rect } from './layout.ts'
 import type { FieldTally } from './scoring.ts'
+import mesh from './assets/mountain-mesh.json' with { type: 'json' }
+
+const MESH_VERTICES = new Float32Array(mesh.vertices)
+const MESH_INDICES = new Uint32Array(mesh.indices)
 
 export const PHYSICS_DT = 1 / 60
 
@@ -14,7 +18,7 @@ export interface BallState {
   body: RAPIER.RigidBody | null
 }
 
-// ---------- Số đo vật lý (gom một chỗ để thay khi có CAD) ----------
+// ---------- Số đo vật lý của bóng và xả bóng (hình học sân ở layout.ts) ----------
 const BALL_COUNT = { o: 100, g: 200 }
 const BALL_MASS = 0.0027
 const BALL_BOUNCE = 0.6
@@ -24,28 +28,16 @@ const BALL_LIN_DAMPING = 0.3
 const BALL_ANG_DAMPING = 0.8
 const FLOOR_FRICTION = 0.9
 const MTN_FRICTION = 0.7
-const WALL_T = 0.02
-/** Bóng có tâm vượt quá biên này (hoặc rơi dưới OUT_Y) bị loại vĩnh viễn (luật P03/P08). */
-const OUT_EDGE = FIELD / 2 + 0.05
+/** Bóng có tâm vượt mặt ngoài rào (hoặc rơi dưới OUT_Y) bị loại vĩnh viễn (luật P03/P08). */
+const OUT_EDGE = FIELD / 2 + WALL_T
 const OUT_Y = -0.1
-
-/** Nửa cạnh từng tầng núi (bầu dục "vuông vức" 0.40 / 0.30 / 0.216 / 0.136 m) và độ lệch tâm về phía sau núi (-z). */
-const TIER_HALF = [0.2, 0.15, 0.108, 0.068]
-const TIER_BACK = [0, 0.01, 0.02, 0.03]
-const TIER_SEGMENTS = 24
-const LIP_H = 0.012
-const LIP_T = 0.004
-/** Trụ đỉnh: tâm lỗ cờ lệch về sau núi để Rãnh 3 phía trước đủ rộng cho bóng Ø40. */
-const PEAK_BACK = 0.038
-const PEAK_OUTER = 0.03
-const PEAK_BLOCKS = 8
-/** Cửa ra của Hộp Phân Phối: ngay trong rào phía xa, cam tầng trên, xanh tầng dưới. */
-const OUTLET_Z = -FIELD / 2 + 0.03
-const OUTLET_W = 0.4
-const OUTLET_Y = { o: 0.42, g: 0.36 }
+/** Bóng ra trong khe ±0.18 m (khe CAD 0.404 trừ bán kính), xanh (tầng dưới) trước rồi cam. */
+const OUTLET_HALF = 0.18
 /** Mọi bóng ra khỏi hộp trước thời điểm này của giai đoạn xả (giây). */
 const RELEASE_END = 8
-/** Cửa sổ cao độ để coi bóng nằm trên một tầng núi (luật chấm: tâm trong ±12 mm của sàn tầng + bán kính). */
+/** Hai bóng ra liền nhau cách nhau ít nhất chừng này theo x để không đè lên nhau. */
+const SPAWN_GAP = 2.2 * BALL_R
+/** Cửa sổ cao độ để coi bóng nằm trên một tầng núi (luật chấm: tâm trong ±12 mm của đáy rãnh + bán kính). */
 const TIER_TOL = 0.012
 const FIRE_MAX_Y = 0.03
 
@@ -61,35 +53,6 @@ function mulberry32(seed: number): () => number {
   }
 }
 
-/** Đa giác siêu elip bậc 4 (bầu dục vuông vức, lồi) nửa cạnh `h`, tâm (cx, cz). */
-function superEllipse(cx: number, cz: number, h: number): [number, number][] {
-  const pts: [number, number][] = []
-  for (let i = 0; i < TIER_SEGMENTS; i++) {
-    const a = (i / TIER_SEGMENTS) * Math.PI * 2
-    const c = Math.cos(a)
-    const s = Math.sin(a)
-    pts.push([cx + h * Math.sign(c) * Math.sqrt(Math.abs(c)), cz + h * Math.sign(s) * Math.sqrt(Math.abs(s))])
-  }
-  return pts
-}
-
-/** Cắt đa giác lồi theo nửa mặt phẳng a·x + b·z <= d (Sutherland–Hodgman), kết quả vẫn lồi. */
-function clip(poly: [number, number][], a: number, b: number, d: number): [number, number][] {
-  const out: [number, number][] = []
-  for (let i = 0; i < poly.length; i++) {
-    const p = poly[i]
-    const q = poly[(i + 1) % poly.length]
-    const fp = a * p[0] + b * p[1] - d
-    const fq = a * q[0] + b * q[1] - d
-    if (fp <= 0) out.push(p)
-    if ((fp < 0 && fq > 0) || (fp > 0 && fq < 0)) {
-      const t = fp / (fp - fq)
-      out.push([p[0] + t * (q[0] - p[0]), p[1] + t * (q[1] - p[1])])
-    }
-  }
-  return out
-}
-
 const inRect = (r: Rect, x: number, z: number, pad = 0) =>
   x >= r.x0 - pad && x <= r.x1 + pad && z >= r.z0 - pad && z <= r.z1 + pad
 
@@ -97,9 +60,10 @@ export class FanrocWorld {
   readonly rapier: RAPIER.World
   readonly balls: BallState[]
   private readonly rnd: () => number
-  /** Thứ tự ra khỏi hộp: xen kẽ 1 cam / 2 xanh. */
+  /** Thứ tự ra khỏi hộp: hết xanh (tầng dưới) rồi tới cam (tầng trên đổ xuống). */
   private readonly releaseOrder: number[]
   private released = 0
+  private lastSpawnX = Number.NaN
 
   private constructor(seed: number) {
     this.rapier = new RAPIER.World({ x: 0, y: -9.81, z: 0 })
@@ -108,14 +72,10 @@ export class FanrocWorld {
     this.balls = []
     for (let i = 0; i < BALL_COUNT.o + BALL_COUNT.g; i++) this.balls.push({ color: i < BALL_COUNT.o ? 'o' : 'g', st: 'box', body: null })
     this.releaseOrder = []
-    let o = 0
-    let g = BALL_COUNT.o
-    while (o < BALL_COUNT.o || g < this.balls.length) {
-      if (o < BALL_COUNT.o) this.releaseOrder.push(o++)
-      for (let k = 0; k < 2 && g < this.balls.length; k++) this.releaseOrder.push(g++)
-    }
+    for (let i = BALL_COUNT.o; i < this.balls.length; i++) this.releaseOrder.push(i)
+    for (let i = 0; i < BALL_COUNT.o; i++) this.releaseOrder.push(i)
     this.buildField()
-    MOUNTAINS.forEach((m) => this.buildMountain(m.x, m.z))
+    MOUNTAINS.forEach((m) => this.buildMountain(m))
   }
 
   static async create(seed: number): Promise<FanrocWorld> {
@@ -137,65 +97,12 @@ export class FanrocWorld {
     }
   }
 
-  /** Một núi: 4 tầng lồi xếp chồng, gờ ngoài 12 mm mỗi tầng, trụ đỉnh rỗng quanh lỗ cờ. */
-  private buildMountain(cx: number, cz: number): void {
-    const hz = cz - PEAK_BACK
-    const hr = HOLE.r
-    TIERS.forEach((tier, i) => {
-      const poly = superEllipse(cx, cz - TIER_BACK[i], TIER_HALF[i])
-      const top = tier.floor
-      // Tầng cao nhất bị khoét lỗ cờ: tách đa giác thành 4 mảnh lồi quanh ô vuông ngoại tiếp lỗ.
-      const pieces = i === TIERS.length - 1
-        ? [
-            clip(poly, 0, -1, -(hz + hr)), // phía trước lỗ (z > hz + hr)
-            clip(poly, 0, 1, hz - hr), // phía sau lỗ
-            clip(clip(clip(poly, 0, 1, hz + hr), 0, -1, -(hz - hr)), 1, 0, cx - hr), // bên trái
-            clip(clip(clip(poly, 0, 1, hz + hr), 0, -1, -(hz - hr)), -1, 0, -(cx + hr)), // bên phải
-          ]
-        : [poly]
-      for (const piece of pieces) {
-        const v = new Float32Array(piece.length * 6)
-        piece.forEach(([x, z], k) => v.set([x, 0, z, x, top, z], k * 6))
-        const desc = RAPIER.ColliderDesc.convexHull(v)
-        if (desc) this.fixed(desc)
-      }
-      // Gờ: một vòng khối mỏng chạy dọc mép ngoài tầng, ở phía trong mép.
-      const ox = cx
-      const oz = cz - TIER_BACK[i]
-      for (let k = 0; k < poly.length; k++) {
-        const [x0, z0] = poly[k]
-        const [x1, z1] = poly[(k + 1) % poly.length]
-        const len = Math.hypot(x1 - x0, z1 - z0)
-        let nx = -(z1 - z0) / len
-        let nz = (x1 - x0) / len
-        const mx = (x0 + x1) / 2
-        const mz = (z0 + z1) / 2
-        if (nx * (mx - ox) + nz * (mz - oz) > 0) { nx = -nx; nz = -nz } // pháp tuyến hướng vào trong
-        const yaw = Math.atan2(z1 - z0, x1 - x0)
-        this.fixed(
-          RAPIER.ColliderDesc.cuboid(len / 2 + LIP_T / 2, LIP_H / 2, LIP_T / 2)
-            .setTranslation(mx + nx * LIP_T / 2, top + LIP_H / 2, mz + nz * LIP_T / 2)
-            .setRotation({ x: 0, y: Math.sin(-yaw / 2), z: 0, w: Math.cos(-yaw / 2) }),
-        )
-      }
-    })
-    // Đáy lỗ cờ: sâu HOLE.depth tính từ đỉnh.
-    const holeBottom = PEAK_Y - HOLE.depth
-    const below = TIERS[TIERS.length - 2].floor
-    this.fixed(RAPIER.ColliderDesc.cuboid(hr, (holeBottom - below) / 2, hr).setTranslation(cx, (below + holeBottom) / 2, hz))
-    // Trụ đỉnh rỗng: 8 khối nhỏ quanh lỗ, từ mặt tầng cao nhất lên PEAK_Y.
-    const base = TIERS[TIERS.length - 1].floor
-    const t = PEAK_OUTER - hr
-    const rc = hr + t / 2
-    const half = PEAK_OUTER * Math.tan(Math.PI / PEAK_BLOCKS)
-    for (let k = 0; k < PEAK_BLOCKS; k++) {
-      const a = (k / PEAK_BLOCKS) * Math.PI * 2
-      this.fixed(
-        RAPIER.ColliderDesc.cuboid(t / 2, (PEAK_Y - base) / 2, half)
-          .setTranslation(cx + Math.cos(a) * rc, (base + PEAK_Y) / 2, hz + Math.sin(a) * rc)
-          .setRotation({ x: 0, y: Math.sin(-a / 2), z: 0, w: Math.cos(-a / 2) }),
-      )
-    }
+  /** Một núi: lưới tam giác CAD (vỏ mỏng: đáy rãnh + gờ 3–4 mm), va chạm tĩnh, xoay theo yaw của núi. */
+  private buildMountain(m: { x: number; z: number; yaw: number }): void {
+    const desc = RAPIER.ColliderDesc.trimesh(MESH_VERTICES, MESH_INDICES)
+      .setTranslation(m.x, 0, m.z)
+      .setRotation({ x: 0, y: Math.sin(m.yaw / 2), z: 0, w: Math.cos(m.yaw / 2) })
+    this.fixed(desc)
   }
 
   step(dt: number): void {
@@ -220,10 +127,13 @@ export class FanrocWorld {
       const b = this.balls[i]
       if (b.st !== 'box') continue
       const r = this.rnd
+      let x = DISPENSER.x + (r() * 2 - 1) * OUTLET_HALF
+      for (let k = 0; k < 4 && Math.abs(x - this.lastSpawnX) < SPAWN_GAP; k++) x = DISPENSER.x + (r() * 2 - 1) * OUTLET_HALF
+      this.lastSpawnX = x
       this.placeBall(
         i,
-        { x: DISPENSER.x + (r() - 0.5) * OUTLET_W, y: OUTLET_Y[b.color], z: OUTLET_Z },
-        { x: (r() - 0.5) * 1.2, y: 0, z: 0.6 + r() * 1.8 },
+        { x, y: DISPENSER.y + BALL_R, z: DISPENSER.z + BALL_R },
+        { x: (r() - 0.5) * 1.2, y: 0, z: 0.5 + r() * 1.5 },
       )
     }
   }
@@ -242,6 +152,7 @@ export class FanrocWorld {
   /** Robot hút bóng vào: bóng thành 'held', xoá body (đánh thức bóng đang tựa vào nó). */
   removeBall(i: number): void {
     const b = this.balls[i]
+    if (b.st !== 'field') return // bóng đã loại / đang giữ không được hồi sinh
     this.freeBody(b)
     b.st = 'held'
   }
@@ -279,25 +190,24 @@ export class FanrocWorld {
     }
   }
 
-  /** Tâm miệng lỗ cờ của từng núi (A..D), ở cao độ PEAK_Y. */
+  /** Tâm miệng lỗ cờ của từng núi (A..D) theo CAD, ở cao độ PEAK_Y. */
   holeCentres(): Vec3[] {
-    return MOUNTAINS.map((m) => ({ x: m.x, y: PEAK_Y, z: m.z - PEAK_BACK }))
+    return MOUNTAINS.map((m) => ({ ...fromMountain(m, HOLE.lx, HOLE.lz), y: PEAK_Y }))
   }
 
-  /** Chỉ số núi có chân (0.4 × 0.4) chứa điểm (x, z), hoặc -1. */
+  /** Chỉ số núi có hình bao chân (CAD 0.414 × 0.409, theo hệ núi) chứa điểm (x, z), hoặc -1. */
   inMountain(x: number, z: number): number {
-    return MOUNTAINS.findIndex((m) => Math.abs(x - m.x) <= MOUNTAIN_HALF && Math.abs(z - m.z) <= MOUNTAIN_HALF)
+    return mountainAt(x, z)
   }
 
   /**
    * Đếm bóng theo luật hình học: Khu Chữa Cháy (bóng chạm vạch cũng tính) và 3 rãnh của từng núi.
-   * Tầng trang trí gộp vào Rãnh 1. Bóng trong `robotsHolding` hoặc không ở 'field' không tính.
+   * Rãnh của từng tầng lấy từ TIER_GROOVE (tầng decor gộp vào Rãnh 1). Bóng trong `robotsHolding` hoặc không ở 'field' không tính.
    */
   tally(robotsHolding: Set<number>): Omit<FieldTally, 'flags' | 'parks'> {
     const fire = { o: 0, g: 0 }
     const mtn = MOUNTAINS.map(() => [0, 1, 2].map(() => ({ g: 0, o: 0 })))
     // TIERS[0] và tầng trang trí TIERS[1] → Rãnh 1; TIERS[2] → Rãnh 2; TIERS[3] → Rãnh 3.
-    const groove = TIERS.map((_, k) => (k <= 1 ? 0 : k - 1))
     this.balls.forEach((b, i) => {
       if (b.st !== 'field' || !b.body || robotsHolding.has(i)) return
       const p = b.body.translation()
@@ -308,7 +218,7 @@ export class FanrocWorld {
       const m = this.inMountain(p.x, p.z)
       if (m < 0) return
       const k = TIERS.findIndex((t) => Math.abs(p.y - (t.floor + BALL_R)) <= TIER_TOL)
-      if (k >= 0) mtn[m][groove[k]][b.color]++
+      if (k >= 0) mtn[m][TIER_GROOVE[k]][b.color]++
     })
     return { fire, mtn }
   }
