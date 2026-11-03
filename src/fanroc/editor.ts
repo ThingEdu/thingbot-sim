@@ -38,6 +38,8 @@ export interface Editors {
   onRun(cb: (i: number) => void): void
   /** Dừng mọi chương trình (trận mới). */
   stopAll(): void
+  /** Vẽ lại vùng khối của thẻ đang mở theo kích thước mới (vùng khối vừa hiện lại). */
+  resize(): void
   /** Một bo ảo nữa chạy theo chương trình của thẻ `src` (robot đồng đội): nạp / chạy / dừng cùng thẻ đó, tay cầm trung tính. */
   follow(src: number, onError: (msg: string) => void): { ports(): PortValues; dispose(): void }
 }
@@ -273,6 +275,9 @@ export function createEditors(container: HTMLElement, robots: { label: string; c
     },
     stopAll() {
       tabs.forEach((_, i) => api.stop(i))
+    },
+    resize() {
+      tabs[active].blocks.resize()
     },
     follow(src, onError) {
       const b = board()

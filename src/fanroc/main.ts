@@ -60,6 +60,8 @@ const CSS = `
 .fr-bar .fr-note[hidden] { display: none; }
 .fr-pads { position: absolute; left: 10px; bottom: 10px; display: grid; gap: 2px; font: 600 12px var(--font); background: rgba(255,255,255,0.92); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; }
 @media (max-width: 900px) { #arena { height: max(420px, 62vh); } #blocks { height: 75vh; } }
+body.fr-nocode #blocks { display: none; }
+@media (min-width: 901px) { body.fr-nocode .layout:has(#arena) { grid-template-columns: minmax(0, 1fr) minmax(260px, 22%); } }
 `
 
 function button(text: string, onClick: () => void): HTMLButtonElement {
@@ -250,9 +252,18 @@ async function start(): Promise<void> {
     q === 'high' ? 0 : 1,
   )
   const again = button('Trận mới', () => void restart())
+  // Nút ☰: ẩn/hiện vùng khối (mẫu ftc.html). Điện thoại mặc định ẩn để sân đủ lớn.
+  const codeBtn = button('☰', () => setCodeHidden(!document.body.classList.contains('fr-nocode')))
+  const setCodeHidden = (hidden: boolean) => {
+    document.body.classList.toggle('fr-nocode', hidden)
+    codeBtn.setAttribute('aria-pressed', String(hidden))
+    codeBtn.title = hidden ? 'Hiện vùng khối lệnh' : 'Ẩn vùng khối lệnh'
+    if (!hidden) editors.resize()
+  }
+  setCodeHidden(matchMedia('(max-width: 760px)').matches)
   const gap = document.createElement('span')
   gap.className = 'gap'
-  bar.append(...modeBtns, ...seatPickers, again, gap, ...camBtns, ...speedBtns, speedNote, ...qBtns)
+  bar.append(codeBtn, ...modeBtns, ...seatPickers, again, gap, ...camBtns, ...speedBtns, speedNote, ...qBtns)
   const padsEl = document.createElement('div')
   padsEl.className = 'fr-pads'
   padsEl.setAttribute('aria-live', 'polite')

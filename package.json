@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "smoke": "node scripts/smoke-lessons.mjs && node scripts/smoke-lessons.mjs --starter",
     "typecheck": "tsc --noEmit",
-    "test:unit": "node --test \"src/fanroc/**/*.test.ts\""
+    "test:unit": "node --test \"src/fanroc/**/*.test.ts\"",
+    "e2e:fanroc": "node scripts/fanroc-e2e.mjs"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.14.0",
