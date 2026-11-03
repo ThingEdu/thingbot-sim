@@ -15,7 +15,8 @@
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "types": [
-      "vite/client"
+      "vite/client",
+      "node"
     ],
     "paths": {
       "@scratch/scratch-blocks": [

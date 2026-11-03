@@ -16,7 +16,12 @@ const BASE = '/mo-phong/'
 
 export default defineConfig({
   base: BASE,
-  build: { outDir: `dist${BASE}`, emptyOutDir: true },
+  build: {
+    outDir: `dist${BASE}`,
+    emptyOutDir: true,
+    // Hai trang: bài học ThingBot (index) và sân FANROC 3D (fanroc).
+    rollupOptions: { input: { main: resolve(__dirname, 'index.html'), fanroc: resolve(__dirname, 'fanroc.html') } },
+  },
   resolve: {
     alias: {
       '@scratch/scratch-blocks': pkg('scratch-blocks/src/index.ts'),

@@ -10,12 +10,16 @@
     "dev": "vite",
     "preview": "vite preview",
     "smoke": "node scripts/smoke-lessons.mjs && node scripts/smoke-lessons.mjs --starter",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:unit": "node --test \"src/fanroc/**/*.test.ts\""
   },
   "dependencies": {
+    "@dimforge/rapier3d-compat": "0.14.0",
+    "jszip": "3.10.1",
     "three": "0.180.0"
   },
   "devDependencies": {
+    "@types/node": "25.6.0",
     "@types/three": "0.180.0",
     "typescript": "5.9.3",
     "vite": "7.1.12"
