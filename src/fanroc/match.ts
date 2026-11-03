@@ -16,12 +16,16 @@ const EPS = 1e-9
 const REARM_S = 1
 /** P12: phần footprint chồng hình chiếu núi và độ cao thân so với sàn. */
 const CLIMB_OVERLAP = 0.3
+/** Gốc thân robot nằm ở sàn (setPose đặt y = 0.002, nghỉ ≈ 0), nên y > 0.03 tuyệt đối = cao hơn lúc nghỉ ~0.03. */
 const CLIMB_Y = 0.03
 /** Lưới điểm lấy mẫu footprint để ước lượng phần chồng lên núi. */
 const SAMPLES = 5
 /** P10: cờ coi như nằm trên sàn khi tâm thấp hơn chừng này. */
 const FLAG_FLOOR_Y = 0.05
-/** G15: khe thân < BLOCK_GAP, cả hai chậm hơn BLOCK_V, kéo dài hơn BLOCK_S. */
+/**
+ * G15 (ruling R19): chỉ giữa hai robot khác liên minh, khe thân < BLOCK_GAP, cả hai chậm hơn BLOCK_V, kéo dài hơn BLOCK_S;
+ * không tính khi một trong hai có góc trong Vùng Bảo Vệ / Khu Tiếp Tế của mình.
+ */
 const BLOCK_GAP = 0.02
 const BLOCK_V = 0.02
 const BLOCK_S = 5
@@ -53,6 +57,10 @@ class Episode {
 }
 
 const inRect = (r: Rect, p: Vec2) => p.x >= r.x0 && p.x <= r.x1 && p.z >= r.z0 && p.z <= r.z1
+
+/** Đang đỗ hoặc đang được nạp bóng: có góc footprint trong Vùng Bảo Vệ / Khu Tiếp Tế của liên minh mình. */
+const inOwnZone = (r: RobotBody, fp: Vec2[]) =>
+  fp.some((p) => inRect(ZONES.safe[r.alliance], p) || inRect(ZONES.load[r.alliance], p))
 
 /** Đỗ theo footprint ∩ Vùng Bảo Vệ của liên minh mình: mọi góc trong = full, ≥ 1 góc = partial. */
 function parkState(r: RobotBody): Park {
@@ -138,8 +146,12 @@ export class Match {
   private readonly flagRun: Episode[]
   /** G15 theo cặp robot (i < j): thời gian đứng sát nhau và đợt lỗi. */
   private readonly block = new Map<string, { time: number; ep: Episode }>()
+  /** Thời điểm gần nhất robot còn chạy (tốc độ ≥ BLOCK_V); −∞ nếu chưa chạy lần nào. */
+  private readonly lastMoving: number[]
 
+  /** `opts.seed` giữ theo giao diện của kế hoạch; nhiễu do thế giới (FanrocWorld.create(seed)) lo, Match không dùng. */
   constructor(world: FanrocWorld, robots: RobotBody[], teams: string[], opts: { practice?: boolean; seed: number }) {
+    if (teams.length !== robots.length) throw new Error(`Cần ${robots.length} tên đội (mỗi robot một đội), nhận ${teams.length}`)
     this.world = world
     this.robots = robots
     this.teams = teams
@@ -149,6 +161,7 @@ export class Match {
     this.climb = robots.map(() => new Episode())
     this.out = robots.map(() => new Episode())
     this.flagRun = robots.map(() => new Episode())
+    this.lastMoving = robots.map(() => -Infinity)
     robots.forEach((r, i) => {
       r.onFlag = (m) => {
         this.flags[m] = true
@@ -212,7 +225,7 @@ export class Match {
 
   /** Trạng thái sân để chấm: sau t = 180 là bản đã chốt, trước đó là bản tức thời (cho bảng điểm). */
   tally(): FieldTally {
-    if (this.final) return this.final.tally
+    if (this.final) return structuredClone(this.final.tally)
     const held = new Set<number>()
     for (const r of this.robots) {
       for (const i of r.stored) held.add(i)
@@ -224,7 +237,7 @@ export class Match {
   }
 
   result(): { score: ScoreBreakdown; teams: { team: string; score: number }[] } {
-    const score = this.final ? this.final.score : scoreTally(this.tally())
+    const score = this.final ? { ...this.final.score } : scoreTally(this.tally())
     return { score, teams: this.teams.map((team, i) => ({ team, score: teamScore(score.total, this.pens[i]) })) }
   }
 
@@ -255,24 +268,39 @@ export class Match {
       // S02 vươn ra ngoài rào.
       const outside = fp.some((p) => Math.abs(p.x) > FIELD / 2 + OUT_TOL || Math.abs(p.z) > FIELD / 2 + OUT_TOL)
       if (this.out[i].update(outside, dt)) this.foul(i, 'vươn ra ngoài rào (S02)', 'yellow')
-      // P10 cán cờ nằm trên sàn (cờ của bất kỳ robot nào).
-      const onFlag = this.robots.some((o) => {
+      // P10 cán cờ nằm trên sàn (cờ của robot khác; tới nhặt lại cờ của mình không phải cán cờ).
+      const onFlag = this.robots.some((o, k) => {
+        if (k === i) return false
         const f = o.flagBody?.translation()
         return f !== undefined && f.y < FLAG_FLOOR_Y && inPoly(fp, f)
       })
       if (this.flagRun[i].update(onFlag, dt)) this.foul(i, 'cán cờ trên sàn (P10)', 'warn')
     })
-    // G15 chặn robot khác quá 5 s: không phân biệt được ai chặn ai khi cả hai đứng yên, nên phạt cả hai.
+    // G15 chặn robot khác liên minh quá 5 s. Lỗi thuộc robot tới sau (còn chạy gần nhất trước khi cả hai đứng);
+    // cùng dừng một bước (không phân định được) ⇒ cảnh cáo cả hai, không thẻ.
+    this.robots.forEach((r, i) => {
+      if (speed(r) >= BLOCK_V) this.lastMoving[i] = this.t
+    })
     for (let i = 0; i < this.robots.length; i++) {
       for (let j = i + 1; j < this.robots.length; j++) {
+        const a = this.robots[i]
+        const b = this.robots[j]
+        if (a.alliance === b.alliance) continue
         const key = `${i}-${j}`
         let s = this.block.get(key)
         if (!s) this.block.set(key, (s = { time: 0, ep: new Episode() }))
-        const close = gap(fps[i], fps[j]) < BLOCK_GAP && speed(this.robots[i]) < BLOCK_V && speed(this.robots[j]) < BLOCK_V
+        const close = gap(fps[i], fps[j]) < BLOCK_GAP && speed(a) < BLOCK_V && speed(b) < BLOCK_V &&
+          !inOwnZone(a, fps[i]) && !inOwnZone(b, fps[j])
         s.time = close ? s.time + dt : 0
-        if (s.ep.update(s.time > BLOCK_S, dt)) {
-          this.foul(i, `chặn Robot ${j + 1} quá 5 giây (G15)`, 'yellow')
-          this.foul(j, `chặn Robot ${i + 1} quá 5 giây (G15)`, 'yellow')
+        if (!s.ep.update(s.time > BLOCK_S, dt)) continue
+        const li = this.lastMoving[i]
+        const lj = this.lastMoving[j]
+        if (li === lj) {
+          this.foul(i, `sát Robot ${j + 1} quá 5 giây (G15), không rõ robot nào chặn`, 'warn')
+          this.foul(j, `sát Robot ${i + 1} quá 5 giây (G15), không rõ robot nào chặn`, 'warn')
+        } else {
+          const [x, y] = li > lj ? [i, j] : [j, i]
+          this.foul(x, `chặn Robot ${y + 1} quá 5 giây (G15)`, 'yellow')
         }
       }
     }

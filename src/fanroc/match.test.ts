@@ -219,20 +219,69 @@ test('vươn ra ngoài rào S02 ⇒ thẻ vàng một lần mỗi đợt', async
   assert.deepEqual(m.result().teams.map((x) => x.score), [5, 25, 25, 25])
 })
 
-test('chặn robot khác > 5 s (G15) ⇒ thẻ vàng, chưa tới 5 s thì không', async () => {
+const g15 = (m: Match) => m.events.filter((e) => e.text.includes('G15'))
+
+test('G15: robot xanh lái tới sát robot đỏ rồi đứng > 5 s ⇒ thẻ vàng cho robot xanh (tới sau), chưa 5 s thì không', async () => {
   const { robots, m } = await setup()
   m.t = 0
-  // Giữa sân (z = 0, hành lang giữa hai cặp núi), xa các robot xanh.
-  robots[0].setPose({ x: -0.1, z: 0, yaw: 0 })
-  robots[1].setPose({ x: -0.1 + 0.24 + 0.01, z: 0, yaw: 0 }) // khe 0.01
+  // Giữa sân (z = 0, hành lang giữa hai cặp núi). Robot 3 (xanh) quay mũi về −x (yaw = π/2): bề ngang theo x là l/2 = 0.15.
+  robots[0].setPose({ x: -0.3, z: 0, yaw: 0 })
+  robots[2].setPose({ x: -0.3 + 0.12 + 0.15 + 0.12, z: 0, yaw: Math.PI / 2 })
+  const gapX = () => robots[2].pose.x - robots[0].pose.x - 0.27
+  for (let k = 0; k < 300 && gapX() > 0.012; k++) m.step(PHYSICS_DT, only(2, { M1: 40, M2: 40 }))
+  assert.ok(gapX() < 0.02 && gapX() > -0.005, `khe ${gapX()}`)
   run(m, all({}), 4.5)
-  assert.equal(m.pens[0].yellow + m.pens[1].yellow, 0)
-  run(m, all({}), 1)
-  assert.equal(m.pens[0].yellow, 1)
-  assert.equal(m.pens[1].yellow, 1)
+  assert.equal(g15(m).length, 0)
+  run(m, all({}), 1.5)
+  assert.equal(m.pens[2].yellow, 1)
+  assert.equal(m.pens[0].yellow, 0)
+  assert.deepEqual(g15(m).map((e) => e.robot), [2])
   run(m, all({}), 6)
-  assert.equal(m.pens[0].yellow, 1, 'cùng một đợt chỉ một thẻ')
-  assert.equal(m.pens[2].yellow + m.pens[3].yellow, 0)
+  assert.equal(m.pens[2].yellow, 1, 'cùng một đợt chỉ một thẻ')
+})
+
+test('G15: hai robot khác liên minh cùng đứng yên từ đầu (không phân định) ⇒ cảnh cáo cả hai, không thẻ', async () => {
+  const { robots, m } = await setup()
+  m.t = 0
+  robots[0].setPose({ x: -0.1, z: 0, yaw: 0 })
+  robots[2].setPose({ x: -0.1 + 0.24 + 0.01, z: 0, yaw: 0 }) // khe 0.01
+  run(m, all({}), 5.5)
+  assert.deepEqual(g15(m).map((e) => e.robot), [0, 2])
+  assert.ok(g15(m).every((e) => e.text.includes('cảnh cáo')))
+  assert.deepEqual(m.pens.map((p) => p.yellow), [0, 0, 0, 0])
+})
+
+test('G15 không áp cho đồng đội cùng liên minh, kể cả hai robot đỗ toàn phần trong End Game (ví dụ 2 vẫn 299)', async () => {
+  const { robots, m } = await setup([UI, UI, MAKER, MAKER])
+  // Đồng đội đứng sát nhau giữa sân.
+  m.t = 0
+  robots[0].setPose({ x: -0.1, z: 0, yaw: 0 })
+  robots[1].setPose({ x: -0.1 + 0.18 + 0.01, z: 0, yaw: 0 })
+  run(m, all({}), 6)
+  assert.equal(g15(m).length, 0)
+  // Hai Xe Ủi đỏ đỗ toàn phần cạnh nhau (khe 0.005) trong End Game > 5 s.
+  const s = ZONES.safe.red
+  const c = mid(s)
+  robots[0].setPose({ x: s.x0 + 0.095, z: c.z, yaw: 0 })
+  robots[1].setPose({ x: s.x1 - 0.095, z: c.z, yaw: 0 })
+  m.t = 155
+  run(m, all({}), 6)
+  assert.deepEqual(m.tally().parks.red, ['full', 'full'])
+  assert.equal(g15(m).length, 0)
+  assert.deepEqual(m.pens.map((p) => p.yellow), [0, 0, 0, 0])
+})
+
+test('G15 không tính khi một robot có góc trong Vùng Bảo Vệ / Khu Tiếp Tế của mình', async () => {
+  for (const zone of [ZONES.safe.red, ZONES.load.red]) {
+    const { robots, m } = await setup()
+    m.t = 0
+    // Robot đỏ chìa nửa thân ra khỏi mép phải ô của mình, robot xanh đứng sát bên phải nó (ngoài mọi ô xanh).
+    const z = zone === ZONES.load.red ? zone.z0 + 0.2 : mid(zone).z
+    robots[0].setPose({ x: zone.x1 + 0.05, z, yaw: 0 })
+    robots[2].setPose({ x: zone.x1 + 0.05 + 0.24 + 0.01, z, yaw: 0 })
+    run(m, all({}), 6)
+    assert.equal(g15(m).length, 0, `ô x1 = ${zone.x1}`)
+  }
 })
 
 test('luyện tập: không hết giờ, không phạt (sự kiện ghi "luyện tập")', async () => {
@@ -272,4 +321,35 @@ test('cán cờ nằm trên sàn (P10) ⇒ cảnh cáo, không phạt điểm', 
   assert.equal(ev[0].robot, 1)
   assert.match(ev[0].text, /cảnh cáo/)
   assert.deepEqual(m.pens[1], { minor: 0, yellow: 0, red: false })
+})
+
+test('P10 không tính robot tới chỗ cờ của chính mình', async () => {
+  const { robots, m } = await setup()
+  m.t = 0
+  robots[0].setPose({ x: 0, z: 0, yaw: 0 })
+  run(m, only(0, { S2: 0 }), 1)
+  const f = robots[0].flagBody!.translation()
+  robots[0].setPose({ x: f.x, z: f.z, yaw: Math.PI / 2 })
+  run(m, all({}), 0.1)
+  assert.equal(m.events.filter((e) => e.text.includes('P10')).length, 0)
+})
+
+test('sau hết giờ tally()/result() trả bản sao: sửa kết quả trả về không đổi điểm đã chốt', async () => {
+  const { m } = await setup()
+  m.t = 179.9
+  run(m, all({}), 0.2)
+  assert.equal(m.phase, 'end')
+  const t = m.tally()
+  t.fire.o = 50
+  t.flags[0] = true
+  m.result().score.total = 999
+  assert.equal(m.tally().fire.o, 0)
+  assert.equal(m.tally().flags[0], false)
+  assert.equal(m.result().score.total, 0)
+})
+
+test('số tên đội phải bằng số robot', async () => {
+  const w = await FanrocWorld.create(1)
+  const robots = [new RobotBody(w, MAKER, 'red', 0), new RobotBody(w, MAKER, 'red', 1)]
+  assert.throws(() => new Match(w, robots, ['Đội 1'], { seed: 1 }), /tên đội/)
 })
