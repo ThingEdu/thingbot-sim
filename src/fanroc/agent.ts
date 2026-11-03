@@ -69,6 +69,8 @@ const CMD_SLOW = 45
 const CMD_TURN = 40
 /** Lệnh nhỏ nhất để bánh còn quay (vùng chết 20 %). */
 const CMD_MIN = DEAD_ZONE + 5
+/** Lệnh bánh nhỏ hơn chừng này coi như muốn dừng bánh đó. */
+const WHEEL_OFF = 10
 /** Bộ điều khiển P theo sai số hướng (lệnh / rad). */
 const K_TURN = 60
 /** Sai số hướng lớn hơn chừng này thì quay tại chỗ. */
@@ -120,6 +122,7 @@ const MOUTH_HALF_W = 0.115
 const PARK_LOOK_S = 60
 const PARK_PRE = 0.35
 const PARK_DOCK_S = 6
+const PARK_GO_MAX_S = 20
 
 // ---------- PRNG ----------
 function mulberry32(seed: number): () => number {
@@ -131,6 +134,16 @@ function mulberry32(seed: number): () => number {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296
   }
+}
+
+/**
+ * Lệnh một bánh sau khi trộn tiến + quay: không bao giờ rơi vào vùng chết của động cơ TT (bánh đứng, xe xoay quanh
+ * bánh đó). |v| < WHEEL_OFF ⇒ 0 (dừng hẳn), còn lại |v| ≥ CMD_MIN; kẹp ±100.
+ */
+export function wheelCmd(v: number): number {
+  const a = Math.abs(v)
+  if (a < WHEEL_OFF) return 0
+  return Math.sign(v) * Math.min(100, Math.max(CMD_MIN, a))
 }
 
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a))
@@ -430,13 +443,14 @@ export class Agent {
     const left = MATCH_S - m.t
     for (const [i, until] of this.avoid) if (until < this.time) this.avoid.delete(i)
     if (this.task?.kind === 'park' && this.task.phase === 'done') return this.toPorts()
+    this.refreshParkEta(view, left)
     this.watchStuck(dt)
     if (this.recover > 0) {
       this.recover -= dt
       this.cmd.fwd = -CMD_SLOW
       this.cmd.turn = 18 * this.recoverTurn
     } else {
-      if (this.task && this.task.kind !== 'park' && this.shouldPark(view, left)) this.setTask(this.parkTask(view))
+      if (this.task && this.task.kind !== 'park' && this.shouldPark(left)) this.setTask(this.parkTask(view))
       if (!this.task) this.setTask(this.decide(view, left))
       if (this.task?.kind !== 'load' && !this.loadAllowed(left, this.robot.pose) && this.touchesLoad()) {
         // Hết giờ nhận bóng mà thân còn chạm Khu Tiếp Tế (đi lạc vào khi gom / né) ⇒ ra khỏi khu trước đã.
@@ -462,7 +476,7 @@ export class Agent {
   private decide(view: AgentView, left: number): Task | null {
     const r = this.robot
     const playT = MATCH_S - left
-    if (this.shouldPark(view, left)) return this.parkTask(view)
+    if (this.shouldPark(left)) return this.parkTask(view)
     // 1. Cắm cờ trước.
     if (r.hasFlag && r.def.flag && playT >= this.S.flagAfter && (this.S.flagAfter === 0 || r.stored.length === 0)) {
       const t = this.flagTask(view)
@@ -513,8 +527,14 @@ export class Agent {
     return DEAD_ZONE + (CMD_CRUISE - DEAD_ZONE) * this.S.speed
   }
 
-  private shouldPark(view: AgentView, left: number): boolean {
-    if (this.forgetPark || left > PARK_LOOK_S) return false
+  /** Về đỗ chưa: thời gian còn ≤ ETA về đỗ (tính ở refreshParkEta) + phần dư theo mức. */
+  private shouldPark(left: number): boolean {
+    return !this.forgetPark && left <= PARK_LOOK_S && left <= this.parkEta + this.S.parkMargin
+  }
+
+  /** Tính lại ETA về đỗ mỗi giây khi trận còn ≤ PARK_LOOK_S; gọi đúng một lần mỗi update. */
+  private refreshParkEta(view: AgentView, left: number): void {
+    if (this.forgetPark || left > PARK_LOOK_S) return
     this.parkEtaIn -= this.dt
     if (this.parkEtaIn <= 0) {
       // Thời gian về đỗ theo đường A* thật tới điểm vào xa hơn trong hai chỗ đỗ, cộng phần quay và vào chỗ.
@@ -528,7 +548,6 @@ export class Agent {
         return (res ? res.len : dist(r.pose, pre) * 2) / v + PARK_DOCK_S
       }))
     }
-    return left <= this.parkEta + this.S.parkMargin
   }
 
   private parkTask(view: AgentView): Task {
@@ -590,6 +609,9 @@ export class Agent {
       const t = this.mountainTask(view, anyColor)
       if (t) return t
     }
+    // Bóng xanh mà không lên núi được (không mặt núi nào tới được / robot không đổ lên núi): giữ bóng, chờ rồi
+    // quyết định lại — không đem bóng xanh tới Khu Chữa Cháy (sai vị trí) và không đổi nhiệm vụ mỗi bước.
+    if (out === 'g' && !anyColor) return { kind: 'idle', t: 0 }
     return this.fireTask(view, anyColor)
   }
 
@@ -946,6 +968,8 @@ export class Agent {
         t.phase = 'dock'
         t.t = 0
       }
+      // Kẹt đường quá lâu (đồng đội / robot khác chắn) ⇒ lập lại nhiệm vụ từ chỗ đang đứng.
+      if (t.t > PARK_GO_MAX_S) this.setTask(null)
       return
     }
     if (t.phase === 'dock') {
@@ -1073,8 +1097,8 @@ export class Agent {
       fwd = 0
       turn = 0
     }
-    const L = Math.max(-100, Math.min(100, fwd - turn))
-    const R = Math.max(-100, Math.min(100, fwd + turn))
+    const L = wheelCmd(fwd - turn)
+    const R = wheelCmd(fwd + turn)
     const w = this.ports.wheels
     if (this.cfg.drive === 'diff2') {
       out[w.L!] = L

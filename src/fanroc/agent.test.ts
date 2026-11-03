@@ -4,13 +4,16 @@ import { FanrocWorld, PHYSICS_DT } from './world.ts'
 import { RobotBody } from './robot.ts'
 import { Match } from './match.ts'
 import { HumanPlayer } from './human.ts'
-import { Agent, type Skill } from './agent.ts'
+import { Agent, wheelCmd, type Skill } from './agent.ts'
+import { NEUTRAL, type PortValues } from './ports.ts'
 import type { RobotConfig } from './robots.ts'
 
+/** Cổng bánh của Mẫu Maker diff2 (M1 trái, M2 phải). */
+const WHEELS = ['M1', 'M2'] as const
 const MAKER: RobotConfig = { type: 'maker', drive: 'diff2', actuator: 'tt' }
 const TEAMS = ['Đội 1', 'Đội 2', 'Đội 3', 'Đội 4']
 
-type Played = { score: number; flags: number; loads: { t: number; text: string }[] }
+type Played = { score: number; flags: number; loads: { t: number; text: string }[]; deadZone: number }
 
 /**
  * Một trận headless: 4 Mẫu Maker diff2 cùng mức agent, Human Player tự động hai bên (sự kiện ghi vào trận),
@@ -23,9 +26,11 @@ async function play(skill: Skill, seed: number): Promise<Played> {
   const humans = (['red', 'blue'] as const).map((a) => new HumanPlayer(a))
   humans.forEach((h) => (h.onEvent = (s) => m.log(s)))
   const agents = robots.map((r, i) => new Agent(r, MAKER, skill, seed * 10 + i))
+  let deadZone = 0
   while (m.phase !== 'end') {
     const view = { world: w, robots, match: m, humans }
     const ports = agents.map((a) => a.update(view, PHYSICS_DT))
+    for (const p of ports) for (const k of WHEELS) if (p[k] !== 0 && Math.abs(p[k]) < 20) deadZone++
     for (const h of humans) h.auto({ world: w, robots, phase: m.phase, endgame: m.endgame }, PHYSICS_DT)
     m.step(PHYSICS_DT, ports)
   }
@@ -33,6 +38,7 @@ async function play(skill: Skill, seed: number): Promise<Played> {
     score: m.result().score.total,
     flags: m.flags.filter(Boolean).length,
     loads: m.events.filter((e) => e.text.includes('nhận bóng')).map((e) => ({ t: e.t, text: e.text })),
+    deadZone,
   }
 }
 
@@ -54,8 +60,46 @@ test('điểm trận trung bình (3 trận, 4 Mẫu Maker diff2): Khó > Vừa >
   for (const s of LEVELS) res[s] = await level(s)
   const a = Object.fromEntries(LEVELS.map((s) => [s, avg(res[s]!)])) as Record<Skill, number>
   for (const s of LEVELS) console.log(`${NAME[s]}: ${res[s]!.map((x) => x.score).join(' / ')} — trung bình ${a[s].toFixed(1)}`)
+  for (const s of LEVELS) for (const x of res[s]!) assert.equal(x.deadZone, 0, `${NAME[s]}: lệnh bánh trong vùng chết (0, 20)`)
   assert.ok(a.hard > a.medium, `Khó ${a.hard} ≤ Vừa ${a.medium}`)
   assert.ok(a.medium > a.easy, `Vừa ${a.medium} ≤ Dễ ${a.easy}`)
+})
+
+test('wheelCmd: lệnh bánh không rơi vào vùng chết 20 % (|v| < 10 ⇒ 0, còn lại ≥ 25), kẹp ±100', () => {
+  for (let v = -150; v <= 150; v += 0.5) {
+    const w = wheelCmd(v)
+    assert.ok(w === 0 || (Math.abs(w) >= 25 && Math.abs(w) <= 100), `wheelCmd(${v}) = ${w}`)
+    if (w !== 0) assert.equal(Math.sign(w), Math.sign(v))
+  }
+  assert.equal(wheelCmd(5), 0)
+  assert.equal(wheelCmd(-18), -25)
+  assert.equal(wheelCmd(60), 60)
+})
+
+test('Xe Ủi chở bóng xanh đứng trong Khu Chữa Cháy: giữ bóng, không đổi nhiệm vụ mỗi bước', async () => {
+  const w = await FanrocWorld.create(1)
+  const ui: RobotConfig = { type: 'ui', drive: 'diff2', actuator: 'tt' }
+  const robots = [ui, MAKER, MAKER, MAKER].map((c, i) => new RobotBody(w, c, i < 2 ? 'red' : 'blue', (i % 2) as 0 | 1))
+  const m = new Match(w, robots, TEAMS, { seed: 1 })
+  m.t = 0
+  const idle: PortValues[] = robots.map(() => ({ ...NEUTRAL }))
+  m.step(PHYSICS_DT, idle) // sang pha thi đấu
+  const r = robots[0]
+  r.setPose({ x: -0.9, z: -0.9, yaw: Math.PI / 4 })
+  w.placeBall(150, { x: 0, y: 0.02, z: 0 })
+  assert.ok(r.take(150))
+  const agent = new Agent(r, ui, 'hard', 1)
+  const view = { world: w, robots, match: m, humans: [] }
+  let switches = 0
+  let last = agent.doing
+  for (let k = 0; k < 180; k++) {
+    const p = agent.update(view, PHYSICS_DT)
+    m.step(PHYSICS_DT, [p, ...idle.slice(1)])
+    if (agent.doing !== last) switches++
+    last = agent.doing
+  }
+  assert.equal(w.balls[150].st, 'held', 'bóng xanh không được thả vào Khu Chữa Cháy')
+  assert.ok(switches <= 6, `${switches} lần đổi nhiệm vụ trong 3 s`)
 })
 
 test('mức Khó cắm ≥ 2 cờ mỗi trận', async () => {
