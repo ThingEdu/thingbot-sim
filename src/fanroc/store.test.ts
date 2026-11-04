@@ -35,7 +35,7 @@ test('KV ném lỗi: mọi hàm trả mặc định, không ném', () => {
 
 test('mặc định cài đặt: không có camera, robot maker 2 bánh', () => {
   const st = createStore('s', fake()).settings()
-  assert.deepEqual(st, { quality: undefined, sound: true, skill: 'medium', alliance: 'red', robot: maker, robot2: maker, layout2p: false })
+  assert.deepEqual(st, { quality: undefined, sound: true, skill: 'medium', alliance: 'red', robot: maker, robot2: maker, layout2p: false, teacher: false })
   assert.ok(!('camera' in st))
 })
 

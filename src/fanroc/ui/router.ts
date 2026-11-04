@@ -39,29 +39,31 @@ export interface ScreenChrome {
   scoreboard: boolean
   /** Sân chạy vật lý và vẽ mỗi khung (màn chính: robot máy chơi nền); false = sân nền đứng yên, vẽ thưa. */
   live: boolean
+  /** Vỏ đủ kiểu VS Code (khối, Serial, thanh trạng thái); false = màn chơi gọn (bật Chế độ giáo viên ở ⚙ để hiện). */
+  dev: boolean
 }
 
 /** Màn nào hiện phần nào của vỏ. */
 export function chrome(s: Screen): ScreenChrome {
   switch (s) {
     case 'home':
-      return { activity: [], runbar: false, scoreboard: false, live: true }
+      return { activity: [], runbar: false, scoreboard: false, live: true, dev: false }
     case 'rules':
     case 'robots':
       // Sân nền tạm dừng: em đọc chữ / xoay robot mẫu (Robot mẫu có ngữ cảnh WebGL riêng), không cần vật lý phía sau.
-      return { activity: [], runbar: false, scoreboard: false, live: false }
+      return { activity: [], runbar: false, scoreboard: false, live: false, dev: false }
     case 'match':
     case 'practice':
     case 'tmatch':
-      return { activity: ['blocks', 'code', 'serial'], runbar: true, scoreboard: true, live: true }
+      return { activity: ['blocks', 'code', 'serial'], runbar: true, scoreboard: true, live: true, dev: false }
     case 'treplay':
-      return { activity: [], runbar: false, scoreboard: true, live: true }
+      return { activity: [], runbar: false, scoreboard: true, live: true, dev: false }
     case 'workshop':
-      return { activity: ['blocks', 'code', 'serial'], runbar: true, scoreboard: false, live: true }
+      return { activity: ['blocks', 'code', 'serial'], runbar: true, scoreboard: false, live: true, dev: true }
     case 'mission':
-      return { activity: ['blocks', 'code', 'serial', 'missions'], runbar: true, scoreboard: false, live: true }
+      return { activity: ['blocks', 'code', 'serial', 'missions'], runbar: true, scoreboard: false, live: true, dev: true }
     case 'missions':
     case 'tournament':
-      return { activity: [], runbar: false, scoreboard: false, live: true }
+      return { activity: [], runbar: false, scoreboard: false, live: true, dev: false }
   }
 }

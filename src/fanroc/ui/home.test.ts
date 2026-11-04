@@ -74,16 +74,21 @@ test('router: camera mặc định theo màn (trận / đấu tập / Xưởng T
 
 test('router: trận giải đấu như trận lẻ (khối, thanh chạy, bảng điểm); Xem nhanh chỉ bảng điểm, không thanh chạy', () => {
   assert.deepEqual(chrome('tmatch'), chrome('match'))
-  assert.deepEqual(chrome('treplay'), { activity: [], runbar: false, scoreboard: true, live: true })
+  assert.deepEqual(chrome('treplay'), { activity: [], runbar: false, scoreboard: true, live: true, dev: false })
 })
 
 test('router: màn chính không có cột biểu tượng / thanh chạy / bảng điểm; trận có; Xưởng không bảng điểm', () => {
-  assert.deepEqual(chrome('home'), { activity: [], runbar: false, scoreboard: false, live: true })
+  assert.deepEqual(chrome('home'), { activity: [], runbar: false, scoreboard: false, live: true, dev: false })
   assert.equal(chrome('match').scoreboard, true)
   assert.equal(chrome('practice').runbar, true)
   assert.equal(chrome('workshop').scoreboard, false)
   assert.ok(chrome('workshop').activity.includes('blocks'))
   assert.equal(chrome('mission').scoreboard, false)
+  // Màn chơi gọn (ẩn khối / Serial / thanh trạng thái); chỉ Xưởng và màn nhiệm vụ cần đủ vỏ lập trình.
+  assert.equal(chrome('match').dev, false)
+  assert.equal(chrome('tmatch').dev, false)
+  assert.equal(chrome('workshop').dev, true)
+  assert.equal(chrome('mission').dev, true)
   // Luật chơi, Robot mẫu: phủ sân như màn chính, không cột biểu tượng / thanh chạy / bảng điểm; sân nền tạm dừng
   // (đọc chữ / xoay robot mẫu, không tốn máy cho vật lý + vẽ sân phía sau).
   assert.deepEqual(chrome('rules'), { ...chrome('home'), live: false })

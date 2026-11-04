@@ -1,4 +1,4 @@
-# FANROC Thanh Hỏa / ThingBot FanRoc Game — các điều đã tự quyết khi thi công (R1–R133)
+# FANROC Thanh Hỏa / ThingBot FanRoc Game — các điều đã tự quyết khi thi công (R1–R134)
 
 Đợt 1 (R1–R34) thi công ngày 03/11/2026 theo kế hoạch `docs/superpowers/plans/2026-11-03-fanroc-sim.md`
 và đặc tả `docs/superpowers/specs/2026-11-03-fanroc-sim-design.md`; đợt 2 — giao diện game "ThingBot FanRoc Game"
@@ -241,6 +241,7 @@ Mục nên xem trước: **R37, R57/R59, R96, R56, R83, R94, R103, R106, R115/R1
 | R131 | Xoá mã thừa: màn chờ `createPlaceholder` (màn thật đã có) và biểu tượng Giải đấu trên cột biểu tượng (`onTrophy`, không màn nào hiện) | Muốn biểu tượng Giải đấu thì thêm lại ở `router.ts` + `shell.ts` |
 | R132 | Số bạn của giải chỉ áp khi đang ở màn của giải (Pit / ghi danh, trận giải, Xem nhanh, Xưởng mở từ Pit), không ghi vào ⚙ › Hai bạn chơi; rời màn giải thì bàn phím về đúng cài đặt của em. Khoá R85/R89 trong giải giữ nguyên | — |
 | R133 | Trận máy chạy ngầm lỗi ⇒ dòng báo ở Pit kèm nút "Thử lại" (xoá lỗi, chạy lại hàng trận máy); lỗi còn hiện khi rời Pit rồi quay lại, tới khi Thử lại hoặc Giải mới | Lỗi lặp lại thì em bấm Thử lại mãi — chưa có lối báo "sân hỏng" |
+| R134 | Màn chơi gọn (anh duyệt 04/11): màn chính, trận, giải, nhiệm vụ (danh sách), Luật chơi, Robot mẫu ẩn cột biểu tượng, khung Serial, thanh trạng thái; 🏠 ⚙ nổi góc phải trên (nằm trên màn phủ ⇒ hết lỗi ⚙ bị che). Xưởng và màn làm nhiệm vụ giữ đủ vỏ lập trình. ⚙ › Chế độ giáo viên (lưu trong cài đặt) bật lại đủ vỏ ở màn có khối (trận, trận giải). Thanh chạy và thẻ robot nhỏ vẫn giữ trong trận (cần để Chạy / Tạm dừng / đổi camera). Chữ trên ô màn chính rút còn một dòng ngắn; link AGPL ở ⚙ | Học sinh muốn xem Serial giữa trận phải bật Chế độ giáo viên |
 
 ### Việc còn chờ anh
 
@@ -254,4 +255,3 @@ Mục nên xem trước: **R37, R57/R59, R96, R56, R83, R94, R103, R106, R115/R1
 - Lỗi chung ở `src/blocks.ts` (`setToolbox` dùng lại khối cũ của khay khối khi đổi hộp công cụ) ảnh hưởng bài học robot.edu.vn — game đã tự tránh trong `editor.ts`, tệp chung chưa sửa.
 - Mã Arduino của khối của em có ô số chưa đúng trên ThingBot thật (R37) — cần sửa ở ThingBlock gốc.
 - Push nhánh `feat/fanroc` trước khi phát hành công khai, để đường dẫn mã nguồn AGPL trong game trỏ tới đúng mã đang chạy.
-- ⚙ ở Luật chơi / Robot mẫu bị màn phủ che, không bấm chuột được (phép thử N11c phải bấm nút ⚙ bằng DOM) — xem có cần nút ⚙ trên hai màn đó không (R128).

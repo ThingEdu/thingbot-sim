@@ -58,7 +58,14 @@ export interface Shell {
   onSettings(cb: () => void): void
   /** Biểu tượng Màn chính chỉ hiện khi có người nghe. */
   onHome(cb: () => void): void
+  /**
+   * 'game': màn chơi gọn — ẩn cột biểu tượng, khung bên, khung đáy, thanh trạng thái; 🏠 ⚙ nổi góc phải trên khi
+   * `corner` (màn chính tự có ⚙ riêng). 'dev': đủ vỏ kiểu VS Code (Xưởng, nhiệm vụ, chế độ giáo viên).
+   */
+  chromeMode(mode: ChromeMode, corner: boolean): void
 }
+
+export type ChromeMode = 'game' | 'dev'
 
 // ---------- Kích thước (brief Task 11) ----------
 export const ACT_W = 48
@@ -253,6 +260,14 @@ const CSS = `
 .sh-run .sep { width: 1px; align-self: stretch; background: #555; margin: 4px 2px; }
 .sh-code-view { flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 8px 10px; background: #1e1e1e; color: #d4d4d4; font: 12px/1.6 var(--mono); white-space: pre; tab-size: 2; }
 .sh-code-view .k { color: #569cd6; } .sh-code-view .n { color: #b5cea8; } .sh-code-view .c { color: #6a9955; } .sh-code-view .s { color: #ce9178; }
+.sh[data-chrome="game"] { grid-template-columns: 0 0 minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 0; }
+.sh[data-chrome="game"] .sh-act, .sh[data-chrome="game"] .sh-side, .sh[data-chrome="game"] .sh-panel, .sh[data-chrome="game"] .sh-status { display: none; }
+html[data-chrome="game"] { --sh-status: 0px; }
+.sh-corner { position: fixed; top: 12px; right: 12px; z-index: 50; display: flex; gap: 8px; }
+.sh-corner[hidden] { display: none; }
+.sh-corner button { width: 40px; height: 40px; border-radius: 50%; border: 1px solid #fff3; background: #0009; color: #eef2fa; display: grid; place-items: center; cursor: pointer; padding: 0; }
+.sh-corner button:hover, .sh-corner button:focus-visible { background: #fff3; }
+.sh-corner button[hidden] { display: none; }
 @media (max-width: 900px) {
   .sh-side { grid-row: auto; grid-column: auto; position: absolute; left: ${ACT_W}px; top: 0; bottom: ${STATUS_H}px; max-width: calc(100vw - ${ACT_W}px); box-shadow: 6px 0 18px #0009; }
   .sh-status .sh-opt { display: none; }
@@ -405,7 +420,20 @@ export function createShell(root: HTMLElement, opts: { thingblockUrl?: string } 
   }
   stage.append(runEl)
 
+  // 🏠 ⚙ nổi góc phải trên (chế độ game: cột biểu tượng ẩn). Gắn thẳng vào body (.sh cố định là một lớp xếp chồng
+  // riêng, nằm dưới các màn phủ z 40) với z 50 nên luôn bấm được.
+  const corner = el('div', 'sh-corner')
+  corner.hidden = true
+  const cHome = iconButton('home', 'Màn chính')
+  cHome.hidden = true
+  const cGear = iconButton('settings', 'Cài đặt')
+  cGear.dataset.view = 'settings'
+  corner.append(cHome, cGear)
+
   shell.append(act, sideEl, center, statusEl)
+  document.querySelector('.sh-corner')?.remove()
+  document.body.append(corner)
+  shell.dataset.chrome = 'dev'
 
   // ---------- Trạng thái ----------
   let view: SideView | null = null
@@ -502,6 +530,12 @@ export function createShell(root: HTMLElement, opts: { thingblockUrl?: string } 
     onHome(cb) {
       homeCb = cb
       homeBtn.hidden = false
+      cHome.hidden = false
+    },
+    chromeMode(mode, show) {
+      shell.dataset.chrome = mode
+      document.documentElement.dataset.chrome = mode
+      corner.hidden = mode !== 'game' || !show
     },
   }
 
@@ -514,6 +548,8 @@ export function createShell(root: HTMLElement, opts: { thingblockUrl?: string } 
     settingsCb?.()
   }
   homeBtn.onclick = () => homeCb?.()
+  cGear.onclick = gearBtn.onclick
+  cHome.onclick = () => homeCb?.()
   for (const t of Object.keys(tabBtn) as PanelTab[]) tabBtn[t].onclick = () => api.setPanel(!(panelOpen && panelTab === t), t)
   fold.onclick = () => api.setPanel(!panelOpen)
 

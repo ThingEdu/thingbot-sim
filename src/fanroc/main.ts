@@ -904,6 +904,13 @@ async function start(): Promise<void> {
       else if (screen === 'workshop') void go('workshop', { player: v ? wsPlayer : 0 }).then(reopen)
       else (showTabs(), reopen())
     },
+    teacher: settings.teacher,
+    setTeacher: (v) => {
+      settings.teacher = v
+      saveSettings()
+      applyChrome(screen)
+      reopen()
+    },
     names,
     cfg: cfgOf,
     match: isMatch()
@@ -942,6 +949,12 @@ async function start(): Promise<void> {
   shell.onSettings(() => popover.toggle(settingsCtx()))
 
   // ---------- Đổi màn ----------
+  /** Màn chơi gọn; Xưởng / nhiệm vụ, hoặc Chế độ giáo viên ở màn có khối, thì đủ vỏ lập trình. */
+  const applyChrome = (s: Screen) => {
+    const c = chrome(s)
+    const dev = c.dev || (settings.teacher && c.activity.length > 0)
+    shell.chromeMode(dev ? 'dev' : 'game', s !== 'home')
+  }
   /** Phần giao diện của màn (không dựng lại phiên). */
   const enter = (next: Screen, arg?: GoArg) => {
     captureDraft() // rời Xưởng (kể cả đổi bạn): giữ bản đang sửa
@@ -967,6 +980,7 @@ async function start(): Promise<void> {
       if (players() !== before) makePads()
     }
     const c = chrome(next)
+    applyChrome(next)
     shell.activity(c.activity)
     shell.runbarVisible(c.runbar)
     board.visible(c.scoreboard)

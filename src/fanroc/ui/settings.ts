@@ -100,6 +100,9 @@ export interface SettingsCtx {
   setSound(v: boolean): void
   layout2p: boolean
   setLayout2p(v: boolean): void
+  /** Chế độ giáo viên: màn chơi cũng hiện đủ vỏ lập trình (khối, Serial, số đo cổng). */
+  teacher: boolean
+  setTeacher(v: boolean): void
   /** Có chữ ⇒ không đổi được số bạn (giải đấu: số bạn chốt lúc ghi danh), nút mờ, hiện chữ này. */
   layoutLocked?: string
   names: [string, string]
@@ -136,6 +139,7 @@ export interface SettingsPopover {
 }
 
 const CSS = `
+html[data-chrome="game"] .st-pop { left: auto; right: 12px; top: 62px; bottom: auto; max-height: calc(100vh - 74px); }
 .st-pop { position: fixed; left: 56px; bottom: 32px; z-index: 60; display: grid; gap: 10px; width: min(660px, calc(100vw - 64px)); max-height: calc(100vh - 48px); overflow: auto; box-sizing: border-box; padding: 14px; background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 30px #0008; font: 13px var(--font); }
 .st-pop[hidden] { display: none; }
 .st-pop h3 { margin: 0; font-size: 15px; }
@@ -279,6 +283,9 @@ export function createSettings(): SettingsPopover {
       adv.append(seats)
       parts.push(adv)
     }
+    const teach = row('Chế độ giáo viên', ...group([[false, 'Tắt'], [true, 'Bật']], c.teacher, c.setTeacher), el('span', 'st-note', 'hiện khối, Serial, số đo cổng ở mọi màn'))
+    teach.dataset.role = 'teacher'
+    parts.push(teach)
     // Địa chỉ mã nguồn dạng chữ chọn / chép được (app desktop không mở được link thì vẫn còn chỗ này).
     const src = el('span', 'st-url', SOURCE_URL)
     src.dataset.role = 'source'

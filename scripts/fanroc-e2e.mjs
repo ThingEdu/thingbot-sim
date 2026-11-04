@@ -129,17 +129,28 @@ const setPad = (page, i, axes) => page.evaluate(([i, axes]) => (window.__pads[i]
 const pose = (page, i = 0) => page.evaluate((i) => window.__fanroc.pose(i), i)
 const dist = (a, b) => Math.hypot(b.x - a.x, b.z - a.z)
 const deg = (rad) => (rad * 180) / Math.PI
+const closeSettings = (page) => page.keyboard.press('Escape')
+const GEAR = '.sh-corner:not([hidden]) button[data-view="settings"], .sh[data-chrome="dev"] .sh-act button[data-view="settings"]'
+const HOME = '.sh-corner:not([hidden]) button[aria-label="Màn chính"], .sh[data-chrome="dev"] .sh-act button[aria-label="Màn chính"]'
 /** Mở khung ⚙ nếu đang đóng (màn chính: nút ⚙ góc trên; màn khác: cột biểu tượng). */
 async function settings(page) {
   if (await page.locator('.st-pop').isVisible()) return
   const home = page.locator('.hm[data-screen="home"]:not([hidden]) .hm-gear')
   if (await home.isVisible()) await home.click()
-  else await page.locator('.sh-act button[data-view="settings"]').click()
+  else await page.locator(GEAR).click()
   await page.locator('.st-pop').waitFor()
 }
-const closeSettings = (page) => page.keyboard.press('Escape')
+/** Màn chơi gọn (ẩn cột biểu tượng / Serial / thanh trạng thái): bật Chế độ giáo viên ở ⚙ để có đủ vỏ lập trình. */
+async function devChrome(page) {
+  if (await page.locator('.sh[data-chrome="dev"]').count()) return
+  await settings(page)
+  await page.locator('.st-pop [data-role="teacher"] button', { hasText: 'Bật' }).click()
+  await closeSettings(page)
+  await page.locator('.sh[data-chrome="dev"]').waitFor()
+}
 /** Mở khung bên "Khối" nếu đang đóng. */
 async function blocksSide(page) {
+  await devChrome(page)
   if (await page.locator('[data-side="blocks"]').isHidden()) await page.locator('.sh-act button[data-view="blocks"]').click()
 }
 /** Ô chọn người lái ghế i (⚙ › Nâng cao): player-0 / player-1 / agent-* / copy-0 / copy-1. */
@@ -435,6 +446,7 @@ async function main() {
     await go(page, 'match')
     await page.waitForTimeout(800)
     const blocksH = () => page.locator('[data-side="blocks"]').evaluate((e) => e.getBoundingClientRect().height)
+    await devChrome(page)
     const menu = page.locator('.sh-act button[data-view="blocks"]')
     expect(await noScrollX(), 'trang cuộn ngang')
     const expanded = () => menu.getAttribute('aria-expanded')
@@ -820,7 +832,7 @@ async function gameTests() {
     await page.waitForTimeout(100)
     expect(await pop.isHidden(), 'Esc không đóng ⚙')
     await go(page, 'match')
-    await page.locator('.sh-act button[data-view="settings"]').click()
+    await page.locator(GEAR).click()
     await pop.waitFor()
     const text = await pop.innerText()
     for (const k of ['Chế độ', 'Robot của em', 'Liên minh của em', 'Mức máy', 'Robot của em chạy', 'Tốc độ', 'Camera', 'Đồ hoạ', 'Âm thanh', 'Nâng cao']) {
@@ -838,10 +850,10 @@ async function gameTests() {
     const seat0 = await pop.locator('select[data-seat="0"]').inputValue()
     const advOpen = await pop.locator('details[data-role="advanced"]').evaluate((d) => d.open)
     expect(seat0 === 'agent-medium' && advOpen, `sau khi đổi ghế 3: ghế 1 "${seat0}", Nâng cao mở ${advOpen}`)
-    await page.mouse.click(1250, 420) // ra ngoài khung (trên sân)
+    await page.mouse.click(300, 420) // ra ngoài khung (trên sân; ⚙ ở trận nằm góc phải)
     await page.waitForTimeout(150)
     expect(await pop.isHidden(), 'bấm ra ngoài không đóng ⚙')
-    await page.locator('.sh-act button[data-view="settings"]').click()
+    await page.locator(GEAR).click()
     await page.keyboard.press('Escape')
     await page.waitForTimeout(100)
     expect(await pop.isHidden(), 'Esc không đóng ⚙ ở trận')
@@ -862,7 +874,7 @@ async function gameTests() {
     const msg = await ws.locator('.ws-msg').innerText()
     expect(msg === 'Đã lưu v1', `báo lưu: "${msg}"`)
     await shot(page, 't13-workshop.png')
-    await page.locator('.sh-act button[aria-label="Màn chính"]').click()
+    await page.locator(HOME).click()
     await page.locator('.hm[data-screen="home"]').waitFor()
     const line = await page.locator('.hm-sub').innerText()
     expect(/chương trình: Của em v1/.test(line), `màn chính: ${line}`)
@@ -915,7 +927,7 @@ async function gameTests() {
     await page.evaluate(() => window.__fanroc.editors.sample(0, 'auto'))
     await page.waitForFunction(() => document.querySelector('.ws-bar .prog')?.textContent === 'Chưa lưu', null, { timeout: 3000 })
     const edited = await page.evaluate(() => JSON.stringify(window.__fanroc.editors.program(0)))
-    await page.locator('.sh-act button[aria-label="Màn chính"]').click()
+    await page.locator(HOME).click()
     await page.locator('.hm[data-screen="home"]').waitFor()
     await page.locator('.hm-tile[data-tile="match"]').click()
     const note = page.locator('.hm[data-screen="pick"] [data-role="draft"]')
@@ -935,7 +947,7 @@ async function gameTests() {
     // Trận vào bằng Mặc định ⇒ bản đã lưu chạy (không phải bản nháp) — sửa tiếp, ra Trước trận: Lưu từ đó ⇒ v2.
     await page.evaluate(() => window.__fanroc.editors.sample(0, 'teleop'))
     await page.waitForFunction(() => document.querySelector('.ws-bar .prog')?.textContent === 'Chưa lưu', null, { timeout: 3000 })
-    await page.locator('.sh-act button[aria-label="Màn chính"]').click()
+    await page.locator(HOME).click()
     await page.locator('.hm-tile[data-tile="match"]').click()
     await note.waitFor()
     await note.locator('button', { hasText: 'Lưu' }).click()
@@ -947,7 +959,7 @@ async function gameTests() {
     await page.locator('.hm-tile[data-tile="workshop"]').click()
     await page.waitForFunction(() => window.__fanroc.screen === 'workshop')
     await page.evaluate(() => window.__fanroc.editors.sample(0, 'auto'))
-    await page.locator('.sh-act button[aria-label="Màn chính"]').click()
+    await page.locator(HOME).click()
     await page.locator('.hm-tile[data-tile="match"]').click()
     await note.locator('button', { hasText: 'Bỏ' }).click()
     expect((await note.count()) === 0, 'Bỏ mà dòng chưa lưu còn')
@@ -1075,12 +1087,13 @@ async function gameTests() {
       await page.locator(`.hm[data-screen="${s}"]:not([hidden])`).waitFor()
       let how = 'bấm'
       try {
-        await page.locator('.sh-act button[data-view="settings"]').click({ timeout: 2000 })
+        await page.locator(GEAR).click({ timeout: 2000 })
       } catch {
         how = 'DOM' // màn phủ che cột biểu tượng: bấm nút ⚙ bằng DOM
-        await page.evaluate(() => document.querySelector('.sh-act button[data-view="settings"]').click())
+        await page.evaluate((sel) => document.querySelector(sel).click(), GEAR)
       }
       await page.locator('.st-pop').waitFor()
+      expect(how === 'bấm', `${s}: nút ⚙ bị màn phủ che, phải bấm bằng DOM`)
       await page.keyboard.press('Escape')
       await page.waitForTimeout(400)
       const one = await page.evaluate(() => ({ s: window.__fanroc.screen, pop: !!document.querySelector('.st-pop:not([hidden])') }))
@@ -1576,6 +1589,7 @@ async function shellTests() {
     await go(page, 'match')
     const title = await page.title()
     expect(title === 'ThingBot FanRoc Game', `tiêu đề "${title}"`)
+    await devChrome(page)
     const act = page.locator('.sh-act button[data-view="blocks"]')
     const side = page.locator('[data-side="blocks"]')
     const avail = () => page.evaluate(() => innerWidth - 48)
@@ -1626,6 +1640,33 @@ async function shellTests() {
     const glowAfter = await page.locator('[data-side] .blocklyHighlighted').count()
     expect(glowAfter === 0, `đã Dừng mà còn ${glowAfter} khối sáng`)
     return `${status.split('\n').find((t) => t.startsWith('Đang chạy khối'))} · mã ${code.split('\n').length} dòng, ${kw} từ khoá`
+  })
+
+  await test('N0 màn chơi gọn: trận không cột biểu tượng / Serial / thanh trạng thái, 🏠 ⚙ góc phải; Xưởng đủ vỏ; Chế độ giáo viên bật lại', async (page) => {
+    await open(page)
+    const shown = (sel) => page.locator(sel).isVisible()
+    const corner = '.sh-corner:not([hidden])'
+    expect(!(await shown(corner)), 'màn chính: 🏠 ⚙ nổi trùng ⚙ của màn chính')
+    await go(page, 'match')
+    await page.waitForTimeout(300)
+    const chrome = () => page.locator('.sh').getAttribute('data-chrome')
+    expect((await chrome()) === 'game', `trận: vỏ "${await chrome()}" (cần game)`)
+    for (const sel of ['.sh-act', '.sh-status', '.sh-panel']) expect(!(await shown(sel)), `trận: ${sel} còn hiện`)
+    const w = await page.locator('#stage').evaluate((e) => e.getBoundingClientRect().width)
+    const iw = await page.evaluate(() => innerWidth)
+    expect(w >= iw - 1, `trận: sân rộng ${w} / ${iw} px`)
+    expect(await shown(`${corner} button[data-view="settings"]`), 'trận: không có ⚙ góc phải')
+    await go(page, 'workshop')
+    expect((await chrome()) === 'dev' && (await shown('.sh-act')), 'Xưởng: thiếu cột biểu tượng')
+    expect(!(await shown(corner)), 'Xưởng: 🏠 ⚙ nổi vẫn hiện')
+    await go(page, 'match')
+    await devChrome(page)
+    expect((await shown('.sh-act')) && (await shown('.sh-status')), 'Chế độ giáo viên: trận chưa hiện đủ vỏ')
+    await go(page, 'tournament')
+    expect((await chrome()) === 'game', 'Chế độ giáo viên: màn ghi danh (không có khối) phải vẫn gọn')
+    await page.locator(HOME).click()
+    await page.waitForFunction(() => window.__fanroc.screen === 'home')
+    return `sân ${Math.round(w)} / ${iw} px`
   })
 
   await test('N1c Serial chạm trần vẫn đếm dòng mới; thanh chạy: Dừng theo thẻ, tạm dừng + Chạy không đổi người lái, không ghế chương trình ⇒ khoá Từng khối', async (page) => {

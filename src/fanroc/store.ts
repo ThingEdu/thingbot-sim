@@ -18,7 +18,7 @@ export const keys = (season: string) => ({
 })
 
 /** Camera không lưu (spec §8.7). `robot` = robot của bạn 1, `robot2` = robot của bạn 2 (khi hai bạn chơi). */
-export type Settings = { quality?: Quality; sound: boolean; skill: Skill; alliance: Alliance; robot: RobotConfig; robot2: RobotConfig; layout2p: boolean }
+export type Settings = { quality?: Quality; sound: boolean; skill: Skill; alliance: Alliance; robot: RobotConfig; robot2: RobotConfig; layout2p: boolean; teacher: boolean }
 export type MissionProgress = { done: boolean; stars: 0 | 1 | 2 | 3; program: object | null }
 export type Profile = { names: [string, string]; stars: number }
 type ProgramRec = { version: number; state: object }
@@ -39,7 +39,7 @@ export interface Store {
 
 export const defaultSettings = (): Settings => ({
   quality: undefined, sound: true, skill: 'medium', alliance: 'red',
-  robot: { type: 'maker', drive: 'diff2', actuator: 'tt' }, robot2: { type: 'maker', drive: 'diff2', actuator: 'tt' }, layout2p: false,
+  robot: { type: 'maker', drive: 'diff2', actuator: 'tt' }, robot2: { type: 'maker', drive: 'diff2', actuator: 'tt' }, layout2p: false, teacher: false,
 })
 const defaultProfile = (): Profile => ({ names: ['Bạn 1', 'Bạn 2'], stars: 0 })
 const defaultMission = (): MissionProgress => ({ done: false, stars: 0, program: null })
@@ -134,6 +134,7 @@ export function createStore(season: string, kvArg?: KV | null): Store {
         robot: robotConfig(v.robot) ?? d.robot,
         robot2: robotConfig(v.robot2) ?? d.robot2,
         layout2p: typeof v.layout2p === 'boolean' ? v.layout2p : d.layout2p,
+        teacher: typeof v.teacher === 'boolean' ? v.teacher : d.teacher,
       }
     },
     saveSettings(s) { writeJSON(K.settings, s) },

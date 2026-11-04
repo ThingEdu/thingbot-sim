@@ -88,7 +88,7 @@ export function robotStats(cfg: RobotConfig): RobotStats {
 // ---------- DOM ----------
 // Các màn phủ (.hm) chừa thanh trạng thái ở đáy: link "Mã nguồn (AGPL)" luôn thấy và bấm được (AGPL), kể cả ở màn chính.
 const CSS = `
-.hm { position: fixed; inset: 0 0 ${STATUS_H}px 0; z-index: 40; overflow: auto; color: #eef2fa; font-family: var(--font); background: linear-gradient(160deg, #0b1440e6 0%, #18246ad0 45%, #3a1460b8 100%); }
+.hm { position: fixed; inset: 0 0 var(--sh-status, ${STATUS_H}px) 0; z-index: 40; overflow: auto; color: #eef2fa; font-family: var(--font); background: linear-gradient(160deg, #0b1440e6 0%, #18246ad0 45%, #3a1460b8 100%); }
 .hm[hidden] { display: none; }
 .hm-in { min-height: 100%; box-sizing: border-box; padding: 22px 26px 26px; display: flex; flex-direction: column; gap: 14px; }
 .hm-top { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
@@ -220,19 +220,19 @@ const TILE_TEXT: Record<TileId, { title: string; text: (i: HomeInfo) => (string 
     text: (i) =>
       i.tournament
         ? [Object.assign(document.createElement('b'), { textContent: i.tournament.text }), i.tournament.corrupt ? ' · bấm để mở Giải mới' : '']
-        : ['Đúng luật FANROC: vòng xếp hạng 4–10 trận, bốc thăm liên minh, 1–2 bạn chơi.'],
+        : ['Đúng luật FANROC · 8 đội · 1–2 bạn'],
   },
-  match: { title: 'Trận lẻ · Đấu tập', text: () => ['Một trận 10 s + 3 phút với 3 robot máy, hoặc sân tự do không tính giờ.'] },
-  missions: { title: 'Nhiệm vụ', text: (i) => [`Con rùa robot · ${i.missions.total} nhiệm vụ · ${i.missions.done}/${i.missions.total} `, icon('check', 14)] },
+  match: { title: 'Trận lẻ · Đấu tập', text: () => ['Một trận 3 phút, hoặc sân tự do'] },
+  missions: { title: 'Nhiệm vụ', text: (i) => [`Con rùa robot · ${i.missions.done}/${i.missions.total} `, icon('check', 14)] },
   workshop: {
     title: 'Xưởng lập trình',
-    text: () => ['Sửa, nâng cấp chương trình điều khiển robot của em — dùng luôn khi Trận lẻ / Đấu tập. Không sửa thì robot chạy chương trình mặc định.'],
+    text: () => ['Lập trình robot của em bằng khối'],
   },
 }
 
 const LINK_TEXT: Record<HomeLink, { title: string; text: string; icon: 'book' | 'robot' }> = {
-  rules: { title: 'Luật chơi', text: 'sân, điểm, lỗi, giải đấu', icon: 'book' },
-  robots: { title: 'Robot mẫu', text: '4 robot, cổng, chương trình mẫu', icon: 'robot' },
+  rules: { title: 'Luật chơi', text: '', icon: 'book' },
+  robots: { title: 'Robot mẫu', text: '', icon: 'robot' },
 }
 
 export function createHome(root: HTMLElement, on: { open(item: HomeItem): void; settings(): void }): Home {
@@ -301,7 +301,7 @@ export function createHome(root: HTMLElement, on: { open(item: HomeItem): void; 
       const b = el('button', 'hm-link')
       b.type = 'button'
       b.dataset.link = l
-      b.append(icon(LINK_TEXT[l].icon, 18), LINK_TEXT[l].title, el('small', undefined, LINK_TEXT[l].text))
+      b.append(icon(LINK_TEXT[l].icon, 18), LINK_TEXT[l].title, ...(LINK_TEXT[l].text ? [el('small', undefined, LINK_TEXT[l].text)] : []))
       b.onclick = () => {
         select(l, false)
         on.open(l)
@@ -310,7 +310,7 @@ export function createHome(root: HTMLElement, on: { open(item: HomeItem): void; 
       tiles[l] = b
       links.append(b)
     }
-    inner.replaceChildren(top, el('div', 'hm-sp'), grid, links, el('div', 'hm-hint', 'Phím mũi tên đổi ô · Enter để vào · nút Cài đặt góc trên có bảng phím'))
+    inner.replaceChildren(top, el('div', 'hm-sp'), grid, links, el('div', 'hm-hint', 'Mũi tên chọn · Enter vào'))
     select(current, false)
   }
 
