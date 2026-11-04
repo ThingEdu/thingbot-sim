@@ -263,6 +263,8 @@ const CSS = `
 .sh[data-chrome="game"] { grid-template-columns: 0 0 minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 0; }
 .sh[data-chrome="game"] .sh-act, .sh[data-chrome="game"] .sh-side, .sh[data-chrome="game"] .sh-panel, .sh[data-chrome="game"] .sh-status { display: none; }
 html[data-chrome="game"] { --sh-status: 0px; }
+/* Màn phủ có nút riêng góc phải trên (Về màn chính): chừa chỗ cho 🏠 ⚙ nổi. */
+html[data-chrome="game"] .hm:not([data-screen="home"]) .hm-top { padding-right: 100px; }
 .sh-corner { position: fixed; top: 12px; right: 12px; z-index: 50; display: flex; gap: 8px; }
 .sh-corner[hidden] { display: none; }
 .sh-corner button { width: 40px; height: 40px; border-radius: 50%; border: 1px solid #fff3; background: #0009; color: #eef2fa; display: grid; place-items: center; cursor: pointer; padding: 0; }
