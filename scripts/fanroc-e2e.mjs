@@ -562,6 +562,16 @@ async function missionTests() {
     expect((await page.evaluate(() => window.__fanroc.robots.length)) === 1, 'nhiệm vụ: không phải 1 robot (R61)')
     expect(await page.locator('[data-side="blocks"]').isVisible(), 'khung Khối không mở sẵn')
     expect((await page.evaluate(() => window.__fanroc.trail)) === null, 'chưa ▶ đã có vệt')
+    // Khay khối của hộp công cụ nhiệm vụ: «đợi» mang số của chính hộp này (1), không phải 0.02 của hộp đầy đủ cũ.
+    const flyout = await page.evaluate(() => {
+      const t = [...document.querySelectorAll('[data-side="blocks"] .fe-panel:not([hidden]) .blocklyFlyout .blocklyText')].map((e) => e.textContent)
+      return { wait: t[t.indexOf('đợi') - 1], all: t.join(' ') }
+    })
+    expect(flyout.wait === '1', `khay khối: «đợi» hiện "${flyout.wait}" (${flyout.all.slice(0, 80)})`)
+    // Chấm khi chưa ▶ ⇒ nhắc bấm ▶.
+    await page.locator('.mi button[data-role="grade"]').click()
+    const tip = await page.locator('.mi-card [data-role="hint"]').innerText()
+    expect(/Bấm ▶ để chạy trước/.test(tip), `Chấm trước ▶: "${tip}"`)
     await page.evaluate((state) => window.__fanroc.editors.load(0, state), straight(0.9))
     const t0 = Date.now()
     await runBtn(page, 'Chạy').click()
@@ -572,13 +582,40 @@ async function missionTests() {
     await page.waitForFunction(() => window.__fanroc.mission?.result, null, { timeout: 10000 })
     const r = await page.evaluate(() => ({ ...window.__fanroc.mission }))
     expect(r.reason === 'rest' && r.result.stars >= 2, `chấm: ${r.reason}, ${r.result.stars} sao`)
-    // Ra Trận lẻ: không có vệt nào.
-    await go(page, 'match')
-    await page.waitForTimeout(400)
-    const trail = await page.evaluate(() => window.__fanroc.trail)
-    expect(trail === null, 'Trận lẻ vẫn có vệt')
-    expect(await page.locator('.mi').isHidden(), 'phần phủ nhiệm vụ còn hiện ở Trận lẻ')
-    return `mục tiêu đầu ✓ sau ${firstOk.toFixed(1)} s · ${segs} đoạn vệt · chấm "${r.reason}" ${r.result.stars} sao · Trận lẻ: trail null`
+    const drawn = await page.evaluate(() => window.__fanroc.trailObjects)
+    expect(drawn >= 2, `nhiệm vụ: chỉ ${drawn} hình vệt / đường gợi ý trên sân`)
+    // Ra Trận lẻ, Xưởng, màn chính: không có vệt nào (cả dữ liệu lẫn hình trên sân).
+    const left = []
+    for (const scr of ['match', 'workshop', 'home']) {
+      await go(page, scr)
+      await page.waitForTimeout(400)
+      const x = await page.evaluate(() => ({ trail: window.__fanroc.trail, n: window.__fanroc.trailObjects }))
+      left.push(`${scr} ${x.n}`)
+      expect(x.trail === null && x.n === 0, `${scr}: vẫn có vệt (trail ${x.trail === null ? 'null' : 'có'}, ${x.n} hình)`)
+    }
+    expect(await page.locator('.mi').isHidden(), 'phần phủ nhiệm vụ còn hiện ngoài nhiệm vụ')
+    return `mục tiêu đầu ✓ sau ${firstOk.toFixed(1)} s · ${segs} đoạn vệt, ${drawn} hình · chấm "${r.reason}" ${r.result.stars} sao · ngoài nhiệm vụ: ${left.join(', ')} hình`
+  })
+
+  await test('N7b sửa nhiệm vụ 2 rồi chuyển ngay (< 1 s) sang nhiệm vụ 3 ⇒ bản sửa lưu cho nhiệm vụ 2, nhiệm vụ 3 giữ chương trình của nó', async (page) => {
+    await open(page)
+    await page.evaluate(() => window.__fanroc.go('mission', { id: 'di-thang' }))
+    await page.waitForFunction(() => window.__fanroc.mission?.id === 'di-thang')
+    // Nạp một chương trình có dấu hiệu riêng (đợi 0.55 s) rồi đổi thẻ để vùng khối báo "đã đổi" (bắt đầu đếm 1 s chờ lưu).
+    await page.evaluate((state) => {
+      window.__fanroc.editors.load(0, state)
+      window.__fanroc.editors.show(0)
+    }, straight(0.55))
+    await page.locator('.sh-act button[data-view="missions"]').click()
+    await page.locator('[data-side="missions"] .ml-card[data-n="3"]').click()
+    await page.waitForFunction(() => window.__fanroc.mission?.id === 'cong-va-xoay')
+    await page.waitForTimeout(1500) // quá hạn chờ lưu của cả hai
+    const got = await page.evaluate(() => ({ a: JSON.stringify(window.__fanroc.store.mission('di-thang').program), b: JSON.stringify(window.__fanroc.store.mission('cong-va-xoay').program) }))
+    expect(/"NUM":"?0\.55/.test(got.a), `nhiệm vụ 2 không giữ bản sửa: ${got.a.match(/NUM[^}]*/g)}`)
+    expect(!/0\.55/.test(got.b), 'nhiệm vụ 3 bị ghi đè bằng chương trình của nhiệm vụ 2')
+    const shown = await page.evaluate(() => JSON.stringify(window.__fanroc.editors.program(0)))
+    expect(!/0\.55/.test(shown), 'vùng khối nhiệm vụ 3 hiện chương trình của nhiệm vụ 2')
+    return `nhiệm vụ 2: có bản sửa · nhiệm vụ 3: ${got.b === 'null' ? 'chưa lưu (starter)' : 'chương trình riêng'}`
   })
 
   await test('N8 nhiệm vụ 7: lời giải mẫu đạt ≥ 2 sao, màn sao; tải lại trang ⇒ thẻ 7 vẫn ✓ và số sao', async (page) => {

@@ -309,6 +309,10 @@ async function start(): Promise<void> {
       get trail() {
         return screen === 'mission' ? (mrun?.trail ?? null) : null
       },
+      /** Số hình vệt / đường gợi ý đang vẽ trên sân. */
+      get trailObjects() {
+        return scene.trailObjects
+      },
       /** Nhiệm vụ đang làm và kết quả chấm của lần chạy (null: chưa chấm). */
       get mission() {
         return screen === 'mission' && mission ? { id: mission.id, result: mrun?.result ?? null, reason: mrun?.reason ?? null } : null
@@ -621,10 +625,11 @@ async function start(): Promise<void> {
   }
   /** Bấm Chấm / Dừng giữa lần chạy: chấm ngay. */
   const pressMission = () => {
-    if (screen === 'mission' && mrun && !mrun.done && missionView) {
+    if (screen !== 'mission' || !mission) return
+    if (mrun && !mrun.done && missionView) {
       mrun.press(missionView)
       finishMission()
-    }
+    } else if (!mrun) missionHud.goals(pendingGoals(mission), mission.kind === 'drive' ? 'Lái robot trước rồi bấm Chấm.' : 'Bấm ▶ để chạy trước đã.')
   }
   const nextOf = (m: Mission) => MISSIONS[MISSIONS.indexOf(m) + 1] ?? null
   /** Lưu kết quả (sao tốt nhất không giảm), hiện màn sao. */
@@ -660,21 +665,32 @@ async function start(): Promise<void> {
     })
     showGraded(m, r, store.mission(m.id).program)
   }
-  // Chương trình đang làm của nhiệm vụ: lưu sau khi vùng khối thôi đổi 1 s (đọc lại để chắc đã lưu).
+  // Chương trình đang làm của nhiệm vụ: lưu sau khi vùng khối thôi đổi 1 s (đọc lại để chắc đã lưu). Lưu theo nhiệm vụ
+  // mà vùng khối đang giữ chương trình (`wsMission`, đặt lúc nạp) — không theo `mission`, vì `go` đổi `mission` trước
+  // khi vào màn mới; chuyển nhanh sang nhiệm vụ khác trong 1 s thì lưu ngay cho nhiệm vụ cũ.
   let mSaveTimer = 0
+  let mSaveId: string | null = null
+  let wsMission: string | null = null
   const saveMissionProgram = () => {
     clearTimeout(mSaveTimer)
     mSaveTimer = 0
-    if (screen !== 'mission' || !mission) return
-    const prev = store.mission(mission.id)
+    const id = mSaveId
+    mSaveId = null
+    if (!id || id !== wsMission) return
+    const prev = store.mission(id)
     const program = editors.program(0)
     if (sameProgram(prev.program, program)) return
-    const r = saveMissionVerified(store, mission.id, { ...prev, program })
+    const r = saveMissionVerified(store, id, { ...prev, program })
     missionHud.note(r.ok ? null : 'Không lưu được chương trình — trình duyệt đang chặn bộ nhớ. Tải .tb về máy để giữ.')
   }
+  /** Lưu ngay nếu còn bản chờ lưu (rời nhiệm vụ / đổi nhiệm vụ). */
+  const flushMissionProgram = () => {
+    if (mSaveTimer) saveMissionProgram()
+  }
   editors.onChange(() => {
-    if (screen !== 'mission' || !mission) return
+    if (screen !== 'mission' || !wsMission) return
     clearTimeout(mSaveTimer)
+    mSaveId = wsMission
     mSaveTimer = window.setTimeout(saveMissionProgram, MISSION_SAVE_MS)
   })
 
@@ -753,7 +769,8 @@ async function start(): Promise<void> {
   /** Phần giao diện của màn (không dựng lại phiên). */
   const enter = (next: Screen, arg?: { player?: Player }) => {
     captureDraft() // rời Xưởng (kể cả đổi bạn): giữ bản đang sửa
-    if (screen === 'mission' && mSaveTimer) saveMissionProgram() // rời nhiệm vụ: lưu ngay bản đang làm
+    flushMissionProgram() // rời / đổi nhiệm vụ: lưu ngay bản đang làm cho đúng nhiệm vụ đó
+    wsMission = null
     popover.close()
     home.hide()
     pick.hide()
@@ -782,6 +799,7 @@ async function start(): Promise<void> {
     if (next === 'mission' && mission) {
       const prog = store.mission(mission.id)
       editors.load(0, prog.program ?? mission.starter ?? sample(mission.robot, 'teleop'))
+      wsMission = mission.id
       editors.show(0)
       wsBar.hide()
       shell.open('blocks')
@@ -814,6 +832,7 @@ async function start(): Promise<void> {
   const go = (next: Screen, arg?: { player?: Player; id?: string }): Promise<void> => {
     going = going
       .then(async () => {
+        flushMissionProgram() // trước khi `mission` đổi sang nhiệm vụ mới
         let to = next
         // Dựng lại Trận lẻ đang chơi nhiệm vụ trận (⚙ đổi liên minh…) thì vẫn là nhiệm vụ đó; vào Trận lẻ khác thì không.
         let mm = next === 'match' && screen === 'match' ? matchMission : null

@@ -30,6 +30,8 @@ export interface FanrocScene {
    * `path` = đường gợi ý trắng nét đứt. `null` xoá cả vệt lẫn đường gợi ý. Gọi mỗi khung được: chỉ dựng lại đoạn có thêm điểm.
    */
   trail(segments: Trail['segments'] | null, path?: { x: number; z: number }[]): void
+  /** Số hình vệt + đường gợi ý đang có trên sân (phép thử: 0 ngoài màn nhiệm vụ). */
+  readonly trailObjects: number
   quality(q: Quality): void
   dispose(): void
 }
@@ -400,7 +402,40 @@ export function createScene(el: HTMLElement): FanrocScene {
     trailGroup.remove(o)
     o.geometry.dispose()
   }
-  const trailMeshes: { mesh: THREE.Mesh; n: number }[] = []
+  /** Một đoạn vệt: bộ đỉnh nới dần (gấp đôi khi đầy), chỉ thêm hình chữ nhật của các điểm mới. */
+  type TrailMesh = { mesh: THREE.Mesh; pts: readonly { x: number; z: number }[]; n: number; buf: Float32Array; used: number }
+  const trailMeshes: TrailMesh[] = []
+  const newTrailMesh = (pts: readonly { x: number; z: number }[], m: THREE.Material): TrailMesh => {
+    const buf = new Float32Array(18 * 64)
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.BufferAttribute(buf, 3).setUsage(THREE.DynamicDrawUsage))
+    g.setDrawRange(0, 0)
+    const mesh = new THREE.Mesh(g, m)
+    mesh.renderOrder = 1
+    mesh.frustumCulled = false
+    trailGroup.add(mesh)
+    return { mesh, pts, n: 0, buf, used: 0 }
+  }
+  /** Thêm hình của các điểm từ `t.n` tới cuối `t.pts` vào bộ đỉnh của đoạn. */
+  const growTrail = (t: TrailMesh) => {
+    if (t.pts.length <= t.n) return
+    const add = ribbon(t.pts.slice(Math.max(0, t.n - 1)), TRAIL_W)
+    t.n = t.pts.length
+    if (!add.length) return
+    if (t.used + add.length > t.buf.length) {
+      let cap = t.buf.length
+      while (cap < t.used + add.length) cap *= 2
+      const next = new Float32Array(cap)
+      next.set(t.buf.subarray(0, t.used))
+      t.buf = next
+      t.mesh.geometry.setAttribute('position', new THREE.BufferAttribute(next, 3).setUsage(THREE.DynamicDrawUsage))
+    }
+    t.buf.set(add, t.used)
+    t.used += add.length
+    const attr = t.mesh.geometry.getAttribute('position') as THREE.BufferAttribute
+    attr.needsUpdate = true
+    t.mesh.geometry.setDrawRange(0, t.used / 3)
+  }
   let pathMeshes: THREE.Mesh[] = []
   let pathOf: { x: number; z: number }[] | undefined
   function setTrail(segments: Trail['segments'] | null, path?: { x: number; z: number }[]): void {
@@ -420,13 +455,16 @@ export function createScene(el: HTMLElement): FanrocScene {
       if (path && path.length >= 2) for (const d of dashes(path)) ribbon(d, PATH_W, pos)
       pathMeshes = pos.length ? [meshOf(pos, pathMat)] : []
     }
-    // Vệt đã xoá (lần chạy mới) ⇒ bỏ các đoạn thừa; đoạn nào có thêm điểm thì dựng lại hình của đoạn đó.
+    // Vệt đã xoá (lần chạy mới) ⇒ bỏ các đoạn thừa; đoạn đổi mảng điểm thì dựng mới; đoạn có thêm điểm thì nối thêm.
     while (trailMeshes.length > segments.length) drop(trailMeshes.pop()!.mesh)
     segments.forEach((seg, i) => {
-      const t = trailMeshes[i]
-      if (t && t.n === seg.points.length) return
-      if (t) drop(t.mesh)
-      trailMeshes[i] = { mesh: meshOf(ribbon(seg.points, TRAIL_W), trailMats[seg.color % trailMats.length]), n: seg.points.length }
+      let t = trailMeshes[i]
+      if (t && t.pts !== seg.points) {
+        drop(t.mesh)
+        t = undefined as unknown as TrailMesh
+      }
+      if (!t) t = trailMeshes[i] = newTrailMesh(seg.points, trailMats[seg.color % trailMats.length])
+      growTrail(t)
     })
   }
 
@@ -653,6 +691,9 @@ export function createScene(el: HTMLElement): FanrocScene {
     },
     quality: setQuality,
     trail: setTrail,
+    get trailObjects() {
+      return trailGroup.children.length
+    },
     dispose() {
       ro.disconnect()
       controls.dispose()
