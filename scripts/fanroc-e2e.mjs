@@ -2,7 +2,11 @@
  * Phép thử đầu-cuối của sân FANROC trên trình duyệt thật (Playwright, lấy từ checkout ThingBlock như ftc-e2e.mjs
  * của nhánh spike/ursim).
  *
- *   npm run e2e:fanroc                 # tự bật Vite dev trên một cổng trống, chạy N3–N6, N6b–N6d, N11 (Luật chơi + Robot mẫu Task 17), N2c (màn chính / ⚙ / Xưởng Task 13), N7, N8 (nhiệm vụ Task 14), N9, N10, N9b–N9d (giải đấu Task 15), N1, N1b, N1c (vỏ Task 11), N2, N2b (bảng điểm Task 12) và E1–E11 (E5 bỏ qua), tắt Vite
+ *   npm run e2e:fanroc                 # tự bật Vite dev trên một cổng trống rồi chạy hết, tắt Vite:
+ *     N3–N6, N6b–N6d, N2c (màn chính / ⚙ / Xưởng, Task 13) · N11, N11b (Luật chơi + Robot mẫu, Task 17) ·
+ *     N7, N7b, N8 (nhiệm vụ, Task 14) · N9, N9b–N9e, N10 (giải đấu, Task 15) · N1, N1b, N1c (vỏ, Task 11) ·
+ *     N2, N2b (bảng điểm, Task 12) · E1–E4, E6–E11 (ý cũ của sân, viết lại theo giao diện mới ở Task 16; E5 Human
+ *     Player bấm phím đã xoá cùng tính năng)
  *   FANROC_URL=http://localhost:5191/mo-phong/fanroc.html npm run e2e:fanroc   # dùng trang đang chạy sẵn
  *   npm run e2e:fanroc -- E3 E5        # chỉ chạy các phép thử có tên bắt đầu như vậy
  *
@@ -107,16 +111,10 @@ async function test(name, fn, viewport = { width: 1440, height: 860 }) {
   console.log(`${ok ? 'ĐẠT  ' : 'TRƯỢT'}  ${name}  (${((Date.now() - t0) / 1000).toFixed(1)} s)  ${detail}`)
   await context.close()
 }
-/** Phép thử tạm bỏ (ghi lý do), không tính vào số ĐẠT / TRƯỢT. */
-function skip(name, why) {
-  if (only.length && !only.some((o) => name.startsWith(o))) return
-  console.log(`BỎ QUA  ${name}  — ${why}`)
-}
 const expect = (cond, msg) => {
   if (!cond) throw new Error(msg)
 }
 
-// ---------- Thao tác trên trang ----------
 // ---------- Thao tác trên trang ----------
 // Task 13: mở trang là vào màn chính; trận / đấu tập vào bằng `__fanroc.go` (N4, N6 đi bằng giao diện thật). Khung ⚙
 // mới (.st-pop, ui/settings.ts): chế độ, liên minh, mức máy, tốc độ, đồ hoạ…; ai lái từng ghế ở mục Nâng cao.
@@ -353,6 +351,9 @@ async function main() {
     const phase = await page.evaluate(() => window.__fanroc.match.phase)
     const err = panel(page).locator('.fe-error')
     const text = (await err.isVisible()) ? await err.innerText() : ''
+    // Lỗi nằm trong Side Bar Khối (khung bên đang mở), không phải chỗ khác.
+    const inSide = await page.locator('[data-side="blocks"]:not([hidden]) .fe-panel:not([hidden]) .fe-error').isVisible()
+    expect(inSide, 'lỗi không hiện trong Side Bar Khối')
     expect(a.z - b.z > 0.1, `trước lỗi robot chỉ đi ${(a.z - b.z).toFixed(3)} m — chương trình không chạy?`)
     expect(dist(c, d) < 0.01, `sau lỗi robot vẫn chạy ${dist(c, d).toFixed(4)} m`)
     expect(text.includes('Chương trình dừng vì lỗi: chia một số nguyên cho 0'), `lỗi hiện: "${text}"`)
@@ -360,9 +361,8 @@ async function main() {
     return `đi ${(a.z - b.z).toFixed(2)} m rồi dừng (trôi ${dist(c, d).toFixed(4)} m) · "${text}" · đồng hồ ${t1.toFixed(1)} → ${t2.toFixed(1)} s`
   })
 
-  // E5 (Human Player bấm phím Q/A/S/D) bỏ: Task 10 bỏ KEYMAP, Human Player luôn tự động (chốt 04/11). Task 16 viết lại
-  // phép thử đầu-cuối theo giao diện mới; luật nạp bóng P04–P07 có phép thử Node ở human.test.ts.
-  skip('E5 bàn phím Human Player', 'đã bỏ KEYMAP (Task 10) — Human Player tự động, xem human.test.ts')
+  // Không có E5: phép thử Human Player bấm phím Q/A/S/D đã xoá cùng tính năng (Task 10 bỏ KEYMAP, Human Player luôn
+  // tự động — chốt 04/11). Luật nạp bóng P04–P07 có phép thử Node ở human.test.ts.
 
   await test('E6 trận ×40 với 4 agent ⇒ HẾT GIỜ, bảng đội 4 dòng, màn kết quả: điểm trận = tổng các mục', async (page) => {
     await open(page)
@@ -404,7 +404,23 @@ async function main() {
     expect(pj, `trong zip chỉ có: ${Object.keys(zip.files).join(', ')}`)
     const project = JSON.parse(await pj.async('string'))
     expect(Array.isArray(project.targets) && project.targets.length > 0, 'project.json không có targets')
-    return `${name} · project.json ${project.targets.length} target`
+    // Khối của em có ô số (R37): tải về ⇒ lời nhắc "chưa nạp được ThingBot thật"; nạp chương trình khác hoặc bấm Chạy
+    // ⇒ lời nhắc cũ được xoá (trước đây còn treo mãi).
+    const warn = () => page.evaluate(() => { const w = document.querySelectorAll('.fe-warn')[0]; return w.hidden ? '' : w.textContent })
+    const tbParam = async () => {
+      await page.evaluate((state) => window.__fanroc.editors.load(0, state), turtle(0.72, 131))
+      await Promise.all([page.waitForEvent('download', { timeout: 10000 }), runBtn(page, 'Tải .tb để nạp ThingBot').click()])
+      const w = await warn()
+      expect(/chưa nạp được lên ThingBot thật/.test(w), `tải .tb có khối ô số mà không nhắc: "${w}"`)
+    }
+    await tbParam()
+    await page.evaluate((state) => window.__fanroc.editors.load(0, state), straight(0.9))
+    const afterLoad = await warn()
+    await tbParam()
+    await run(page, 0)
+    const afterRun = await warn()
+    expect(afterLoad === '' && afterRun === '', `lời nhắc ô số còn sau khi nạp "${afterLoad.slice(0, 30)}" / chạy "${afterRun.slice(0, 30)}"`)
+    return `${name} · project.json ${project.targets.length} target · nhắc khối ô số hiện khi tải, xoá khi nạp / chạy`
   })
 
   await test('E8 điện thoại 390×844: không cuộn ngang (màn chính, trận), biểu tượng Khối mở/đóng khung bên phủ sân, sân vẫn vẽ', async (page) => {
@@ -983,8 +999,17 @@ async function gameTests() {
     const faults = await rules.locator('[data-card="faults"]').innerText()
     expect(['P12', 'S02', 'P10', 'G15'].every((c) => faults.includes(c)), `thẻ lỗi: ${faults.slice(0, 80)}`)
     await shot(page, 't17-rules.png')
+    // Sân nền tạm dừng khi đọc Luật chơi; về màn chính thì chạy lại.
+    const clock = () => page.evaluate(() => window.__fanroc.match.t)
+    const r0 = await clock()
+    await page.waitForTimeout(600)
+    const r1 = await clock()
+    expect(r1 === r0, `Luật chơi: sân nền vẫn chạy ${r0.toFixed(2)} → ${r1.toFixed(2)} s`)
     await page.keyboard.press('Escape')
     await page.waitForFunction(() => window.__fanroc.screen === 'home')
+    const h0 = await clock()
+    await page.waitForTimeout(600)
+    expect((await clock()) > h0, 'về màn chính mà sân nền không chạy lại')
 
     // Xưởng với Mẫu Maker: sửa (nạp mẫu Auto) mà chưa lưu ⇒ bản nháp; rời Xưởng.
     await page.locator('.hm-tile[data-tile="workshop"]').click()
@@ -1008,9 +1033,24 @@ async function gameTests() {
     // Vùng khối chỉ xem: kéo khối không được, không có hộp công cụ.
     const ro = await page.evaluate(() => document.querySelectorAll('.rg-ws .blocklyToolboxDiv, .rg-ws .blocklyFlyout').length === 0)
     expect(ro, 'vùng khối Robot mẫu có hộp công cụ')
+    // Chỉ xem thật: kéo khối đầu chương trình 80 px ⇒ khối không dời chỗ (vị trí riêng của khối giữ nguyên).
+    const topBlock = gal.locator('.rg-ws .blocklyBlockCanvas > g.blocklyBlock, .rg-ws .blocklyBlockCanvas > g[data-id]').first()
+    const before = await topBlock.getAttribute('transform')
+    const bb = await topBlock.boundingBox()
+    await page.mouse.move(bb.x + 12, bb.y + 12)
+    await page.mouse.down()
+    await page.mouse.move(bb.x + 60, bb.y + 50, { steps: 6 })
+    await page.mouse.move(bb.x + 92, bb.y + 92, { steps: 6 })
+    await page.mouse.up()
+    await page.waitForTimeout(200)
+    const after = await topBlock.getAttribute('transform')
+    expect(before && before === after, `kéo được khối ở vùng chỉ xem: ${before} → ${after}`)
     await page.waitForTimeout(500) // xoay một chút cho ảnh chụp
     await shot(page, 't17-robots.png')
     const v1 = await page.evaluate(() => window.__fanroc.viewers())
+    const g0 = await page.evaluate(() => window.__fanroc.match.t)
+    await page.waitForTimeout(400)
+    expect((await page.evaluate(() => window.__fanroc.match.t)) === g0, 'Robot mẫu: sân nền vẫn chạy')
     await gal.locator('[data-role="open-workshop"]').click()
     await page.waitForFunction(() => window.__fanroc.screen === 'workshop')
     const cfg = await page.evaluate(() => window.__fanroc.editors.cfg(0))
@@ -1025,6 +1065,36 @@ async function gameTests() {
     await page.evaluate(() => window.__fanroc.editors.setConfig(0, { type: 'maker', drive: 'diff2', actuator: 'tt' }))
     await page.waitForFunction(() => /Chưa lưu/.test(document.querySelector('.ws-bar .prog')?.textContent ?? ''), null, { timeout: 5000 })
     return `mục nhỏ ${links.map((l) => l.split(':')[0]).join(' · ')} · Rãnh 3 ${r3} · Xưởng ${cfg.type} "${lbl}" · canvas ${v0}→${v1}→${v2} · bản nháp Mẫu Maker còn`
+  })
+
+  await test('N11b Robot mẫu trên máy không có WebGL: báo một câu tiếng Việt thay hình 3D, không lỗi JS; thông tin + vùng khối vẫn có', async (page, errors) => {
+    await open(page)
+    // Từ giờ mọi canvas mới không lấy được ngữ cảnh WebGL (sân chính đã có ngữ cảnh từ trước, không bị ảnh hưởng).
+    await page.evaluate(() => {
+      const get = HTMLCanvasElement.prototype.getContext
+      HTMLCanvasElement.prototype.getContext = function (kind, ...rest) {
+        return /webgl/.test(kind) && !this.closest('#stage') ? null : get.call(this, kind, ...rest)
+      }
+    })
+    await page.locator('.hm-link[data-link="robots"]').click()
+    const gal = page.locator('.hm[data-screen="robots"]')
+    const fail = gal.locator('.rg-3d .rg-fail')
+    await fail.waitFor({ timeout: 15000 })
+    const text = await fail.innerText()
+    await gal.locator('.rg-ws .blocklyBlockCanvas .blocklyBlock').first().waitFor({ timeout: 15000 })
+    const ports = await gal.locator('[data-role="ports"] td').count()
+    expect(/robot 3D/.test(text), `câu báo: "${text}"`)
+    expect(ports > 0, 'mất bảng cổng của robot')
+    expect((await gal.locator('.rg-3d canvas').count()) === 0, 'vẫn còn canvas 3D hỏng')
+    // three.js tự ghi console.error khi không tạo được ngữ cảnh — đó là lỗi đã bắt, không phải lỗi trang.
+    const rest = errors.filter((e) => !/WebGL/i.test(e))
+    errors.length = 0
+    errors.push(...rest)
+    // Đổi robot rồi về màn chính: không lỗi, câu báo được dọn.
+    await gal.locator('.rg-pick [data-robot="co"]').click()
+    await page.keyboard.press('Escape')
+    await page.waitForFunction(() => window.__fanroc.screen === 'home')
+    return `"${text}"`
   })
 
   await test('N2c màn kết quả: báo nổi / đếm ngược bị xoá; "Về màn chính" ⇒ màn chính', async (page) => {

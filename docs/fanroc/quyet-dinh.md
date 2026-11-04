@@ -1,7 +1,9 @@
-# FANROC Thanh Hỏa — các điều đã tự quyết khi thi công (R1–R34)
+# FANROC Thanh Hỏa / ThingBot FanRoc Game — các điều đã tự quyết khi thi công (R1–R124)
 
-Thi công ngày 03/11/2026 theo kế hoạch `docs/superpowers/plans/2026-11-03-fanroc-sim.md`
-và đặc tả `docs/superpowers/specs/2026-11-03-fanroc-sim-design.md`, nhánh `feat/fanroc`.
+Đợt 1 (R1–R34) thi công ngày 03/11/2026 theo kế hoạch `docs/superpowers/plans/2026-11-03-fanroc-sim.md`
+và đặc tả `docs/superpowers/specs/2026-11-03-fanroc-sim-design.md`; đợt 2 — giao diện game "ThingBot FanRoc Game"
+(R35–R124) — ngày 04/11/2026 theo kế hoạch `docs/superpowers/plans/2026-11-04-fanroc-game.md` và đặc tả
+`docs/superpowers/specs/2026-11-03-fanroc-ui-nhiem-vu-design.md` (xem mục cuối). Nhánh `feat/fanroc`.
 Khi đặc tả và kế hoạch không trả lời, em tự quyết và ghi lại ở đây kèm cái giá nếu quyết sai,
 để anh duyệt lại và đổi được.
 
@@ -82,3 +84,158 @@ Mục nên xem trước: **R11, R16, R7/R25, R17, R8, R19, R23/R28, R24, R27, R3
 - `agent.ts` dài ~1100 dòng, nên tách phần tìm đường.
 - Logic chọn chế độ ghế trong `main.ts` chỉ được kiểm bằng phép thử trình duyệt.
 - Chưa mở thử 4 file `.tb` xuất ra trong ThingBlock desktop.
+
+---
+
+## Giao diện game (đợt 2, 04/11/2026)
+
+**Anh đã chốt (04/11):** khối của em có ô số — sửa trước trên mô phỏng (R37); game chạy độc lập (bản tải về máy,
+bản web cho sự kiện ở máy 201); nhiều mùa giải về sau, đợt này một mùa (R42); bảng điểm chia hai bên
+Đỏ | chung + đồng hồ | Xanh; Human Player luôn tự động (bỏ phím Q/A/S/D).
+
+Mục nên xem trước: **R37, R57/R59, R96, R56, R83, R94, R103, R106, R115/R116, R122, R123**.
+
+### Khối của em (khối tự tạo, có ô số)
+
+| # | Đã quyết | Nếu sai thì |
+|---|---|---|
+| R37 | Khối của em có ô số chạy được trên mô phỏng bằng bộ sinh mã riêng trong `src/fanroc/procedures.ts` (không sửa ThingBlock, không sửa `sim-extra.ts`); tải `.tb` có khối kiểu này thì hiện lời nhắc "chưa nạp được ThingBot thật" | Mã Arduino của khối có ô số vẫn sai trên robot thật — cần sửa ở ThingBlock gốc |
+| R38 | Sửa `headless.ts` cho sinh mã được khối của em khi chạy không giao diện; sửa `tb.ts` giữ đúng tên khối và ô số khi xuất `.tb` | — (cần dù sao) |
+| R40 | Ô số của khối của em (khối tròn "mét", "độ") cắm được vào ô tốc độ động cơ / góc servo | ThingBlock gốc phải làm giống thế |
+| R41 | Không có phép thử nạp lại `.tb` vào game (game không có nút mở `.tb`); chỉ kiểm cấu trúc tệp | Lỗi `.tb` chỉ lộ ra khi anh mở thử trong ThingBlock desktop |
+| R124 | Lời nhắc "khối có ô số" (hiện khi tải `.tb`) được xoá khi nạp chương trình khác hoặc bấm Chạy | Em phải bấm tải lại mới thấy nhắc lần nữa |
+
+### Tạm dừng, chạy từng khối, bo ảo
+
+| # | Đã quyết | Nếu sai thì |
+|---|---|---|
+| R36, R43 | "Chạy từng khối" chạy tới khối kế tiếp, tối đa 5 s thời gian ảo (khối đợi dài hay vòng lặp rỗng không treo); hàm bước nằm ở `src/sim-step.ts`, bo ảo không phụ thuộc game | Dựa vào phần trong của Session, ThingBlock đổi thì phải sửa |
+| R63 | Nhiều bo cùng chạy từng khối thì sân chạy theo bo cần lâu nhất (≤ 5 s) | Đổi sang ngắn nhất, sửa một dòng |
+| R64 | Mỗi khung chạy vật lý có trần số bước và 45 ms; khung dài quá 100 ms bị cắt | Máy yếu thấy trận chậm hơn đồng hồ thật |
+| R65 | Phiên trận có `setDriver` để đổi agent / chương trình mà không dựng lại trận | — |
+| R66 | Khi bỏ phiên trận chỉ dừng các bo mà phiên đó còn giữ (bo thuộc về phiên cuối cùng nhận nó) | Một chương trình vừa bấm ▶ đúng lúc đổi phiên bị dừng, bấm lại |
+| R69 | Thanh chạy: Chạy lúc đang tạm dừng = chạy tiếp; Tạm dừng dừng cả trận agent; Dừng chỉ bật khi thẻ đang mở có chương trình; Về chỗ cũ = trận mới; đang chạy từng khối thì khoá Chạy / Tạm dừng / Từng khối | Chỉ sửa phần xử lý nút |
+
+### Bàn phím, tay cầm, hai bạn chơi
+
+| # | Đã quyết | Nếu sai thì |
+|---|---|---|
+| R85 | Trận lẻ cho hai bạn chơi luôn: bật "Hai bạn chơi" thì bạn 2 ngồi ô đầu của liên minh kia, lái bằng nửa phải bàn phím + tay PS2 số 2 | Ẩn nút ở ⚙ |
+| R86 | Ghế chọn theo người (Bạn 1, Bạn 2, Máy, Chép chương trình của bạn); mỗi bạn ngồi một ghế; rời ghế thì chương trình của bạn đó dừng | — |
+| R89 | Nút "Hai bạn chơi" có ở ⚙ trên mọi màn | — |
+| R93 | "Robot của em chạy" chỉ nhớ trong phiên, không lưu | Mở lại trang phải chọn lại |
+| R107 | Thử phím ở giải đấu không chọn kiểu bàn phím: bạn 1 = nửa trái / tay 1, bạn 2 = nửa phải / tay 2 | — |
+| R108 | Ghi danh giải đặt luôn "Hai bạn chơi" theo số bạn; đấu tiếp giải cũng đặt lại cho khớp | — |
+
+### Giải đấu
+
+| # | Đã quyết | Nếu sai thì |
+|---|---|---|
+| R44 | Có 7 đội máy (1 bạn chơi cần 7 đội máy cho đủ 8 đội) | — |
+| R45 | Giữa giải, bảng xếp hạng = tổng điểm các trận đã đấu, ghi "tạm"; bỏ trận thấp nhất chỉ khi giải xong | Đổi cách hiện ở Pit |
+| R46 | Trận ngầm toàn agent nhận thứ tự ghế tuỳ chọn; phép thử agent cũ giữ thứ tự cũ để điểm trung bình không đổi | — |
+| R103 | Trong giải, bạn chơi bằng chương trình "Của em" nếu đã lưu cho robot đã ghi danh, không thì Mặc định; muốn về mặc định thì dùng "Về mặc định" ở Xưởng | Thêm nút chọn cho từng bạn |
+| R104 | "Trận x/y" = lượt đấu / số trận mỗi đội | Chỉ đổi chữ |
+| R105 | Thêm hai màn: trận giải của bạn và "Xem nhanh" (chỉ bảng điểm, không khối, để tua ×40 được) | — |
+| R106 | Trận máy chạy lần lượt, chỉ từ Pit, trước trận kế của bạn; sân nền đứng yên lúc đó | Máy yếu chờ ~6 s mỗi trận máy |
+| R109 | Xem nhanh dựng lại đúng hạt / agent / thứ tự ghế như trận đã ghi, nhưng không bao giờ đổi điểm đã ghi | Có thể khác chút với trận gốc |
+| R110 | "Bỏ giải, ghi danh lại" bấm hai lần để xác nhận | — |
+| R111 | Vào trận giải / Xưởng từ Pit thì robot của giải ghi đè robot đang chọn ở cài đặt | Em phải chọn lại robot sau giải |
+
+### Lưu trữ và mùa giải
+
+| # | Đã quyết | Nếu sai thì |
+|---|---|---|
+| R42 | Có đối tượng Mùa (`season.ts`), khoá lưu trữ theo mùa (`fanroc.v1.`…); chưa làm bộ máy nhiều mùa | Sửa nhỏ khi thêm mùa sau |
+| R47 | Mặc định: có âm thanh, máy mức Vừa, liên minh Đỏ, robot Mẫu Maker, một bạn chơi; tên "Bạn 1", "Bạn 2"; chưa có giải = chuỗi rỗng | Đổi mặc định |
+| R90 | Cài đặt có thêm robot của bạn 2; robot lưu được kiểm lại với danh sách robot | — |
+| R94 | Bản đang sửa ở Xưởng giữ trong phiên (mỗi bạn × robot), có nhãn "Chưa lưu"; Trước trận nhắc Lưu / Bỏ; trận luôn chạy bản đã lưu | Đổi cách nhắc |
+| R102 | Số sao trên hồ sơ = tổng sao tốt nhất các nhiệm vụ, ghi lại sau mỗi lần lưu | — |
+| R119 | Thẻ Luật chơi lấy từ `rules-data.ts`, chưa gắn vào đối tượng Mùa | Làm nhiều mùa thì chuyển vào gói mùa |
+
+### Nhiệm vụ con rùa
+
+| # | Đã quyết | Nếu sai thì |
+|---|---|---|
+| R35 | Phép thử nhiệm vụ không giao diện dùng sân thường, không bước trận (bóng nằm yên trong hộp) | Chậm hơn chút |
+| R48 | Quãng đường cộng mọi bước (lọc 5 mm chỉ cho điểm vẽ vệt); góc quay lấy đường ngắn nhất | Rung nhẹ cộng thêm chút quãng |
+| R49 | Thêm `layout.holeCentres()` dùng chung một nguồn với sân | — |
+| R50 | Hình vuông nhiệm vụ 7 cạnh 0,72 m nghiêng −8° quanh Núi A; nhiệm vụ 8 cạnh 0,70 m quanh Núi D (hở chỉ ~2 cm) | Đổi điểm xuất phát / đường gợi ý |
+| R51 | Nhiệm vụ 7, 8 không bắt "không chạm núi" (hở quá hẹp) | — |
+| R52 | Thêm loại mục tiêu: rẽ, thời gian, khối có ô số, điểm trận, đỗ trọn, đo tối thiểu; trường sao 2/3 | — |
+| R53 | Đứng yên không được sao: nhiệm vụ 7/8 còn đòi đi ≥ 2,4 / 2,3 m và quay ≥ 300° | — |
+| R54 | Tên nhiệm vụ 1 là "Làm quen robot" | Một chuỗi chữ |
+| R55 | Chấm cờ / hết giờ theo dòng chữ sự kiện của trận; đỗ xe đọc ô Đỏ 0; dọn Khu Chữa Cháy cần số đếm sân | Đổi chữ sự kiện thì phải sửa bộ chấm |
+| R56 | Nhiệm vụ 12: ⭐⭐ khi điểm trận ≥ 350, ⭐⭐⭐ khi ≥ 450 (4 máy Dễ trung bình 417) | **Chưa thử thật** — chỉnh ngưỡng |
+| R57 | Chấm khi: robot đứng yên 1 s sau khi đã chạy, hoặc em bấm Dừng / Chấm, hoặc hết thời gian tối đa; thời gian = từ ▶ tới lần chạy cuối | Chỉnh lại sao theo thời gian |
+| R58 | "Đang chạy" = tâm dời ≥ 5 mm hoặc hướng đổi ≥ 2° (quay tại chỗ không bị tính là đứng yên) | Hai hằng số trong `trail.ts` |
+| R59 | Luật đứng yên chỉ cho nhiệm vụ lập trình; nhiệm vụ lái tay chấm khi bấm, hết giờ, hoặc đứng yên ≥ 1 s mà đủ mục tiêu ⭐ | — |
+| R60 | Nhiệm vụ có bóng xả hết ngay lúc bắt đầu (38–52 bóng xanh rơi vào Khu Chữa Cháy) | — |
+| R61 | Nhiệm vụ dựng trận một robot (ghế 0, Đỏ) | Nhiệm vụ cần đối thủ phải đổi chế độ |
+| R62 | Nhiệm vụ không có Human Player, không giới hạn giờ, không phạt | — |
+| R95 | Không chấm "đứng yên" khi chương trình đang ở khối đợi (trừ khi vòng lặp rỗng) | Nhiệm vụ chỉ chấm khi bấm / hết giờ |
+| R96 | Sân nhiệm vụ cố định hạt 2; nhiệm vụ 9 được ⭐ khi còn ≤ 28 bóng xanh (lúc đầu ~40); "0 bóng trong 90 s" không làm nổi | **Cần chơi thử bằng bàn phím** rồi chỉnh |
+| R97 | Độ khó 12 nhiệm vụ: 1,1,2,2,3,3,4,4,3,3,4,5 | Chỉ là hình |
+| R98 | Vệt vẽ bằng dải phẳng 1,4 cm (đường gợi ý nét đứt trắng) vì nét WebGL 1 px gần như không thấy | — |
+| R99 | Bấm ▶ ở nhiệm vụ luôn làm lại từ đầu (robot về chỗ, xoá vệt); đang tạm dừng thì ▶ là chạy tiếp | Không "chạy tiếp từ đây" được |
+| R100 | Thẻ thử thách tự tích ✓ trong lúc chạy; kết quả chính thức sau khi chấm | Mục "tới chỗ" có thể tích rồi bỏ tích |
+| R101 | Nhiệm vụ 12 chỉ chấm lúc hết trận | — |
+
+### Giao diện
+
+| # | Đã quyết | Nếu sai thì |
+|---|---|---|
+| R67 | Vỏ giao diện có thêm vài hàm nhỏ (màn đang xem, thẻ panel, khoá thanh chạy, nút cúp) | — |
+| R68 | Khung ⚙ tạm và HUD cũ dùng tới Task 12/13 (đã thay hết) | — |
+| R70 | Side Bar Khối đóng sẵn khi vào trận; Xưởng / nhiệm vụ tự mở | — |
+| R71 | Màn hẹp ≤ 900 px: khung bên rộng mặc định `max(40 %, min(rộng − 48, 560))`; độ rộng em kéo được giữ | — |
+| R72 | Serial hiện của thẻ đang mở; huy hiệu đếm dòng mới cả khi chạm trần 20 000 ký tự | — |
+| R73 | Khối đang chạy sáng viền vàng 3 px (viền nổi mặc định của Blockly gần như không thấy) | — |
+| R74 | Panel đáy mở cao 160 px | — |
+| R75 | Dòng điểm nhận nhãn chương trình từng robot và trả cả bảng mục | — |
+| R76 | Bảng điểm, đồng hồ cập nhật 4 lần/giây | Đồng hồ trễ ≤ 0,25 s |
+| R77 | Báo điểm nổi chỉ trong lúc thi đấu (không lúc xả bóng); cả điểm giảm (xám); "ting" khi có điểm tăng | Lọc chỉ điểm tăng nếu rối |
+| R78 | Kiểm tra theo luật, vùng chết, chi tiết phạt chuyển vào thẻ "Sự kiện trận"; điểm đội và phạt có ở màn kết quả | — |
+| R79 | Nhiệm vụ ẩn bảng điểm trận | — |
+| R80, R81 | "Về màn chính" / "Trận kế tiếp" nối khi có màn chính và giải; ghế hiện "Mặc định", "Của em vN", "Máy Dễ/Vừa/Khó" | — |
+| R82 | Âm thanh đọc cài đặt mỗi lần phát | — |
+| R84 | Thanh "Tốc độ" bằng nhau cho mọi robot (cùng động cơ TT); cắm cờ, chứa bóng tính từ thông số robot | Chỉnh công thức thanh |
+| R87 | Sân Xưởng là đấu tập không bóng, 3 robot kia đứng yên | Đổi sang agent |
+| R88 | Nền màn chính là trận tập 4 máy Vừa đang chơi, dựng lại mỗi lần về màn chính | — |
+| R91 | Camera theo robot nâng lên 1,0 m, lùi 0,6 m (cũ thấp, bị rào che) | — |
+| R92 | Phép thử trình duyệt tua qua 10 s xả bóng bằng cách lùi đồng hồ trận (×40 bị khoá khi có chương trình) | — |
+| R113 | Hình thẻ Luật chơi là SVG vẽ từ số đo sân, không chụp sân 3D | Trông "vẽ" hơn ảnh thật |
+| R114 | Robot mẫu dùng một khung vẽ 3D nhỏ riêng, tạo khi vào, giải phóng khi rời | — |
+| R117 | Vùng khối Robot mẫu chỉ xem (không kéo được, không hộp công cụ) | Chép ~6 dòng màu từ `blocks.ts` |
+| R118 | Luật chơi, Robot mẫu là màn của bộ chuyển màn; Esc về màn chính | — |
+| R120 | "Mở trong Xưởng" mở cho bạn 1 | Bạn 2 phải đổi bạn ở thanh Xưởng |
+| R121 | Mũi tên ↓ từ hàng ô xuống hai mục Luật chơi / Robot mẫu | — |
+| R123 | Ở Luật chơi và Robot mẫu, sân nền tạm dừng (không chạy vật lý) và chỉ vẽ lại 2 lần/giây; về màn chính thì chạy tiếp. Robot mẫu không có WebGL thì báo một câu thay hình 3D | Nền đứng yên, camera quay giật nhẹ phía sau thẻ |
+
+### Luật và robot mẫu
+
+| # | Đã quyết | Nếu sai thì |
+|---|---|---|
+| R83 | Chưa hiện "cờ do robot liên minh nào cắm" (trận chưa ghi ai cắm); màn kết quả chỉ có tổng cờ chung | Thiếu một ý của đặc tả §6.1 |
+| R115 | Số điểm trên thẻ Luật chơi dò lúc chạy bằng sân giả (phần tính điểm không có hằng xuất ra, không được sửa) | Phụ thuộc hình dạng bảng đếm |
+| R116 | Ngưỡng chặn robot G15 (5 s) và danh sách lỗi trên thẻ được phép thử so với mã `match.ts` | Đổi cách viết `foul()` thì sửa phép thử |
+| R122 | Thẻ lỗi ghi mã lỗi (P12, S02, P10, G15) và câu "thẻ đỏ do trọng tài người, game không tự rút" | — |
+
+### Quy trình, đóng gói
+
+| # | Đã quyết | Nếu sai thì |
+|---|---|---|
+| R39 | Bản tải về máy đóng gói bằng Tauri 2 như ThingBlock desktop | Đổi cách đóng gói ở Task 18 |
+| R112 | Làm Task 17 (Luật chơi, Robot mẫu) trước Task 16 để phép thử đầu-cuối phủ cả hai màn | — |
+
+### Việc còn chờ anh
+
+- Mở thử 4 tệp `.tb` xuất ra trong ThingBlock desktop (kiểm bằng mắt, R41).
+- Chơi thử nhiệm vụ 9 bằng bàn phím xem ngưỡng ≤ 28 bóng có vừa sức không (R96).
+- Ngưỡng sao nhiệm vụ 12 (350 / 450 điểm) chưa thử thật (R56).
+- Đọc lại lời thẻ Luật chơi trước khi đem ra sự kiện công khai.
+- Xin phép ban tổ chức dùng tên FANROC trước khi công khai.
+- Hỏi anh trước khi đăng / push lưới núi CAD (`assets/mountain-mesh.json`, R12).
+- Chưa hiện cờ theo liên minh (R83).
+- Lỗi chung ở `src/blocks.ts` (`setToolbox` dùng lại khối cũ của khay khối khi đổi hộp công cụ) ảnh hưởng bài học robot.edu.vn — game đã tự tránh trong `editor.ts`, tệp chung chưa sửa.
+- Mã Arduino của khối của em có ô số chưa đúng trên ThingBot thật (R37) — cần sửa ở ThingBlock gốc.
