@@ -109,3 +109,39 @@ test('nextMatch sau 3 record = 3; record bất biến; JSON khứ hồi dùng l�
   for (let i = 3; i < 8; i++) done = record(done, i, { teams: {}, matchScore: 0 })
   assert.equal(nextMatch(done), null)
 })
+
+test('giữa giải: xếp theo tổng thô các trận đã đấu, provisional, không mất điểm trận mới', () => {
+  let s = mk(4)
+  const m0 = s.schedule[0]
+  s = record(s, 0, { teams: { [m0.red[0]]: { score: 50, penalty: 0 }, [m0.red[1]]: { score: 50, penalty: 0 }, [m0.blue[0]]: { score: 20, penalty: 0 }, [m0.blue[1]]: { score: 20, penalty: 0 } }, matchScore: 70 })
+  const st = standings(s)
+  assert.ok(st.every((x) => x.provisional))
+  assert.equal(rankOf(st, m0.red[0]).total, 50)
+  assert.equal(rankOf(st, m0.blue[0]).total, 20)
+  const played = new Set([...m0.red, ...m0.blue])
+  st.filter((x) => !played.has(x.id)).forEach((x) => assert.equal(x.total, 0))
+  assert.ok(rankOf(st, m0.red[0]).rank <= 2 && rankOf(st, m0.blue[0]).rank > rankOf(st, m0.red[0]).rank)
+  // 3 trận: không đội nào mất điểm trận mới nhất
+  for (let i = 1; i < 3; i++) {
+    const m = s.schedule[i]
+    s = record(s, i, { teams: Object.fromEntries([...m.red, ...m.blue].map((id) => [id, { score: 10, penalty: 0 }])), matchScore: 0 })
+  }
+  const st3 = standings(s)
+  const n = (id: string) => s.results.filter((r) => r?.teams[id]).length
+  st3.forEach((x) => assert.equal(x.counted.length, n(x.id)))
+  assert.ok(st3.every((x) => x.provisional))
+})
+
+test('đủ kết quả: provisional = false và áp luật E.2', () => {
+  let s = mk(4)
+  s.schedule.forEach((m, i) => {
+    s = record(s, i, { teams: Object.fromEntries([...m.red, ...m.blue].map((id) => [id, { score: 10 + i, penalty: 0 }])), matchScore: 0 })
+  })
+  const st = standings(s)
+  assert.ok(st.every((x) => !x.provisional && x.counted.length === 4))
+})
+
+test('machines tuỳ chọn thay MACHINE_TEAMS', () => {
+  const s = createTournament({ players: [{ name: 'A', robot }, { name: 'B', robot }], perTeam: 4, seed: 1, machines: MACHINE_TEAMS.slice(0, 5).concat(MACHINE_TEAMS.slice(0, 1).map((m) => ({ ...m, name: 'Khác' }))) })
+  assert.equal(s.entrants[7].name, 'Khác')
+})
