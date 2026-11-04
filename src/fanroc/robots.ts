@@ -132,3 +132,17 @@ export function ruleChecks(cfg: RobotConfig, extendNow: number, armFrac = 0): { 
   }
   return out
 }
+
+/** Cơ cấu M4 đẩy điểm xả / kẹp theo hướng nào (Mẫu Maker: thanh trượt tới trước; Xe Cắm Cờ: nâng thùng lên). */
+export const LIFT_AXIS: Partial<Record<RobotType, 'forward' | 'up'>> = { maker: 'forward', co: 'up' }
+
+/** Điểm kẹp cờ trong hệ toạ độ của hình robot (gốc tâm xe trên sàn, mũi +z), m — như RobotBody.gripPoint. */
+export function localGripPoint(def: RobotDef, extend: number, armFrac: number): { x: number; y: number; z: number } {
+  const fwd = LIFT_AXIS[def.type] === 'forward' ? extend : 0
+  const up = LIFT_AXIS[def.type] === 'up' ? extend : 0
+  return {
+    x: 0,
+    y: def.release.y + up + armFrac * (def.arm?.up ?? 0),
+    z: def.size.l / 2 + def.release.reach + fwd + armFrac * (def.arm?.reach ?? 0),
+  }
+}

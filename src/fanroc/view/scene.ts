@@ -16,6 +16,14 @@ import mesh from '../assets/mountain-mesh.json' with { type: 'json' }
 export type CameraView = 'field' | 'follow' | 'driver' | 'orbit'
 /** Vòng quay của camera màn chính, rad/s (một vòng ≈ 2 phút). */
 export const ORBIT_SPEED = 0.05
+
+/** Ba mức xa của góc Theo robot (lăn chuột đổi mức). Robot dài ~0,3 m: mức vừa thấy trọn robot ở nửa dưới màn và
+ *  đường phía trước; gần để xem cơ cấu; xa để thấy cả một góc sân. */
+export const FOLLOW_ZOOM = [0.6, 1, 1.6] as const
+/** Camera Theo robot ở mức `zoom`: lùi sau robot `back` m, cao `up` m, nhìn điểm trước mũi `ahead` m. */
+export function followOffset(zoom: number): { back: number; up: number; ahead: number } {
+  return { back: 0.95 * zoom, up: 0.12 + 0.55 * zoom, ahead: 0.25 + 0.3 * zoom }
+}
 export type Quality = 'low' | 'high'
 
 export interface FanrocScene {
@@ -472,6 +480,19 @@ export function createScene(el: HTMLElement): FanrocScene {
   let built: RobotBody[] | null = null
   let view: CameraView = 'field'
   let followIdx = 0
+  let followZoom = 1
+  let zoomEase = 0
+  // Lăn chuột ở góc Theo robot: đổi mức gần / vừa / xa (các góc khác OrbitControls tự phóng to).
+  renderer.domElement.addEventListener(
+    'wheel',
+    (e) => {
+      if (view !== 'follow') return
+      e.preventDefault()
+      followZoom = Math.max(0, Math.min(FOLLOW_ZOOM.length - 1, followZoom + Math.sign(e.deltaY)))
+      zoomEase = 40 // vài chục khung trượt mượt sang mức mới thay vì nhảy
+    },
+    { passive: false },
+  )
   let goal: { pos: THREE.Vector3; target: THREE.Vector3 } | null = null
   const dummy = new THREE.Object3D()
   const tmp = new THREE.Vector3()
@@ -646,11 +667,12 @@ export function createScene(el: HTMLElement): FanrocScene {
       const p = robots[followIdx].pose
       const fx = -Math.sin(p.yaw)
       const fz = -Math.cos(p.yaw)
-      // Sau-trên robot, đủ cao để nhìn qua rào (cao 0,3 m) khi robot còn ở ô xuất phát sát rào Khu Điều Khiển.
-      const pos = new THREE.Vector3(p.x - fx * 0.6, 1.0, p.z - fz * 0.6)
-      const target = new THREE.Vector3(p.x + fx * 0.35, 0.08, p.z + fz * 0.35)
+      // Sau-trên robot; mức vừa trở lên đủ cao để nhìn qua rào (0,3 m) khi robot còn ở ô xuất phát sát rào.
+      const o = followOffset(FOLLOW_ZOOM[followZoom])
+      const pos = new THREE.Vector3(p.x - fx * o.back, o.up, p.z - fz * o.back)
+      const target = new THREE.Vector3(p.x + fx * o.ahead, 0.06, p.z + fz * o.ahead)
       // Ở tốc độ xem cao robot đi xa mỗi khung: bám thẳng khi lệch nhiều, chỉ làm mượt khi lệch ít.
-      const k = camera.position.distanceTo(pos) > 0.12 ? 1 : 0.15
+      const k = zoomEase > 0 ? (zoomEase--, 0.12) : camera.position.distanceTo(pos) > 0.12 ? 1 : 0.15
       camera.position.lerp(pos, k)
       controls.target.lerp(target, k)
       return

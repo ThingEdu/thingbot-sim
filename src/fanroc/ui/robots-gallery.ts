@@ -2,7 +2,7 @@
 // (portMap), nút tay PS2 của chương trình TeleOp mẫu, vùng khối TeleOp chỉ xem, nút "Mở trong Xưởng".
 // Phần thuần (portRows, controlRows, sizeText) chạy được trong Node (robots-gallery.test.ts); three và scratch-blocks
 // chỉ nạp (import động) khi màn hiện ra. Rời màn ⇒ giải phóng WebGL (renderer, hình) và vùng khối.
-import { portMap, ROBOTS, type Actuator, type Drive, type RobotConfig, type RobotDef, type RobotType } from '../robots.ts'
+import { localGripPoint, portMap, ROBOTS, type Actuator, type Drive, type RobotConfig, type RobotDef, type RobotType } from '../robots.ts'
 import { sample, teleopButtons, type Ps2Button } from '../programs.ts'
 import { injectCss as homeCss, robotStats } from './home.ts'
 import { icon } from './icons.ts'
@@ -47,7 +47,15 @@ export const sizeText = (def: RobotDef): string => `${mm(def.size.w)} × ${mm(de
 // ---------- Hình 3D xoay chậm (một canvas nhỏ riêng, giải phóng khi rời màn) ----------
 interface Viewer {
   set(cfg: RobotConfig): void
+  /** Bật / tắt chạy thử cơ cấu (tay, kẹp, thanh trượt, cửa xả, con lăn chạy lần lượt theo vòng). */
+  demo(on: boolean): void
   dispose(): void
+}
+
+/** Tư thế cơ cấu lúc `t` giây khi chạy thử: chu kỳ 6 s — vươn / nâng, kẹp đóng mở, cửa xả, con lăn quay. */
+export function demoPose(def: RobotDef, t: number): { extend: number; armFrac: number; grip: boolean; gate: boolean; intake: number } {
+  const w = (Math.sin((t / 6) * Math.PI * 2 - Math.PI / 2) + 1) / 2
+  return { extend: def.maxExtend * w, armFrac: w, grip: t % 3 < 1.5, gate: t % 6 > 3, intake: 1 }
 }
 
 let liveViewers = 0
@@ -71,19 +79,36 @@ async function createViewer(host: HTMLElement, cfg: RobotConfig): Promise<Viewer
   const ground = new THREE.Mesh(groundGeo, groundMat)
   ground.rotation.x = -Math.PI / 2
   scene.add(ground)
-  const camera = new THREE.PerspectiveCamera(32, 1, 0.01, 10)
-  camera.position.set(0.62, 0.44, 0.62)
-  camera.lookAt(0, 0.09, 0)
+  const camera = new THREE.PerspectiveCamera(30, 1, 0.01, 10)
   const pose = { extend: 0, armFrac: 0, grip: true, gate: false, intake: 0, fwd: 0, dyaw: 0, hasFlag: false, grip3: new THREE.Vector3() }
   let model: ReturnType<typeof buildRobotModel> | null = null
+  let def = ROBOTS[cfg.type]
+  let demoT: number | null = null
+  const setPose = () => {
+    Object.assign(pose, demoT === null ? { extend: 0, armFrac: 0, grip: true, gate: false, intake: 0 } : demoPose(def, demoT))
+    const g = localGripPoint(def, pose.extend, pose.armFrac)
+    pose.grip3.set(g.x, g.y, g.z)
+    pose.hasFlag = def.flag && pose.grip
+  }
+  // Khung robot vừa khung hình: lùi camera theo cỡ robot (kể cả phần vươn tối đa) thay vì một khoảng cố định.
+  const frame3 = () => {
+    // Bán kính khối bao (xoay quanh trục đứng nên lấy cả đường chéo đáy) / tan(nửa góc nhìn), thêm lề.
+    const rad = Math.hypot(def.size.w, def.size.l + 2 * def.maxExtend, def.size.h) / 2
+    const d = (rad / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) * 1.08
+    camera.position.set(0.62, 0.5, 0.62).normalize().multiplyScalar(d)
+    camera.lookAt(0, def.size.h * 0.45, 0)
+  }
   const set = (c: RobotConfig) => {
     if (model) {
       scene.remove(model.group)
       model.dispose()
     }
+    def = ROBOTS[c.type]
     model = buildRobotModel(c, 'red')
+    setPose()
     model.update(pose)
     scene.add(model.group)
+    frame3()
   }
   set(cfg)
   const fit = () => {
@@ -101,7 +126,14 @@ async function createViewer(host: HTMLElement, cfg: RobotConfig): Promise<Viewer
   const frame = (now: number) => {
     const dt = Math.min(0.1, (now - last) / 1000)
     last = now
-    if (model) model.group.rotation.y += dt * 0.6
+    if (model) {
+      model.group.rotation.y += dt * (demoT === null ? 0.6 : 0.25)
+      if (demoT !== null) {
+        demoT += dt
+        setPose()
+        model.update(pose)
+      }
+    }
     renderer.render(scene, camera)
     raf = requestAnimationFrame(frame)
   }
@@ -109,6 +141,11 @@ async function createViewer(host: HTMLElement, cfg: RobotConfig): Promise<Viewer
   let alive = true
   return {
     set,
+    demo(on) {
+      demoT = on ? 0 : null
+      setPose()
+      model?.update(pose)
+    },
     dispose() {
       if (!alive) return
       alive = false
@@ -181,7 +218,10 @@ const CSS = `
 .rg-box h2 { margin: 0; font-size: 18px; font-weight: 900; color: #ffcf5a; }
 .rg-box h3 { margin: 4px 0 0; font-size: 13px; font-weight: 800; color: #c2cbea; text-transform: uppercase; letter-spacing: .5px; }
 .rg-box p { margin: 0; font-size: 13px; line-height: 1.5; color: #e4e8f5; }
-.rg-3d { position: relative; height: 230px; border-radius: 10px; background: radial-gradient(circle at 50% 40%, #2a3a78, #0b1230); overflow: hidden; }
+.rg-3d { position: relative; height: 300px; border-radius: 10px; background: radial-gradient(circle at 50% 40%, #2a3a78, #0b1230); overflow: hidden; }
+.rg-demo { margin-top: 8px; }
+.rg-demo button { padding: 7px 14px; font-size: 13.5px; }
+.rg-demo button[aria-pressed="true"] { background: #f2a516; border-color: #f2a516; color: #221; }
 .rg-3d canvas { display: block; width: 100% !important; height: 100% !important; }
 .rg-box table { border-collapse: collapse; width: 100%; font-size: 13px; }
 .rg-box td { padding: 4px 6px; border-top: 1px solid #fff1; color: #e4e8f5; vertical-align: top; line-height: 1.4; }
@@ -260,6 +300,8 @@ export function createRobotsGallery(root: HTMLElement, o: { season: string; open
 
   let cfg: RobotConfig = { type: 'maker', drive: 'diff2', actuator: 'tt' }
   let viewer: Viewer | null = null
+  /** Đang chạy thử cơ cấu (giữ khi đổi robot / đế: robot mới chạy thử luôn). */
+  let demoOn = false
   let code: CodeView | null = null
   /** Lần hiện màn: kết quả import động đến sau khi đã rời màn thì giải phóng ngay. */
   let token = 0
@@ -276,6 +318,7 @@ export function createRobotsGallery(root: HTMLElement, o: { season: string; open
     const again = a?.robot ? `.rg-pick [data-robot="${a.robot}"]` : a?.value ? `.pk-seg [data-value="${a.value}"]` : null
     if (again) box.querySelector<HTMLElement>(again)?.focus()
     viewer?.set(cfg)
+    if (demoOn) viewer?.demo(true)
     code?.load(sample(cfg, 'teleop'))
   }
 
@@ -308,7 +351,16 @@ export function createRobotsGallery(root: HTMLElement, o: { season: string; open
     const st = robotStats(cfg)
     view3d.setAttribute('aria-label', `${def.name} xoay chậm`)
     const left = el('div', 'rg-box')
-    left.append(view3d)
+    const demo = btn(demoOn ? 'Dừng thử cơ cấu' : 'Thử cơ cấu', () => {
+      demoOn = !demoOn
+      demo.textContent = demoOn ? 'Dừng thử cơ cấu' : 'Thử cơ cấu'
+      demo.setAttribute('aria-pressed', String(demoOn))
+      viewer?.demo(demoOn)
+    })
+    demo.setAttribute('aria-pressed', String(demoOn))
+    const demoRow = el('div', 'pk-acts rg-demo')
+    demoRow.append(demo)
+    left.append(view3d, demoRow)
     if (def.drives.length > 1) left.append(segment('Đế bánh', def.drives.map((d) => [d, DRIVE_NAME[d]] as [Drive, string]), cfg.drive, (d) => pick({ ...cfg, drive: d })))
     const hasMech = Object.keys(def.mech).length > 0
     if (hasMech) {
@@ -391,6 +443,7 @@ export function createRobotsGallery(root: HTMLElement, o: { season: string; open
         .then((v) => {
           if (mine !== token) return v.dispose()
           viewer = v
+          if (demoOn) v.demo(true)
           if (JSON.stringify(cfg) !== JSON.stringify(start)) v.set(cfg) // em đã chọn robot khác lúc đang nạp
         })
         .catch(fail(view3d, 'Máy này chưa vẽ được robot 3D. Em xem thông tin và cổng ở bên cạnh nhé.'))

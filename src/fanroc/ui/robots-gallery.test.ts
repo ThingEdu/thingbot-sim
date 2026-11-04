@@ -52,3 +52,12 @@ test('controlRows: nút tay PS2 lấy từ teleopButtons, kèm dòng cần lái 
   for (const [k, v] of Object.entries(btns)) assert.ok(rows.some((r) => r.port === k && r.use === v), k)
   assert.match(controlRows({ type: 'co', drive: 'omni', actuator: 'tt' })[0].use, /đi ngang/)
 })
+
+test('demoPose: chạy thử cơ cấu trong giới hạn của robot (vươn 0…maxExtend, tay 0…1, kẹp / cửa đổi theo nhịp)', async () => {
+  const { demoPose } = await import('./robots-gallery.ts')
+  const def = ROBOTS.maker
+  const ps = Array.from({ length: 61 }, (_, i) => demoPose(def, i / 10))
+  assert.ok(ps.every((p) => p.extend >= 0 && p.extend <= def.maxExtend + 1e-9 && p.armFrac >= 0 && p.armFrac <= 1))
+  assert.ok(ps[0].extend < 1e-9 && Math.abs(ps[30].extend - def.maxExtend) < 1e-9, 'đầu chu kỳ thu hết, giữa chu kỳ vươn hết')
+  assert.ok(ps.some((p) => p.grip) && ps.some((p) => !p.grip) && ps.some((p) => p.gate) && ps.some((p) => !p.gate))
+})

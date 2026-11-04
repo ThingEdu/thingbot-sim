@@ -10,7 +10,7 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import type { FanrocWorld } from './world.ts'
 import { HOLE, PEAK_Y, START_POSES, type Alliance, type Pose } from './layout.ts'
 import { servo360, type PortValues } from './ports.ts'
-import { ROBOTS, portMap, type PortMap, type RobotConfig, type RobotDef } from './robots.ts'
+import { LIFT_AXIS, ROBOTS, portMap, type PortMap, type RobotConfig, type RobotDef } from './robots.ts'
 
 export type Vec2 = { x: number; z: number }
 
@@ -49,7 +49,6 @@ const MASS = 1.2
  */
 export const WHEEL_SIGN = { FL: 1, FR: 1, RL: 1, RR: 1 }
 /** Cơ cấu nâng/vươn đi theo phương nào: Maker là thanh trượt vươn tới trước, Xe Cắm Cờ nâng thùng lên. */
-const LIFT_AXIS: Partial<Record<RobotDef['type'], 'forward' | 'up'>> = { maker: 'forward', co: 'up' }
 
 /** Mô hình động cơ TT: lệnh −100…100 → phần tốc độ −1…1, có vùng chết. */
 export function ttFraction(cmd: number): number {
