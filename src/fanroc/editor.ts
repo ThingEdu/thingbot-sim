@@ -285,6 +285,12 @@ export function createEditors(container: HTMLElement, robots: { label: string; c
   }
   show(0)
 
+  /** Ẩn lời nhắc "khối của em có ô số" (hiện lúc tải .tb, R37). */
+  const clearWarn = (t: Tab) => {
+    t.warn.hidden = true
+    t.warn.textContent = ''
+  }
+
   const startIfOpen = (link: RobotLink) => {
     if (link.state === 'loaded' && gate()) link.start()
   }
@@ -295,11 +301,13 @@ export function createEditors(container: HTMLElement, robots: { label: string; c
     },
     program: (i) => ScratchBlocks.serialization.workspaces.save(tabs[i].blocks.workspace),
     load(i, state) {
+      clearWarn(tabs[i])
       tabs[i].blocks.load(state)
       tabs[i].shownW = tabs[i].panel.clientWidth
     },
     run(i) {
       const t = tabs[i]
+      clearWarn(t) // lời nhắc .tb khối ô số chỉ cho lần tải vừa rồi
       t.link.stop()
       const { code, error } = t.blocks.simCode()
       const ok = t.link.load(code, error)

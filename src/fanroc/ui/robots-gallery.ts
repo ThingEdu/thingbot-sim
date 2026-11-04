@@ -187,6 +187,8 @@ const CSS = `
 .rg-box td { padding: 4px 6px; border-top: 1px solid #fff1; color: #e4e8f5; vertical-align: top; line-height: 1.4; }
 .rg-box td:first-child { font-weight: 900; color: #ffcf5a; white-space: nowrap; width: 1%; }
 .rg-ws { height: 380px; border-radius: 10px; overflow: hidden; background: #fff; position: relative; }
+.rg-fail { margin: 0; padding: 14px; font-size: 13.5px; line-height: 1.5; color: #ffcf5a; }
+.rg-ws .rg-fail { color: #7a4b00; }
 .rg-ws-note { font-size: 12px !important; color: #aab3c7 !important; }
 @media (max-width: 1100px) { .rg-body { grid-template-columns: minmax(0, 300px) minmax(0, 1fr); } .rg-body .rg-code { grid-column: 1 / -1; } }
 @media (max-width: 700px) { .rg-body { grid-template-columns: minmax(0, 1fr); } .rg-3d { height: 200px; } .rg-ws { height: 320px; } }
@@ -361,6 +363,7 @@ export function createRobotsGallery(root: HTMLElement, o: { season: string; open
     code?.dispose()
     code = null
     wsHost.replaceChildren()
+    view3d.querySelector('.rg-fail')?.remove()
   }
 
   return {
@@ -378,16 +381,26 @@ export function createRobotsGallery(root: HTMLElement, o: { season: string; open
       box.scrollTop = 0
       box.querySelector<HTMLButtonElement>(`.rg-pick .pk-card[data-robot="${cfg.type}"]`)?.focus()
       const mine = token
-      void createViewer(view3d, cfg).then((v) => {
-        if (mine !== token) return v.dispose()
-        viewer = v
-        if (JSON.stringify(cfg) !== JSON.stringify(start)) v.set(cfg) // em đã chọn robot khác lúc đang nạp
-      })
-      void createCodeView(wsHost).then((c) => {
-        if (mine !== token) return c.dispose()
-        code = c
-        c.load(sample(cfg, 'teleop'))
-      })
+      // Máy không có WebGL / tải mô-đun hỏng: báo một câu thay cho hình, phần thông tin bên cạnh vẫn dùng được.
+      const fail = (host: HTMLElement, text: string) => (e: unknown) => {
+        if (mine !== token) return
+        console.warn('Robot mẫu:', e)
+        host.replaceChildren(el('p', 'rg-fail', text))
+      }
+      createViewer(view3d, cfg)
+        .then((v) => {
+          if (mine !== token) return v.dispose()
+          viewer = v
+          if (JSON.stringify(cfg) !== JSON.stringify(start)) v.set(cfg) // em đã chọn robot khác lúc đang nạp
+        })
+        .catch(fail(view3d, 'Máy này chưa vẽ được robot 3D. Em xem thông tin và cổng ở bên cạnh nhé.'))
+      createCodeView(wsHost)
+        .then((c) => {
+          if (mine !== token) return c.dispose()
+          code = c
+          c.load(sample(cfg, 'teleop'))
+        })
+        .catch(fail(wsHost, 'Chưa mở được vùng khối. Em bấm «Mở trong Xưởng» để xem chương trình mẫu.'))
     },
     hide() {
       box.hidden = true

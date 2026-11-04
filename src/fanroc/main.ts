@@ -64,6 +64,8 @@ const ALLIANCE_SEAT = ['Đỏ', 'Xanh', 'Đỏ', 'Xanh']
 const MAX_STEPS = 4
 /** Ngân sách thời gian chạy vật lý mỗi khung, ms. */
 const STEP_BUDGET_MS = 45
+/** Màn sân nền đứng yên (chrome.live = false): khoảng cách giữa hai lần vẽ sân, ms. */
+const IDLE_DRAW_MS = 500
 const SPEEDS = [1, 4, 40]
 const CAMERAS: CameraView[] = ['field', 'follow', 'driver']
 const PLAYERS = [0, 1] as const
@@ -1261,6 +1263,7 @@ async function start(): Promise<void> {
 
   let last = performance.now()
   let lastPreview = 0
+  let lastIdleDraw = 0
   const frame = (now: number) => {
     const { pads, status } = seats.read()
     for (const p of PLAYERS) editors.input(p, padOf(p, pads))
@@ -1274,7 +1277,8 @@ async function start(): Promise<void> {
     if (now > last) fps += (1000 / (now - last) - fps) * 0.05
     last = now
     // Trận máy đang chạy ngầm (màn giải đấu): sân nền đứng yên để nhường máy cho trận ngầm.
-    if (chrome(screen).live && !(screen === 'tournament' && machineRun)) game.advance(dt, speed, { steps: MAX_STEPS * Math.max(1, speed), ms: STEP_BUDGET_MS })
+    const live = chrome(screen).live
+    if (live && !(screen === 'tournament' && machineRun)) game.advance(dt, speed, { steps: MAX_STEPS * Math.max(1, speed), ms: STEP_BUDGET_MS })
     if (screen === 'mission' && mission) {
       // Vệt + đường gợi ý, ô số đo, thẻ thử thách tự tích ✓ (chấm thử ≤ PREVIEW_HZ lần/giây).
       const tr = mrun?.trail
@@ -1285,7 +1289,11 @@ async function start(): Promise<void> {
         missionHud.goals(mrun.preview(missionView).goals, null)
       }
     }
-    scene.sync(game.world, game.robots, game.match, game.ports)
+    // Sân nền đứng yên (Luật chơi, Robot mẫu): vẽ lại thưa (2 lần/giây) để đổi cỡ cửa sổ không để sân trống.
+    if (live || now - lastIdleDraw >= IDLE_DRAW_MS) {
+      lastIdleDraw = now
+      scene.sync(game.world, game.robots, game.match, game.ports)
+    }
     hud.update(game.match, game.robots, game.cfgs, game.ports)
     showBoard(now)
     showRun(status)

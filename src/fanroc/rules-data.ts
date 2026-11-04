@@ -297,7 +297,7 @@ export function fanrocRules(): RuleCard[] {
     {
       id: 'faults',
       title: 'Lỗi thường gặp',
-      lead: `Trọng tài tự động của game bắt các lỗi dưới đây. Lỗi nhẹ trừ ${POINTS.minor} điểm, thẻ vàng trừ ${POINTS.yellow} điểm của đội mắc lỗi; thẻ đỏ thì đội đó được 0 điểm trận.`,
+      lead: `Trọng tài tự động của game bắt các lỗi dưới đây. Lỗi nhẹ trừ ${POINTS.minor} điểm, thẻ vàng trừ ${POINTS.yellow} điểm của đội mắc lỗi; thẻ đỏ thì đội đó được 0 điểm (các đội khác vẫn nhận điểm trận).`,
       rows: FAULTS.map((f) => ({ label: `${f.name} (${f.code})`, value: f.text })),
       bullets: ['Đấu tập: lỗi vẫn hiện trong Sự kiện trận để em biết, nhưng không bị trừ điểm.'],
       note: 'Trận thật còn có trọng tài người: thẻ đỏ và các lỗi khác do trọng tài quyết định, game này không tự rút thẻ đỏ.',
@@ -309,7 +309,7 @@ export function fanrocRules(): RuleCard[] {
       title: 'Giải đấu',
       lead: `Giải có ${TEAM_COUNT} đội đấu vòng xếp hạng: mỗi đội đấu ${PER_TEAM.min}–${PER_TEAM.max} trận (chọn lúc ghi danh).`,
       bullets: [
-        'Mỗi lượt, đồng đội và đối thủ được bốc thăm ngẫu nhiên — trận này là đồng đội, trận sau có thể là đối thủ.',
+        'Mỗi lượt, robot cùng màu và robot liên minh khác màu được bốc thăm ngẫu nhiên — trận này cùng màu, trận sau có thể khác màu. Cả bốn đội vẫn cùng nhận điểm trận.',
         'Hạng xếp theo tổng điểm đội của các trận.',
         'Bằng điểm thì so trận cao điểm nhất, rồi đến đội ít điểm phạt hơn; vẫn bằng nữa thì bốc thăm.',
         'Hết vòng xếp hạng: ba đội đứng đầu lên bục trao giải.',

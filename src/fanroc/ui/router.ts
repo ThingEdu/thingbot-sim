@@ -37,7 +37,7 @@ export interface ScreenChrome {
   runbar: boolean
   /** Bảng điểm trận Đỏ | chung | Xanh. */
   scoreboard: boolean
-  /** Sân chạy vật lý (màn chính: robot máy chơi nền). */
+  /** Sân chạy vật lý và vẽ mỗi khung (màn chính: robot máy chơi nền); false = sân nền đứng yên, vẽ thưa. */
   live: boolean
 }
 
@@ -45,9 +45,11 @@ export interface ScreenChrome {
 export function chrome(s: Screen): ScreenChrome {
   switch (s) {
     case 'home':
+      return { activity: [], runbar: false, scoreboard: false, live: true }
     case 'rules':
     case 'robots':
-      return { activity: [], runbar: false, scoreboard: false, live: true }
+      // Sân nền tạm dừng: em đọc chữ / xoay robot mẫu (Robot mẫu có ngữ cảnh WebGL riêng), không cần vật lý phía sau.
+      return { activity: [], runbar: false, scoreboard: false, live: false }
     case 'match':
     case 'practice':
     case 'tmatch':

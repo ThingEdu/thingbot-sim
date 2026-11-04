@@ -535,7 +535,6 @@ export function createShell(root: HTMLElement): Shell {
     sash.addEventListener('pointercancel', up)
   }
 
-  // Đổi cỡ cửa sổ: khung bên chưa kéo tay thì theo độ rộng mặc định của cỡ mới.
   // Đổi cỡ cửa sổ: độ rộng đã kéo tay kẹp lại trong 280 px … 70 % của cỡ mới; chưa kéo thì theo mặc định của cỡ mới.
   addEventListener('resize', () => {
     for (const v of Object.keys(widths) as SideView[]) widths[v] = clampSide(widths[v]!, innerWidth)

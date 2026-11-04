@@ -89,3 +89,13 @@ test('FAULTS: đúng các lỗi trọng tài tự động trong match.ts, mức 
   const all = [faults.lead, ...(faults.bullets ?? []), ...(faults.rows ?? []).flatMap((r) => [r.label, r.value])].join(' ')
   assert.ok(all.includes(signed(-POINTS.minor)) && all.includes(signed(-POINTS.yellow)), all)
 })
+
+test('lời thẻ khớp luật chung điểm: không gọi liên minh kia là "đối thủ"; thẻ đỏ ⇒ đội được 0 điểm (không phải 0 điểm trận)', () => {
+  const cards = fanrocRules()
+  const all = cards.flatMap((c) => [c.lead, ...(c.bullets ?? []), ...(c.rows ?? []).flatMap((r) => [r.label, r.value]), c.note ?? '']).join(' ')
+  assert.ok(!/đối thủ/i.test(all), 'còn chữ "đối thủ" — cả 4 đội nhận chung điểm trận')
+  const faults = cards.find((c) => c.id === 'faults')!
+  assert.ok(!faults.lead.includes('0 điểm trận') && /thẻ đỏ thì đội đó được 0 điểm/.test(faults.lead), faults.lead)
+  // Khớp teamScore: thẻ đỏ ⇒ điểm đội 0 dù điểm trận cao.
+  assert.equal(teamScore(500, { minor: 0, yellow: 0, red: true }), 0)
+})

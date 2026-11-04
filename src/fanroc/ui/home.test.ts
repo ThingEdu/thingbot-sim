@@ -84,7 +84,8 @@ test('router: màn chính không có cột biểu tượng / thanh chạy / bả
   assert.equal(chrome('workshop').scoreboard, false)
   assert.ok(chrome('workshop').activity.includes('blocks'))
   assert.equal(chrome('mission').scoreboard, false)
-  // Luật chơi, Robot mẫu: phủ sân như màn chính (sân chạy nền), không cột biểu tượng / thanh chạy / bảng điểm.
-  assert.deepEqual(chrome('rules'), chrome('home'))
-  assert.deepEqual(chrome('robots'), chrome('home'))
+  // Luật chơi, Robot mẫu: phủ sân như màn chính, không cột biểu tượng / thanh chạy / bảng điểm; sân nền tạm dừng
+  // (đọc chữ / xoay robot mẫu, không tốn máy cho vật lý + vẽ sân phía sau).
+  assert.deepEqual(chrome('rules'), { ...chrome('home'), live: false })
+  assert.deepEqual(chrome('robots'), { ...chrome('home'), live: false })
 })
