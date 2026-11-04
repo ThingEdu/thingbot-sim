@@ -41,6 +41,10 @@ export class RobotLink {
   block: string | undefined = undefined
   /** Chữ Serial bo ảo đã in, cộng dồn từ lần nạp (giữ SERIAL_MAX ký tự cuối). */
   serial = ''
+  /** Tổng số ký tự / dòng (ký tự xuống dòng) Serial đã nhận từ lần nạp, không bị trần SERIAL_MAX cắt: trang đếm dòng
+   *  mới bằng hiệu hai lần đọc (chuỗi `serial` đã chạm trần thì hai lần đọc có thể giống hệt nhau). */
+  serialChars = 0
+  serialLines = 0
   /** Thời gian ảo của bo (µs, `snapshot.t`). */
   virtualT = 0
   onError?: (message: string) => void
@@ -49,6 +53,10 @@ export class RobotLink {
   private readonly post: (c: Command) => void
   private readonly feed = new PadFeed()
   private run = 0
+  /** Số lần nạp (tăng mỗi `load`): trang biết `serial*` đã bắt đầu lại. */
+  get loads(): number {
+    return this.run
+  }
   private pwm: number[] | null = null
   private pad: Ps2State | null = null
   /**
@@ -72,6 +80,8 @@ export class RobotLink {
     this.run++
     this.block = undefined
     this.serial = ''
+    this.serialChars = 0
+    this.serialLines = 0
     this.virtualT = 0
     this.error = null
     this.settle()
@@ -142,7 +152,11 @@ export class RobotLink {
     if (msg.type === 'error') this.fail(msg.message)
     else if (msg.type === 'snapshot') {
       const s = msg.snapshot
-      if (s.serial) this.serial = (this.serial + s.serial).slice(-SERIAL_MAX)
+      if (s.serial) {
+        this.serial = (this.serial + s.serial).slice(-SERIAL_MAX)
+        this.serialChars += s.serial.length
+        for (let k = s.serial.indexOf('\n'); k >= 0; k = s.serial.indexOf('\n', k + 1)) this.serialLines++
+      }
       if (s.block !== undefined) this.block = s.block
       if (typeof s.t === 'number') this.virtualT = s.t
       if (s.error) this.fail(s.error)

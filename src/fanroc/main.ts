@@ -33,7 +33,7 @@ import { defaultConfig } from './programs.ts'
 import { NEUTRAL } from './ports.ts'
 import { createScene, defaultQuality, type CameraView, type Quality } from './view/scene.ts'
 import { createHud } from './view/hud.ts'
-import { createShell, highlightCpp, serialNews, type InputKind } from './ui/shell.ts'
+import { createShell, highlightCpp, serialNews, serialPatch, type InputKind, type SerialMark } from './ui/shell.ts'
 
 const shell = createShell(document.querySelector<HTMLElement>('#app')!)
 const stage = shell.stage
@@ -189,29 +189,40 @@ async function start(): Promise<void> {
   })
   showCode()
 
-  // Khung đáy "Serial": chữ bo ảo của thẻ đang mở in ra; dòng mới khi khung đóng ⇒ số đỏ trên biểu tượng Serial.
+  // Khung đáy "Serial": chữ bo ảo của thẻ đang mở in ra. Dòng mới đếm bằng bộ đếm của RobotLink (đúng cả khi chuỗi đã
+  // chạm trần SERIAL_MAX); khi khung không mở trên Serial ⇒ số đỏ trên biểu tượng. Chỉ vẽ khi thẻ Serial đang hiện và
+  // có chữ mới: nối phần thêm, vẽ lại cả chuỗi khi nạp lại / trần cắt đầu.
   const serialPre = Object.assign(document.createElement('pre'), { className: 'sh-serial' })
   shell.panel.serial.append(serialPre)
+  const markOf = (l: RobotLink): SerialMark => ({ loads: l.loads, chars: l.serialChars, lines: l.serialLines, len: l.serial.length })
   let serialOf = -1
-  let serialPrev = ''
+  let counted: SerialMark | null = null
+  let drawn: SerialMark | null = null
   let serialUnseen = 0
   const showSerial = () => {
     const i = editors.active
-    const s = editors.link(i).serial
+    const link = editors.link(i)
+    const m = markOf(link)
     if (i !== serialOf) {
+      // Đổi thẻ robot: số chưa xem tính lại từ thẻ mới, khung vẽ lại cả chuỗi.
       serialOf = i
-      serialPrev = s
-      serialPre.textContent = s
-    } else if (s !== serialPrev) {
-      const n = serialNews(serialPrev, s)
-      serialPrev = s
-      const body = shell.panel.serial
-      const atEnd = body.scrollTop + body.clientHeight >= body.scrollHeight - 4
-      serialPre.textContent = s
-      if (atEnd) body.scrollTop = body.scrollHeight
-      if (shell.panelTab !== 'serial') serialUnseen += n
+      serialUnseen = 0
+      drawn = null
+    } else if (counted && shell.panelTab !== 'serial') serialUnseen += serialNews(counted, m)
+    counted = m
+    if (shell.panelTab === 'serial') {
+      serialUnseen = 0
+      const patch = serialPatch(drawn, m)
+      if (patch !== 'same') {
+        const body = shell.panel.serial
+        const atEnd = body.scrollTop + body.clientHeight >= body.scrollHeight - 4
+        const text = serialPre.firstChild as Text | null
+        if (patch === 'full' || !text) serialPre.textContent = link.serial // chuỗi rỗng ⇒ không còn nút chữ: hiện lời nhắc
+        else text.appendData(link.serial.slice(-patch))
+        if (atEnd) body.scrollTop = 1e9 // trình duyệt tự kẹp về cuối, không đọc lại kích thước
+        drawn = m
+      }
     }
-    if (shell.panelTab === 'serial') serialUnseen = 0
     shell.badge('serial', serialUnseen)
   }
 
@@ -303,10 +314,9 @@ async function start(): Promise<void> {
   }
   const handlers = {
     run() {
-      const i = editors.active
-      if (game.paused && editors.state(i) === 'paused') return setPaused(false)
-      if (game.paused) setPaused(false)
-      runProgram(i)
+      // Đang tạm dừng: Chạy chỉ là chạy tiếp, không nạp lại / không đổi người lái của thẻ đang mở.
+      if (game.paused) return setPaused(false)
+      runProgram(editors.active)
     },
     pause: () => setPaused(true),
     step: () => void stepBlock(),
@@ -409,8 +419,9 @@ async function start(): Promise<void> {
   let fps = 60
   const showRun = (status: SeatStatus[]) => {
     const i = editors.active
-    const state: LinkState = game.paused ? 'paused' : editors.state(i)
-    shell.runbar(handlers, state, game.stepping)
+    const state: LinkState = editors.state(i)
+    const canStep = game.robots.some((_, k) => game.driver(k).kind === 'program')
+    shell.runbar(handlers, state, { busy: game.stepping, paused: game.paused, canStep })
     for (const k of [0, 1]) {
       const s = editors.state(k)
       editors.highlight(k, s === 'running' || s === 'paused' ? editors.link(k).block : undefined)

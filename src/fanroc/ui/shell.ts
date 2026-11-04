@@ -45,10 +45,10 @@ export interface Shell {
   /** Số đỏ trên biểu tượng (0 = ẩn). */
   badge(view: 'serial', n: number): void
   /**
-   * Nối nút của thanh chạy và tô theo trạng thái bo ảo ('none' = không có chương trình). `busy` = đang chạy từng khối:
-   * khoá Chạy / Tạm dừng / Chạy từng khối tới khi khối chạy xong. Gọi mỗi khung được (chỉ đổi DOM khi khác).
+   * Nối nút của thanh chạy và tô theo trạng thái bo ảo của thẻ đang mở ('none' = không có chương trình) và phiên
+   * (`runState`). Gọi mỗi khung được (chỉ đổi DOM khi khác).
    */
-  runbar(h: RunHandlers, state: LinkState | 'none', busy?: boolean): void
+  runbar(h: RunHandlers, state: LinkState | 'none', opts?: RunOpts): void
   status(s: StatusInfo): void
   /** Màn nào hiện biểu tượng nào (⚙ luôn có). */
   activity(items: Activity[]): void
@@ -110,19 +110,54 @@ export function highlightCpp(code: string): string {
 }
 
 // ---------- Serial ----------
-const lines = (s: string) => (s.match(/\n/g) ?? []).length
+/** Một lần đọc Serial của RobotLink: lần nạp (`loads`), tổng ký tự / dòng đã nhận (`serialChars` / `serialLines`, không
+ *  bị trần cắt) và độ dài chuỗi `serial` đang giữ. */
+export interface SerialMark {
+  loads: number
+  chars: number
+  lines: number
+  len: number
+}
+
+/** Số dòng Serial mới giữa hai lần đọc: hiệu bộ đếm (chuỗi đã chạm trần SERIAL_MAX có thể giống hệt nhau); nạp lại ⇒
+ *  đếm từ đầu lần nạp mới. */
+export function serialNews(prev: SerialMark, next: SerialMark): number {
+  return prev.loads !== next.loads ? next.lines : Math.max(0, next.lines - prev.lines)
+}
 
 /**
- * Số dòng Serial mới (đã xuống dòng) giữa hai lần đọc `RobotLink.serial` (chuỗi cộng dồn, giữ SERIAL_MAX ký tự cuối).
- * Nối tiếp ⇒ đếm phần thêm; nạp lại (chuỗi bắt đầu lại) ⇒ đếm cả chuỗi mới; trần cắt đầu ⇒ ít nhất 1 (có chữ mới).
+ * Cách vẽ khung Serial từ lần vẽ trước `prev` tới `next`: 'same' (không đổi), số n = nối n ký tự cuối, 'full' = vẽ lại
+ * cả chuỗi (chưa vẽ lần nào, nạp lại, hay trần cắt đầu chuỗi).
  */
-export function serialNews(prev: string, next: string): number {
-  if (next === prev) return 0
-  if (next.startsWith(prev)) return lines(next) - lines(prev)
-  // Trần SERIAL_MAX cắt đầu: chuỗi mới = (cũ + phần thêm) bỏ k ký tự đầu ⇒ bắt đầu bằng một đuôi của chuỗi cũ.
-  const limit = Math.min(prev.length - 1, 4096)
-  for (let k = 1; k <= limit; k++) if (next.startsWith(prev.slice(k))) return lines(next.slice(prev.length - k))
-  return lines(next) // nạp lại: chuỗi bắt đầu lại từ đầu
+export function serialPatch(prev: SerialMark | null, next: SerialMark): 'same' | 'full' | number {
+  if (!prev || prev.loads !== next.loads) return 'full'
+  const d = next.chars - prev.chars
+  if (d === 0) return 'same'
+  return d > 0 && next.len === prev.len + d ? d : 'full'
+}
+
+// ---------- Thanh chạy ----------
+export interface RunOpts {
+  /** Đang chạy từng khối: khoá Chạy / Tạm dừng / Chạy từng khối tới khi khối chạy xong. */
+  busy?: boolean
+  /** Phiên đang tạm dừng (có thể không có chương trình nào). */
+  paused?: boolean
+  /** Có ghế nào do chương trình khối lái không (không ⇒ Chạy từng khối không có gì để chạy). */
+  canStep?: boolean
+}
+/** Nút nào khoá (true = disabled) và nút nào sáng, theo bo ảo của thẻ đang mở và phiên. */
+export function runState(state: LinkState | 'none', o: RunOpts) {
+  const busy = o.busy ?? false
+  const paused = o.paused ?? state === 'paused'
+  const live = state === 'loaded' || state === 'running' || state === 'paused'
+  return {
+    run: busy,
+    pause: busy || paused,
+    step: busy || o.canStep === false,
+    stop: !live,
+    runOn: state === 'running' && !paused,
+    pauseOn: paused,
+  }
 }
 
 // ---------- Thanh trạng thái ----------
@@ -417,18 +452,18 @@ export function createShell(root: HTMLElement): Shell {
       serialBadge.hidden = n <= 0
       if (serialBadge.textContent !== text) serialBadge.textContent = text
     },
-    runbar(h, state, busy = false) {
+    runbar(h, state, opts = {}) {
       handlers = h
-      const live = state === 'loaded' || state === 'running' || state === 'paused'
+      const r = runState(state, opts)
       const set = (b: HTMLButtonElement, disabled: boolean, pressed: boolean) => {
         if (b.disabled !== disabled) b.disabled = disabled
         const p = String(pressed)
         if (b.getAttribute('aria-pressed') !== p) b.setAttribute('aria-pressed', p)
       }
-      set(runBtn.run, busy, state === 'running')
-      set(runBtn.pause, busy || state === 'paused', state === 'paused')
-      set(runBtn.step, busy, false)
-      set(runBtn.stop, !live, false)
+      set(runBtn.run, r.run, r.runOn)
+      set(runBtn.pause, r.pause, r.pauseOn)
+      set(runBtn.step, r.step, false)
+      set(runBtn.stop, r.stop, false)
     },
     status(s) {
       const [robot, input, ports, block, fps] = statusText(s)
@@ -495,8 +530,10 @@ export function createShell(root: HTMLElement): Shell {
   }
 
   // Đổi cỡ cửa sổ: khung bên chưa kéo tay thì theo độ rộng mặc định của cỡ mới.
+  // Đổi cỡ cửa sổ: độ rộng đã kéo tay kẹp lại trong 280 px … 70 % của cỡ mới; chưa kéo thì theo mặc định của cỡ mới.
   addEventListener('resize', () => {
-    if (view && widths[view] === undefined) sideEl.style.width = `${widthOf(view)}px`
+    for (const v of Object.keys(widths) as SideView[]) widths[v] = clampSide(widths[v]!, innerWidth)
+    if (view) sideEl.style.width = `${widthOf(view)}px`
   })
 
   api.activity(['blocks', 'code', 'serial'])

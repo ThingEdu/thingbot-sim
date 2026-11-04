@@ -174,6 +174,25 @@ test('snapshot: block, virtualT, serial cộng dồn (cắt 20 000 ký tự cu�
   assert.equal(link.virtualT, 0)
 })
 
+test('serialChars / serialLines đếm cả khi chuỗi đã chạm trần (7000 × "hi\\n" rồi 10 dòng ⇒ +10); nạp lại về 0', () => {
+  const { link, sent } = setup()
+  link.load('x')
+  const run = runOf(sent)
+  link.start()
+  link.receive(snapOf(run, { serial: 'hi\n'.repeat(7000) }))
+  const before = { text: link.serial, chars: link.serialChars, lines: link.serialLines, loads: link.loads }
+  assert.equal(before.lines, 7000)
+  assert.equal(before.chars, 21_000)
+  link.receive(snapOf(run, { serial: 'hi\n'.repeat(10) }))
+  assert.equal(link.serial, before.text, 'chuỗi đã chạm trần: hai lần đọc giống hệt nhau')
+  assert.equal(link.serialLines - before.lines, 10)
+  assert.equal(link.serialChars - before.chars, 30)
+  link.load('y')
+  assert.equal(link.serialLines, 0)
+  assert.equal(link.serialChars, 0)
+  assert.equal(link.loads, before.loads + 1)
+})
+
 test('tạm dừng: tay cầm vẫn gửi (lần chạy từng khối kế đọc đúng tay)', () => {
   const { link, sent } = setup()
   link.load('x')

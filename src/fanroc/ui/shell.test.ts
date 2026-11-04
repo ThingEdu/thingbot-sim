@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { clampSide, defaultSide, highlightCpp, serialNews, statusText } from './shell.ts'
+import { clampSide, defaultSide, highlightCpp, runState, serialNews, serialPatch, statusText } from './shell.ts'
 import { ICON_NAMES, ICON_PATHS } from './icons.ts'
 import { NEUTRAL } from '../ports.ts'
 
@@ -17,13 +17,30 @@ test('highlightCpp: thoát HTML, tô từ khoá / số / chú thích, không tô
   assert.match(h2, /motorM1\(a10, <span class="n">2\.5<\/span>\);/)
 })
 
-test('serialNews: đếm dòng mới; nạp lại thì đếm lại từ đầu; cắt đuôi ở trần vẫn báo có dòng mới', () => {
-  assert.equal(serialNews('', 'a\nb\n'), 2)
-  assert.equal(serialNews('a\n', 'a\nb\nc'), 1)
-  assert.equal(serialNews('a\nb\n', 'a\nb\n'), 0)
-  assert.equal(serialNews('a\nb\nc\n', 'x\n'), 1) // bo ảo nạp lại: serial bắt đầu lại
-  assert.equal(serialNews('a\nb\n', 'b\nc\n'), 1) // trần SERIAL_MAX cắt đầu: có chữ mới
-  assert.equal(serialNews('a', 'ab'), 0) // chưa hết dòng
+test('serialNews: đếm theo bộ đếm của RobotLink, kể cả khi chuỗi đã chạm trần (7000 × "hi\\n" rồi 10 dòng ⇒ 10)', () => {
+  const capped = { loads: 1, chars: 21_000, lines: 7000, len: 20_000 }
+  assert.equal(serialNews(capped, { ...capped, chars: 21_030, lines: 7010 }), 10)
+  assert.equal(serialNews(capped, capped), 0)
+  // Nạp lại: đếm từ đầu theo lần nạp mới.
+  assert.equal(serialNews(capped, { loads: 2, chars: 4, lines: 2, len: 4 }), 2)
+})
+
+test('serialPatch: chưa chạm trần ⇒ chỉ nối phần thêm; trần cắt đầu hoặc nạp lại ⇒ vẽ lại cả khung', () => {
+  const a = { loads: 1, chars: 10, lines: 2, len: 10 }
+  assert.equal(serialPatch(a, a), 'same')
+  assert.equal(serialPatch(a, { loads: 1, chars: 13, lines: 3, len: 13 }), 3)
+  assert.equal(serialPatch({ ...a, chars: 19_990, len: 19_990 }, { loads: 1, chars: 20_020, lines: 9, len: 20_000 }), 'full')
+  assert.equal(serialPatch(a, { loads: 2, chars: 13, lines: 3, len: 13 }), 'full')
+  assert.equal(serialPatch(null, a), 'full')
+})
+
+test('runState: Dừng theo bo ảo của thẻ đang mở; tạm dừng phiên không mở Dừng; không có ghế chương trình ⇒ khoá Từng khối', () => {
+  assert.deepEqual(runState('idle', { paused: true }), { run: false, pause: true, step: false, stop: true, runOn: false, pauseOn: true })
+  assert.deepEqual(runState('paused', { paused: true }), { run: false, pause: true, step: false, stop: false, runOn: false, pauseOn: true })
+  assert.deepEqual(runState('running', {}), { run: false, pause: false, step: false, stop: false, runOn: true, pauseOn: false })
+  assert.equal(runState('running', { canStep: false }).step, true)
+  const busy = runState('running', { busy: true })
+  assert.ok(busy.run && busy.pause && busy.step && !busy.stop)
 })
 
 test('clampSide: khung bên 280 px … 70 % phần cửa sổ trừ cột biểu tượng', () => {

@@ -548,6 +548,54 @@ async function shellTests() {
     expect(glowAfter === 0, `đã Dừng mà còn ${glowAfter} khối sáng`)
     return `${status.split('\n').find((t) => t.startsWith('Đang chạy khối'))} · mã ${code.split('\n').length} dòng, ${kw} từ khoá`
   })
+
+  await test('N1c Serial chạm trần vẫn đếm dòng mới; thanh chạy: Dừng theo thẻ, tạm dừng + Chạy không đổi người lái, không ghế chương trình ⇒ khoá Từng khối', async (page) => {
+    await open(page)
+    await (await bar(page, 'Luyện tập')).click()
+    await page.waitForFunction(() => window.__fanroc.match.practice)
+    await blocksSide(page)
+    await runBtn(page, 'Chạy').click()
+    await page.waitForFunction(() => window.__fanroc.editors.state(0) === 'running', null, { timeout: 15000 })
+    // Bo ảo in Serial (thư giả cùng lần nạp): 7000 dòng (chạm trần 20 000 ký tự) rồi thêm 10 dòng giống hệt.
+    const feed = (n) =>
+      page.evaluate((n) => {
+        const l = window.__fanroc.editors.link(0)
+        l.receive({ type: 'snapshot', run: l.loads, snapshot: { pwm: Array(16).fill(0), running: true, serial: 'hi\n'.repeat(n) }, bus: {} })
+      }, n)
+    const badge = () => page.locator('.sh-act button[data-view="serial"] .sh-badge').evaluate((e) => (e.hidden ? '' : e.textContent))
+    await feed(7000)
+    await page.waitForTimeout(100)
+    const b1 = await badge()
+    await page.locator('.sh-act button[data-view="serial"]').click()
+    await page.waitForTimeout(100)
+    const shown = await page.locator('.sh-serial').evaluate((e) => e.textContent.length)
+    const b2 = await badge()
+    await page.locator('.sh-act button[data-view="serial"]').click()
+    await feed(10)
+    await page.waitForTimeout(100)
+    const b3 = await badge()
+    expect(b1 === '99+' && shown === 20000 && b2 === '' && b3 === '10', `số đỏ ${b1} → mở Serial ${b2} (${shown} ký tự) → +10 dòng: "${b3}"`)
+    // Đổi sang thẻ Robot 2 ⇒ số chưa xem của Robot 1 không mang sang.
+    await (await tab(page, 1)).click()
+    await page.waitForTimeout(100)
+    const b4 = await badge()
+    expect(b4 === '', `đổi thẻ mà số đỏ còn "${b4}"`)
+    // Tạm dừng ở thẻ Robot 2 (chưa nạp): Dừng khoá; Chạy chỉ chạy tiếp, Robot 2 vẫn do agent lái.
+    await runBtn(page, 'Tạm dừng').click()
+    await page.waitForTimeout(100)
+    const stopOff = await runBtn(page, 'Dừng').isDisabled()
+    await runBtn(page, 'Chạy').click()
+    await page.waitForTimeout(200)
+    const r2 = await page.evaluate(() => ({ paused: window.__fanroc.session.paused, kind: window.__fanroc.session.driver(1).kind, st: window.__fanroc.editors.state(1) }))
+    expect(stopOff, 'thẻ Robot 2 chưa có chương trình mà Dừng vẫn bấm được khi phiên tạm dừng')
+    expect(!r2.paused && r2.kind === 'agent' && r2.st === 'idle', `tạm dừng + Chạy: ${JSON.stringify(r2)}`)
+    // Không ghế nào do chương trình lái ⇒ Chạy từng khối khoá.
+    await seat(page, 0, 'agent-medium')
+    await page.waitForTimeout(300)
+    const stepOff = await runBtn(page, 'Chạy từng khối').isDisabled()
+    expect(stepOff, 'không có ghế chương trình mà Chạy từng khối vẫn bấm được')
+    return `số đỏ ${b1} → ${b2 || 'ẩn'} → ${b3} · Dừng khoá · Robot 2 vẫn ${r2.kind} · Từng khối khoá`
+  })
 }
 
 let code = 1
