@@ -1,7 +1,7 @@
 // Màn chính kiểu game (spec §6.0, bản phác v4b) và màn "Trước trận" (chọn robot như chọn đội) của ThingBot FanRoc
 // Game. Màn chính phủ lên sân 3D đang quay chậm (camera `orbit`): tên game, tên mùa, dòng "robot của em · chương
 // trình: Mặc định / Của em vN", 4 ô chế độ — Giải đấu (to nhất, chọn sẵn, Enter vào), Trận lẻ · Đấu tập, Nhiệm vụ
-// (x/12), Xưởng lập trình. Phím mũi tên đổi ô.
+// (x/12), Xưởng lập trình; dưới 4 ô là hàng mục nhỏ Luật chơi · Robot mẫu (Task 17). Phím mũi tên đổi ô.
 // Phần thuần (TILES, tileMove, programText, robotStats) chạy được trong Node (home.test.ts); create* dựng DOM.
 import type { Skill } from '../agent.ts'
 import type { Alliance } from '../layout.ts'
@@ -12,21 +12,29 @@ import { icon } from './icons.ts'
 export type TileId = 'tournament' | 'match' | 'missions' | 'workshop'
 /** Thứ tự ô (cũng là thứ tự Tab): Giải đấu trước, chọn sẵn. */
 export const TILES: readonly TileId[] = ['tournament', 'match', 'missions', 'workshop']
+/** Hai mục nhỏ dưới 4 ô (làm quen đề thi, spec §6.7): Luật chơi, Robot mẫu. */
+export type HomeLink = 'rules' | 'robots'
+export const LINKS: readonly HomeLink[] = ['rules', 'robots']
+/** Một chỗ chọn được trên màn chính: ô chế độ hoặc mục nhỏ. */
+export type HomeItem = TileId | HomeLink
 
 /**
  * Lưới ô của màn chính (máy tính): Giải đấu chiếm cột trái hai hàng; hàng trên Trận lẻ · Đấu tập rồi Nhiệm vụ; hàng
  * dưới Xưởng lập trình trải hai cột. Phím mũi tên đi theo lưới đó; đi ra ngoài lưới thì đứng yên.
  */
-const MOVES: Record<TileId, Partial<Record<'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight', TileId>>> = {
-  tournament: { ArrowRight: 'match' },
+const MOVES: Record<HomeItem, Partial<Record<'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight', HomeItem>>> = {
+  tournament: { ArrowRight: 'match', ArrowDown: 'rules' },
   match: { ArrowLeft: 'tournament', ArrowRight: 'missions', ArrowDown: 'workshop' },
   missions: { ArrowLeft: 'match', ArrowDown: 'workshop' },
-  workshop: { ArrowUp: 'match', ArrowLeft: 'tournament' },
+  workshop: { ArrowUp: 'match', ArrowLeft: 'tournament', ArrowDown: 'rules' },
+  // Hàng mục nhỏ nằm dưới cả lưới ô.
+  rules: { ArrowUp: 'workshop', ArrowRight: 'robots' },
+  robots: { ArrowUp: 'workshop', ArrowLeft: 'rules' },
 }
 
-/** Ô kế tiếp khi bấm phím `key` ở ô `from` (phím khác ⇒ giữ nguyên). */
-export function tileMove(from: TileId, key: string): TileId {
-  return MOVES[from][key as keyof (typeof MOVES)[TileId]] ?? from
+/** Chỗ kế tiếp khi bấm phím `key` ở `from` (phím khác ⇒ giữ nguyên). */
+export function tileMove(from: HomeItem, key: string): HomeItem {
+  return MOVES[from][key as keyof (typeof MOVES)[HomeItem]] ?? from
 }
 
 /** Nhãn chương trình của robot em: có bản lưu ở Xưởng và chọn chạy bản đó ⇒ "Của em vN", không thì "Mặc định". */
@@ -108,6 +116,11 @@ const CSS = `
 .hm-tile .k { position: absolute; right: 12px; top: 10px; font-size: 11px; background: #0005; padding: 2px 8px; border-radius: 10px; }
 .hm-tile:not([aria-current="true"]) .k { display: none; }
 .hm-hint { color: #aab3c7; font-size: 12.5px; }
+.hm-links { display: flex; flex-wrap: wrap; gap: 10px; max-width: 800px; }
+.hm-link { display: inline-flex; gap: 8px; align-items: center; font: 800 14px var(--font); color: #eef2fa; background: #0007; border: 1px solid #fff3; border-radius: 10px; padding: 9px 16px; cursor: pointer; }
+.hm-link small { font-weight: 500; color: #c2cbea; font-size: 12px; }
+.hm-link:hover { background: #fff2; }
+.hm-link[aria-current="true"] { outline: 3px solid #ffcf5a; outline-offset: 2px; }
 @media (max-width: 700px) {
   .hm-in { padding: 16px; }
   .hm-tiles { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
@@ -140,7 +153,8 @@ const CSS = `
 .pk-note[data-ok="false"] { color: #ff8a7a; }
 `
 
-function injectCss(): void {
+/** CSS chung của các màn phủ sân (.hm, .pk-*): màn Luật chơi / Robot mẫu dùng lại. */
+export function injectCss(): void {
   if (document.getElementById('hm-css')) return
   const s = document.createElement('style')
   s.id = 'hm-css'
@@ -214,7 +228,12 @@ const TILE_TEXT: Record<TileId, { title: string; text: (i: HomeInfo) => (string 
   },
 }
 
-export function createHome(root: HTMLElement, on: { open(tile: TileId): void; settings(): void }): Home {
+const LINK_TEXT: Record<HomeLink, { title: string; text: string; icon: 'book' | 'robot' }> = {
+  rules: { title: 'Luật chơi', text: 'sân, điểm, lỗi, giải đấu', icon: 'book' },
+  robots: { title: 'Robot mẫu', text: '4 robot, cổng, chương trình mẫu', icon: 'robot' },
+}
+
+export function createHome(root: HTMLElement, on: { open(item: HomeItem): void; settings(): void }): Home {
   injectCss()
   const box = el('section', 'hm')
   box.dataset.screen = 'home'
@@ -224,11 +243,11 @@ export function createHome(root: HTMLElement, on: { open(tile: TileId): void; se
   box.append(inner)
   root.append(box)
 
-  let current: TileId = 'tournament'
-  const tiles = {} as Record<TileId, HTMLButtonElement>
-  const select = (t: TileId, focus: boolean) => {
+  let current: HomeItem = 'tournament'
+  const tiles = {} as Record<HomeItem, HTMLButtonElement>
+  const select = (t: HomeItem, focus: boolean) => {
     current = t
-    for (const k of TILES) tiles[k]?.setAttribute('aria-current', String(k === t))
+    for (const k of [...TILES, ...LINKS]) tiles[k]?.setAttribute('aria-current', String(k === t))
     if (focus) tiles[t]?.focus()
   }
 
@@ -273,7 +292,23 @@ export function createHome(root: HTMLElement, on: { open(tile: TileId): void; se
       tiles[t] = b
       grid.append(b)
     }
-    inner.replaceChildren(top, el('div', 'hm-sp'), grid, el('div', 'hm-hint', 'Phím mũi tên đổi ô · Enter để vào · nút Cài đặt góc trên có bảng phím'))
+    const links = el('div', 'hm-links')
+    links.setAttribute('role', 'group')
+    links.setAttribute('aria-label', 'Làm quen đề thi')
+    for (const l of LINKS) {
+      const b = el('button', 'hm-link')
+      b.type = 'button'
+      b.dataset.link = l
+      b.append(icon(LINK_TEXT[l].icon, 18), LINK_TEXT[l].title, el('small', undefined, LINK_TEXT[l].text))
+      b.onclick = () => {
+        select(l, false)
+        on.open(l)
+      }
+      b.onfocus = () => select(l, false)
+      tiles[l] = b
+      links.append(b)
+    }
+    inner.replaceChildren(top, el('div', 'hm-sp'), grid, links, el('div', 'hm-hint', 'Phím mũi tên đổi ô · Enter để vào · nút Cài đặt góc trên có bảng phím'))
     select(current, false)
   }
 

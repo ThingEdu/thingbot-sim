@@ -66,8 +66,8 @@ test('statusText: cổng M1–M4 và khối đang chạy; không có cổng (gh�
   assert.equal(u[3], '')
 })
 
-test('biểu tượng: đủ 20 tên, mỗi tên có nét vẽ, không tải từ mạng', () => {
-  assert.equal(ICON_NAMES.length, 20)
+test('biểu tượng: đủ 22 tên, mỗi tên có nét vẽ, không tải từ mạng', () => {
+  assert.equal(ICON_NAMES.length, 22)
   for (const n of ICON_NAMES) {
     assert.ok(ICON_PATHS[n] && ICON_PATHS[n].length > 10, `thiếu nét vẽ cho ${n}`)
     assert.ok(!/https?:|href|url\(/.test(ICON_PATHS[n]), `${n} tải từ ngoài`)

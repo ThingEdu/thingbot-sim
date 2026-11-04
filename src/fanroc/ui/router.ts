@@ -4,10 +4,11 @@ import type { CameraView } from '../view/scene.ts'
 import type { Activity } from './shell.ts'
 
 /** 'tournament' = các màn giải đấu phủ sân (ghi danh, thử phím, lịch, Pit, bục trao giải); 'tmatch' = trận của giải có
- * người chơi; 'treplay' = Xem nhanh một trận máy đã chơi ngầm (×40, không ghi kết quả). */
-export type Screen = 'home' | 'match' | 'practice' | 'workshop' | 'missions' | 'mission' | 'tournament' | 'tmatch' | 'treplay'
+ * người chơi; 'treplay' = Xem nhanh một trận máy đã chơi ngầm (×40, không ghi kết quả); 'rules' = Luật chơi, 'robots' =
+ * Robot mẫu (hai mục nhỏ của màn chính, phủ sân như màn chính). */
+export type Screen = 'home' | 'match' | 'practice' | 'workshop' | 'missions' | 'mission' | 'tournament' | 'tmatch' | 'treplay' | 'rules' | 'robots'
 
-export const SCREENS: readonly Screen[] = ['home', 'match', 'practice', 'workshop', 'missions', 'mission', 'tournament', 'tmatch', 'treplay']
+export const SCREENS: readonly Screen[] = ['home', 'match', 'practice', 'workshop', 'missions', 'mission', 'tournament', 'tmatch', 'treplay', 'rules', 'robots']
 
 /**
  * Camera mặc định khi vào màn (spec §6.5; camera không lưu — §8.7): màn chính quay chậm quanh sân, trận / đấu tập /
@@ -16,6 +17,8 @@ export const SCREENS: readonly Screen[] = ['home', 'match', 'practice', 'worksho
 export function defaultCamera(s: Screen): CameraView {
   switch (s) {
     case 'home':
+    case 'rules':
+    case 'robots':
       return 'orbit'
     case 'match':
     case 'practice':
@@ -42,6 +45,8 @@ export interface ScreenChrome {
 export function chrome(s: Screen): ScreenChrome {
   switch (s) {
     case 'home':
+    case 'rules':
+    case 'robots':
       return { activity: [], runbar: false, scoreboard: false, live: true }
     case 'match':
     case 'practice':

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { programText, robotName, robotStats, tileMove, TILES } from './home.ts'
+import { LINKS, programText, robotName, robotStats, tileMove, TILES } from './home.ts'
 import { chrome, defaultCamera, SCREENS } from './router.ts'
 import { ROBOTS } from '../robots.ts'
 import { V_MAX } from '../robot.ts'
@@ -12,13 +12,21 @@ test('TILES: 4 ô, Giải đấu đầu tiên (chọn sẵn)', () => {
 
 test('tileMove: phím mũi tên đi theo lưới ô; ra ngoài lưới / phím khác thì đứng yên', () => {
   const rows: [Parameters<typeof tileMove>[0], string, string][] = [
-    ['tournament', 'ArrowRight', 'match'], ['tournament', 'ArrowLeft', 'tournament'], ['tournament', 'ArrowDown', 'tournament'], ['tournament', 'ArrowUp', 'tournament'],
+    ['tournament', 'ArrowRight', 'match'], ['tournament', 'ArrowLeft', 'tournament'], ['tournament', 'ArrowDown', 'rules'], ['tournament', 'ArrowUp', 'tournament'],
     ['match', 'ArrowLeft', 'tournament'], ['match', 'ArrowRight', 'missions'], ['match', 'ArrowDown', 'workshop'], ['match', 'ArrowUp', 'match'],
     ['missions', 'ArrowLeft', 'match'], ['missions', 'ArrowDown', 'workshop'], ['missions', 'ArrowRight', 'missions'], ['missions', 'ArrowUp', 'missions'],
-    ['workshop', 'ArrowUp', 'match'], ['workshop', 'ArrowLeft', 'tournament'], ['workshop', 'ArrowRight', 'workshop'], ['workshop', 'ArrowDown', 'workshop'],
+    ['workshop', 'ArrowUp', 'match'], ['workshop', 'ArrowLeft', 'tournament'], ['workshop', 'ArrowRight', 'workshop'], ['workshop', 'ArrowDown', 'rules'],
+    // Hàng mục nhỏ dưới 4 ô: Luật chơi · Robot mẫu.
+    ['rules', 'ArrowRight', 'robots'], ['rules', 'ArrowUp', 'workshop'], ['rules', 'ArrowLeft', 'rules'], ['rules', 'ArrowDown', 'rules'],
+    ['robots', 'ArrowLeft', 'rules'], ['robots', 'ArrowUp', 'workshop'], ['robots', 'ArrowRight', 'robots'], ['robots', 'ArrowDown', 'robots'],
     ['match', 'Enter', 'match'], ['missions', 'KeyW', 'missions'],
   ]
   for (const [from, key, to] of rows) assert.equal(tileMove(from, key), to, `${from} + ${key}`)
+})
+
+test('LINKS: hai mục nhỏ Luật chơi, Robot mẫu — ngoài 4 ô chính', () => {
+  assert.deepEqual([...LINKS], ['rules', 'robots'])
+  for (const l of LINKS) assert.ok(!(TILES as readonly string[]).includes(l))
 })
 
 test('programText: có bản lưu ⇒ "Của em vN"; chưa lưu hoặc chọn Mặc định ⇒ "Mặc định"', () => {
@@ -59,7 +67,9 @@ test('router: camera mặc định theo màn (trận / đấu tập / Xưởng T
   assert.equal(defaultCamera('tournament'), 'field')
   assert.equal(defaultCamera('tmatch'), 'follow')
   assert.equal(defaultCamera('treplay'), 'field')
-  assert.equal(SCREENS.length, 9)
+  assert.equal(defaultCamera('rules'), 'orbit')
+  assert.equal(defaultCamera('robots'), 'orbit')
+  assert.equal(SCREENS.length, 11)
 })
 
 test('router: trận giải đấu như trận lẻ (khối, thanh chạy, bảng điểm); Xem nhanh chỉ bảng điểm, không thanh chạy', () => {
@@ -74,4 +84,7 @@ test('router: màn chính không có cột biểu tượng / thanh chạy / bả
   assert.equal(chrome('workshop').scoreboard, false)
   assert.ok(chrome('workshop').activity.includes('blocks'))
   assert.equal(chrome('mission').scoreboard, false)
+  // Luật chơi, Robot mẫu: phủ sân như màn chính (sân chạy nền), không cột biểu tượng / thanh chạy / bảng điểm.
+  assert.deepEqual(chrome('rules'), chrome('home'))
+  assert.deepEqual(chrome('robots'), chrome('home'))
 })

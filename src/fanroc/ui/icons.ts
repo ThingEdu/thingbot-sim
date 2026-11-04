@@ -4,7 +4,7 @@
 
 export const ICON_NAMES = [
   'blocks', 'code', 'serial', 'missions', 'trophy', 'settings', 'play', 'pause', 'stepOver', 'stop',
-  'reset', 'download', 'camera', 'home', 'sound', 'mute', 'keyboard', 'gamepad', 'star', 'check',
+  'reset', 'download', 'camera', 'home', 'sound', 'mute', 'keyboard', 'gamepad', 'star', 'check', 'book', 'robot',
 ] as const
 export type IconName = (typeof ICON_NAMES)[number]
 
@@ -42,6 +42,10 @@ export const ICON_PATHS: Record<IconName, string> = {
     '<path d="M7.5 7.5h9a4.5 4.5 0 0 1 4.5 4.5v1.5a3 3 0 0 1-5.4 1.8l-1-1.3h-5.2l-1 1.3A3 3 0 0 1 3 13.5V12a4.5 4.5 0 0 1 4.5-4.5z"/><path d="M8 10.5v3M6.5 12h3M15.5 11h.01M17.5 13h.01"/>',
   star: `<polygon points="12 2.5 14.9 8.6 21.5 9.4 16.6 13.9 17.9 20.5 12 17.2 6.1 20.5 7.4 13.9 2.5 9.4 9.1 8.6" ${FILL}/>`,
   check: '<polyline points="20 6 9.5 16.5 4 11"/>',
+  // Cuốn sách mở (Luật chơi).
+  book: '<path d="M12 6.5C10 5 7 4.5 3.5 5v13.5c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5c-3.5-.5-6.5 0-8.5 1.5z"/><path d="M12 6.5V20"/>',
+  // Đầu robot có ăng-ten (Robot mẫu).
+  robot: '<rect x="4" y="8" width="16" height="11" rx="2.5"/><path d="M12 8V4.5"/><circle cx="12" cy="3.5" r="1"/><path d="M9 13h.01M15 13h.01M9.5 16.5h5"/><path d="M2 12.5v3M22 12.5v3"/>',
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg'

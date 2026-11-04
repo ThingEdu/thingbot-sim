@@ -39,7 +39,10 @@ import { createStore } from './store.ts'
 import { FANROC_2026 } from './season.ts'
 import { createShell, highlightCpp, serialNews, serialPatch, type InputKind, type SerialMark } from './ui/shell.ts'
 import { chrome, defaultCamera, type Screen } from './ui/router.ts'
-import { createHome, createPick, createPlaceholder, programText, robotName, type HomeInfo, type TileId } from './ui/home.ts'
+import { createHome, createPick, createPlaceholder, programText, robotName, type HomeInfo, type HomeItem } from './ui/home.ts'
+import { createRules } from './ui/rules.ts'
+import { createRobotsGallery, viewerCount } from './ui/robots-gallery.ts'
+import { fanrocRules } from './rules-data.ts'
 import { assignSeat, createSettings, defaultSeats, playerSeat, seatOf, seatOptions, type SeatMode, type SettingsCtx } from './ui/settings.ts'
 import { createWorkshopBar, Drafts, resetVerified, saveVerified, sameProgram } from './ui/workshop.ts'
 import { createRobotCards, type CardInfo } from './ui/robotcard.ts'
@@ -407,7 +410,7 @@ async function start(): Promise<void> {
       get mission() {
         return screen === 'mission' && mission ? { id: mission.id, result: mrun?.result ?? null, reason: mrun?.reason ?? null } : null
       },
-      mySeat, keypads: () => keypads, workers: workerCount,
+      mySeat, keypads: () => keypads, workers: workerCount, viewers: viewerCount,
       pause: () => setPaused(true), resume: () => setPaused(false), stepBlock: () => stepBlock(),
       pose: (i: number) => {
         const p = game.robots[i].pose
@@ -538,13 +541,13 @@ async function start(): Promise<void> {
   })
   const overlay = document.body
   const home = createHome(overlay, {
-    open: (t: TileId) => {
+    open: (t: HomeItem) => {
       if (t === 'match') {
         home.hide()
         pickPlayer = 0
         pickMsg = null
         pick.show()
-      } else void go(t === 'workshop' ? 'workshop' : t === 'missions' ? 'missions' : 'tournament')
+      } else void go(t)
     },
     settings: () => popover.toggle(settingsCtx()),
   })
@@ -582,6 +585,18 @@ async function start(): Promise<void> {
     },
   )
   const placeholder = createPlaceholder(overlay, () => void go('home'))
+  // Làm quen đề thi (spec §6.7): thẻ Luật chơi do mùa giải cấp (§6.8: FANROC 2026–2027 ⇒ rules-data.ts).
+  const rules = createRules(overlay, { season: FANROC_2026.name, cards: fanrocRules, home: () => void go('home') })
+  // Robot mẫu ⇒ "Mở trong Xưởng": robot của bạn 1 đổi sang robot đó rồi vào Xưởng. Bản đang sửa dở ở Xưởng đã được giữ
+  // lúc rời Xưởng (captureDraft, R94) theo đúng robot cũ; Xưởng nạp bản nháp của robot mới nếu có.
+  const gallery = createRobotsGallery(overlay, {
+    season: FANROC_2026.name,
+    open: (cfg) => {
+      if (JSON.stringify(cfg) !== JSON.stringify(cfgOf(0))) editors.setConfig(0, cfg)
+      void go('workshop', { player: 0 })
+    },
+    home: () => void go('home'),
+  })
   const tScreen = createTournamentScreen(overlay, {
     setPlayers: (n) => {
       reg.players = n
@@ -916,6 +931,8 @@ async function start(): Promise<void> {
     home.hide()
     pick.hide()
     placeholder.hide()
+    rules.hide()
+    gallery.hide()
     tScreen.hide()
     missionList.hide()
     if (next !== 'mission') missionHud.hide()
@@ -973,6 +990,8 @@ async function start(): Promise<void> {
   const shown = (next: Screen) => {
     scene.camera(cam, mySeat())
     if (next === 'home') home.show(homeInfo())
+    else if (next === 'rules') rules.show()
+    else if (next === 'robots') gallery.show(cfgOf(0))
     else if (next === 'missions') missionList.show(missionCards(store))
     else if (next === 'mission') showSide()
     else if (next === 'tournament') showTour(tourCorrupt ? 'corrupt' : !tour ? 'register' : nextMatch(tour) === null ? 'podium' : 'pit')
@@ -1122,6 +1141,11 @@ async function start(): Promise<void> {
     if (popover.shown) return
     if (home.shown) {
       if (home.key(e)) e.preventDefault()
+      return
+    }
+    // Luật chơi / Robot mẫu: Esc về màn chính (không lái robot nền).
+    if (screen === 'rules' || screen === 'robots') {
+      if (e.key === 'Escape') void go('home')
       return
     }
     // Phím tắt (Ctrl / ⌘ / Alt + phím) không lái robot: Ctrl+S, ⌘+W… không được thành "chạy tới".

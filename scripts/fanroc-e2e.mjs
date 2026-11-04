@@ -2,7 +2,7 @@
  * Phép thử đầu-cuối của sân FANROC trên trình duyệt thật (Playwright, lấy từ checkout ThingBlock như ftc-e2e.mjs
  * của nhánh spike/ursim).
  *
- *   npm run e2e:fanroc                 # tự bật Vite dev trên một cổng trống, chạy N3–N6, N6b–N6d, N2c (màn chính / ⚙ / Xưởng Task 13), N7, N8 (nhiệm vụ Task 14), N9, N10, N9b–N9d (giải đấu Task 15), N1, N1b, N1c (vỏ Task 11), N2, N2b (bảng điểm Task 12) và E1–E11 (E5 bỏ qua), tắt Vite
+ *   npm run e2e:fanroc                 # tự bật Vite dev trên một cổng trống, chạy N3–N6, N6b–N6d, N11 (Luật chơi + Robot mẫu Task 17), N2c (màn chính / ⚙ / Xưởng Task 13), N7, N8 (nhiệm vụ Task 14), N9, N10, N9b–N9d (giải đấu Task 15), N1, N1b, N1c (vỏ Task 11), N2, N2b (bảng điểm Task 12) và E1–E11 (E5 bỏ qua), tắt Vite
  *   FANROC_URL=http://localhost:5191/mo-phong/fanroc.html npm run e2e:fanroc   # dùng trang đang chạy sẵn
  *   npm run e2e:fanroc -- E3 E5        # chỉ chạy các phép thử có tên bắt đầu như vậy
  *
@@ -959,6 +959,72 @@ async function gameTests() {
     const w1 = await page.evaluate(() => window.__fanroc.workers())
     expect(seen.every((n) => n === w0) && withCopy === w0 + 1 && w1 === w0, `bo ảo: đầu ${w0}, các màn ${seen.join(' ')}, có đồng đội ${withCopy}, cuối ${w1}`)
     return `bo ảo luôn ${w0} (đồng đội +1 rồi dọn)`
+  })
+
+  await test('N11 màn chính có Luật chơi + Robot mẫu; bảng điểm "+15" Rãnh 3; Robot mẫu "Mở trong Xưởng" ⇒ Xưởng nạp đúng robot, giữ bản nháp robot cũ', async (page) => {
+    await open(page)
+    // Hai mục nhỏ dưới 4 ô; phím mũi tên đi tới được, 4 ô chính không đổi.
+    const links = await page.locator('.hm[data-screen="home"] .hm-link').evaluateAll((es) => es.map((e) => `${e.dataset.link}:${e.textContent}`))
+    expect(links.length === 2 && /^rules:Luật chơi/.test(links[0]) && /^robots:Robot mẫu/.test(links[1]), `mục nhỏ: ${links.join(' | ')}`)
+    const tiles = await page.locator('.hm[data-screen="home"] .hm-tile').count()
+    expect(tiles === 4, `màn chính có ${tiles} ô`)
+    await page.keyboard.press('ArrowDown')
+    const cur = await page.locator('.hm-link[aria-current="true"]').getAttribute('data-link')
+    expect(cur === 'rules', `↓ từ Giải đấu ⇒ ${cur}`)
+    await page.keyboard.press('Enter')
+    await page.waitForFunction(() => window.__fanroc.screen === 'rules')
+    const rules = page.locator('.hm[data-screen="rules"]')
+    await rules.waitFor()
+    const cards = await rules.locator('.rl-card').evaluateAll((es) => es.map((e) => e.dataset.card))
+    expect(cards.join() === 'field,match,score,faults,tournament', `thẻ: ${cards.join()}`)
+    const r3 = await rules.locator('[data-card="score"] tr', { hasText: 'Rãnh 3' }).locator('td.v').innerText()
+    expect(r3 === '+15', `Rãnh 3: "${r3}"`)
+    expect((await rules.locator('.rl-card svg').count()) === 5, 'thiếu hình SVG trên thẻ')
+    const faults = await rules.locator('[data-card="faults"]').innerText()
+    expect(['P12', 'S02', 'P10', 'G15'].every((c) => faults.includes(c)), `thẻ lỗi: ${faults.slice(0, 80)}`)
+    await shot(page, 't17-rules.png')
+    await page.keyboard.press('Escape')
+    await page.waitForFunction(() => window.__fanroc.screen === 'home')
+
+    // Xưởng với Mẫu Maker: sửa (nạp mẫu Auto) mà chưa lưu ⇒ bản nháp; rời Xưởng.
+    await page.locator('.hm-tile[data-tile="workshop"]').click()
+    await page.waitForFunction(() => window.__fanroc.screen === 'workshop')
+    expect((await page.evaluate(() => window.__fanroc.editors.cfg(0).type)) === 'maker', 'Xưởng không mở Mẫu Maker')
+    await page.evaluate(() => window.__fanroc.editors.sample(0, 'auto'))
+    await page.waitForFunction(() => /Chưa lưu/.test(document.querySelector('.ws-bar .prog')?.textContent ?? ''), null, { timeout: 5000 })
+    await go(page, 'home')
+
+    const v0 = await page.evaluate(() => window.__fanroc.viewers())
+    await page.locator('.hm-link[data-link="robots"]').click()
+    await page.waitForFunction(() => window.__fanroc.screen === 'robots')
+    const gal = page.locator('.hm[data-screen="robots"]')
+    await gal.locator('.rg-3d canvas').waitFor({ timeout: 15000 })
+    await gal.locator('.rg-ws .blocklyBlockCanvas .blocklyBlock').first().waitFor({ timeout: 15000 })
+    await gal.locator('.rg-pick [data-robot="co"]').click()
+    const info = await gal.locator('[data-role="info"]').innerText()
+    expect(/Xe Cắm Cờ/.test(info) && /185 × 280 × 250 mm/.test(info) && /Vươn tay cờ/.test(info), `thông tin: ${info.slice(0, 120)}`)
+    const ports = await gal.locator('[data-role="ports"] td:first-child').allInnerTexts()
+    expect(ports.join() === 'M1,M2,M4,S1,S2,S3', `cổng Xe Cắm Cờ: ${ports.join()}`)
+    // Vùng khối chỉ xem: kéo khối không được, không có hộp công cụ.
+    const ro = await page.evaluate(() => document.querySelectorAll('.rg-ws .blocklyToolboxDiv, .rg-ws .blocklyFlyout').length === 0)
+    expect(ro, 'vùng khối Robot mẫu có hộp công cụ')
+    await page.waitForTimeout(500) // xoay một chút cho ảnh chụp
+    await shot(page, 't17-robots.png')
+    const v1 = await page.evaluate(() => window.__fanroc.viewers())
+    await gal.locator('[data-role="open-workshop"]').click()
+    await page.waitForFunction(() => window.__fanroc.screen === 'workshop')
+    const cfg = await page.evaluate(() => window.__fanroc.editors.cfg(0))
+    const v2 = await page.evaluate(() => window.__fanroc.viewers())
+    expect(cfg.type === 'co' && cfg.drive === 'diff2', `Xưởng mở robot ${JSON.stringify(cfg)}`)
+    expect(v1 === v0 + 1 && v2 === v0 && (await page.locator('.rg-3d canvas').count()) === 0, `canvas 3D: trước ${v0}, đang xem ${v1}, sau ${v2}`)
+    const lbl = await page.locator('.ws-bar .prog').innerText()
+    expect(lbl === 'Mặc định', `Xưởng Xe Cắm Cờ nhãn "${lbl}"`)
+    const prog = await page.evaluate(() => JSON.stringify(window.__fanroc.editors.program(0)))
+    expect(/thingBotC3_initPS2/.test(prog), 'Xưởng Xe Cắm Cờ không nạp TeleOp mẫu')
+    // Quay lại Mẫu Maker ⇒ bản nháp chưa lưu vẫn còn.
+    await page.evaluate(() => window.__fanroc.editors.setConfig(0, { type: 'maker', drive: 'diff2', actuator: 'tt' }))
+    await page.waitForFunction(() => /Chưa lưu/.test(document.querySelector('.ws-bar .prog')?.textContent ?? ''), null, { timeout: 5000 })
+    return `mục nhỏ ${links.map((l) => l.split(':')[0]).join(' · ')} · Rãnh 3 ${r3} · Xưởng ${cfg.type} "${lbl}" · canvas ${v0}→${v1}→${v2} · bản nháp Mẫu Maker còn`
   })
 
   await test('N2c màn kết quả: báo nổi / đếm ngược bị xoá; "Về màn chính" ⇒ màn chính', async (page) => {
