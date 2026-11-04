@@ -21,9 +21,9 @@ export type Goal =
   | { type: 'measure'; what: 'distance' | 'turned'; min?: number }
   /** Chương trình (phần nối với khối mũ) có đủ các khối này. */
   | { type: 'uses'; opcodes: string[] }
-  /** Đã cắm cờ lên núi `mountain` (0..3 = A..D). */
+  /** Robot của em (Robot 1, chỉ số 0 trong trận) đã cắm cờ lên núi `mountain` (0..3 = A..D): sự kiện của match.ts. */
   | { type: 'flag'; mountain: number }
-  /** Robot của em (Robot 1, đỏ) đỗ trong Vùng Bảo Vệ lúc hết giờ; `full` ⇒ phải đỗ toàn phần. */
+  /** Robot của em (Robot 1, đỏ) đỗ trong Vùng Bảo Vệ lúc chấm; `full` ⇒ phải đỗ toàn phần. */
   | { type: 'park'; full?: boolean }
   /** Khu Chữa Cháy còn ≤ `max` bóng xanh. */
   | { type: 'fireClear'; max: number }
@@ -31,7 +31,7 @@ export type Goal =
   | { type: 'matchEnd' }
   /** Hướng cuối lệch hướng đầu đúng `deg` độ (dương = quay trái, ngược chiều kim đồng hồ nhìn từ trên), sai ≤ `tol` độ. */
   | { type: 'turn'; deg: number; tol: number }
-  /** Thời gian chạy (ô số đo) ≤ `max` s. */
+  /** Robot dừng hẳn (RunRecord.trail.time, R57) trong vòng `max` s kể từ ▶. */
   | { type: 'time'; max: number }
   /** Chương trình gọi khối của em có ít nhất một ô số, ít nhất `calls` lần (mặc định 1). */
   | { type: 'paramBlock'; calls?: number }
@@ -61,6 +61,8 @@ export interface Mission {
   /** Đường gợi ý nét đứt vẽ trên sàn. */
   path?: { x: number; z: number }[]
   kind: 'drive' | 'program' | 'match'
+  /** Giới hạn thời gian một lần chạy (s, kể từ ▶): hết giờ thì chấm ngay (R57 c). Chặng 4: đồng hồ trận. */
+  maxTime: number
   /** ⭐: đạt mọi điều kiện này (nhiệm vụ xong). */
   goals: Goal[]
   /** Điều kiện thêm: ⭐⭐ = ⭐ + `two`; ⭐⭐⭐ = ⭐⭐ + `three`. */
@@ -68,10 +70,24 @@ export interface Mission {
   hints: { when: HintWhen; text: string }[]
 }
 
+/**
+ * Bản ghi một lần chạy — hợp đồng với GameSession (Task 10), quyết định R57.
+ *
+ * Thời điểm chấm: lần chạy được chấm ngay khi điều đầu tiên trong ba điều sau xảy ra
+ *   (a) robot đã đứng yên — trong 1,0 s vừa qua tâm dời < 5 mm và hướng đổi < 2° — sau khi đã chạy ít nhất một lần
+ *       (`Trail.hasMoved` và `Trail.time − Trail.lastMoveTime ≥ 1`; ngưỡng ở trail.ts MOVE_STEP / MOVE_TURN_DEG;
+ *       thêm "hướng đổi" để quay tại chỗ — tâm gần như không dời — không bị coi là đứng yên);
+ *   (b) học sinh bấm Dừng / Chấm;
+ *   (c) hết `Mission.maxTime` giây kể từ ▶ (nhiệm vụ trận: hết đồng hồ trận).
+ * Nhiệm vụ `kind: 'match'` không dùng (a): trận chỉ được chấm khi hết đồng hồ trận (c) hoặc học sinh bấm Chấm (b).
+ * Mọi trường dưới đây lấy ĐÚNG lúc chấm đó (`end`, `tally`, `events`, `touchedMountain` gộp từ ▶ tới lúc chấm),
+ * riêng `trail.time` = `Trail.lastMoveTime`: số giây từ ▶ tới lần cuối robot còn chạy (lúc nó dừng hẳn), KHÔNG tính
+ * khoảng 1 s chờ xác nhận đứng yên hay lúc bấm Chấm. Điều kiện ⭐ `time` so với số này (thời gian tới nơi).
+ */
 export type RunRecord = {
   start: Pose
   end: Pose
-  /** Số đo của vệt (Trail): quãng m, góc đã quay độ, thời gian s kể từ ▶ tới lúc chấm. */
+  /** Số đo của vệt (Trail): `distance` m, `turned` độ, `time` = Trail.lastMoveTime (s, xem trên). */
   trail: { distance: number; turned: number; time: number }
   touchedMountain: boolean
   events: MatchEvent[]

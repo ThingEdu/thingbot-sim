@@ -78,6 +78,23 @@ test('clear() xoá sạch, dùng lại được', () => {
   assert.equal(tr.time, 0)
 })
 
+test('lastMoveTime (R57): giờ của lần cuối robot còn chạy; trôi < 5 mm / quay < 2° không tính; time không đổi nghĩa', () => {
+  const tr = new Trail()
+  const p = P({ M1: 60, M2: 60 })
+  tr.add(0, { x: 0, z: 0, yaw: 0 }, p)
+  assert.equal(tr.hasMoved, false)
+  for (let k = 1; k <= 100; k++) tr.add(k * 0.01, { x: 0, z: -k * 0.003, yaw: 0 }, p) // 1 s, 0,3 m
+  for (let k = 1; k <= 200; k++) tr.add(1 + k * 0.01, { x: 0, z: -0.3 - Math.min(k, 40) * 0.0001, yaw: 0 }, P({})) // trôi 4 mm rồi đứng
+  assert.equal(tr.hasMoved, true)
+  assert.ok(Math.abs(tr.lastMoveTime - 1) < 0.011, `lastMoveTime ${tr.lastMoveTime}`)
+  assert.ok(Math.abs(tr.time - 3) < 1e-9, 'time vẫn là tới điểm cuối')
+  // Quay tại chỗ (tâm không dời) vẫn là đang chạy.
+  for (let k = 1; k <= 50; k++) tr.add(3 + k * 0.01, { x: 0, z: -0.304, yaw: k * 0.02 }, P({ M1: -60, M2: 60 }))
+  assert.ok(Math.abs(tr.lastMoveTime - 3.5) < 0.03, `quay: lastMoveTime ${tr.lastMoveTime}`)
+  tr.clear()
+  assert.deepEqual([tr.lastMoveTime, tr.hasMoved], [0, false])
+})
+
 const MAKER: RobotConfig = { type: 'maker', drive: 'diff2', actuator: 'tt' }
 
 test('lặp lại (spec §8.2): M1 = M2 = 60 trong 1 s, 5 lần ⇒ distance lệch nhau ≤ 0,01 m', async () => {

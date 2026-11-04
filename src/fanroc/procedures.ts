@@ -158,12 +158,17 @@ export const TB_PARAM_WARNING =
   'Lưu ý: chương trình này có khối của em có ô số. Khối kiểu này mới chạy được trong mô phỏng — ThingBlock chưa hỗ trợ, ' +
   'nên tệp .tb này chưa nạp được lên ThingBot thật. Muốn nạp lên robot thật, em làm khối của em không có ô số nhé.'
 
+/** Số ô số (tham số) của một khối của em, đọc từ `extraState` (mutation `argumentids`). */
+export function procedureArgCount(extraState: unknown): number {
+  return jsonList(readMutation(extraState).argumentids).length
+}
+
 /** Chương trình có khối của em có ít nhất một tham số (định nghĩa hoặc lời gọi) — loại .tb ThingBlock chưa nạp được. */
 export function hasParamProcedures(state: object): boolean {
   type S = { type?: string; extraState?: unknown; inputs?: Record<string, { shadow?: S; block?: S }>; next?: { block?: S } }
   const visit = (b: S | undefined): boolean => {
     if (!b) return false
-    if (b.type?.startsWith('procedures_') && jsonList(readMutation(b.extraState).argumentids).length > 0) return true
+    if (b.type?.startsWith('procedures_') && procedureArgCount(b.extraState) > 0) return true
     return Object.values(b.inputs ?? {}).some((i) => visit(i.block) || visit(i.shadow)) || visit(b.next?.block)
   }
   const stacks = (state as { blocks?: { blocks?: S[] } }).blocks?.blocks ?? []

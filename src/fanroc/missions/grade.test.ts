@@ -18,6 +18,8 @@ import { holeCentres, mountainAt, type Pose } from '../layout.ts'
 import { scoreTally, type FieldTally } from '../scoring.ts'
 import { RobotLink } from '../link.ts'
 import { FanrocWorld, PHYSICS_DT } from '../world.ts'
+import { Match } from '../match.ts'
+import { MATCH_S } from '../layout.ts'
 import { RobotBody } from '../robot.ts'
 import { Trail } from '../trail.ts'
 import type { Command, Message } from '../../sim-worker.ts'
@@ -131,8 +133,11 @@ function ideal(m: Mission): RunRecord {
 }
 
 // ---------- Chạy trên sân ----------
-/** Chạy chương trình của nhiệm vụ trên sân `seconds` giây như vòng lặp trận: bo ảo một nhịp, vật lý một bước. */
-async function runOnField(m: Mission, state: object, seconds: number): Promise<RunRecord> {
+/**
+ * Chạy chương trình của nhiệm vụ trên sân như vòng lặp trận (bo ảo một nhịp, vật lý một bước) và dừng đúng thời điểm
+ * chấm R57: robot đứng yên ≥ 1 s sau khi đã chạy (a), hoặc hết `maxTime` (c). `trail.time` = Trail.lastMoveTime.
+ */
+async function runOnField(m: Mission, state: object): Promise<RunRecord & { gradedAt: number; why: 'rest' | 'maxTime' }> {
   const g = H.generate(state)
   assert.equal(g.error, undefined, `sinh mã lỗi: ${g.error}`)
   const world = await FanrocWorld.create(1)
@@ -151,7 +156,10 @@ async function runOnField(m: Mission, state: object, seconds: number): Promise<R
     const trail = new Trail()
     let touched = false
     trail.add(0, robot.pose, link.ports())
-    for (let k = 1; k <= Math.round(seconds / PHYSICS_DT); k++) {
+    let why: 'rest' | 'maxTime' = 'maxTime'
+    let k = 0
+    while (k * PHYSICS_DT < m.maxTime - 1e-9) {
+      k++
       if (session) link.receive({ type: 'snapshot', run, snapshot: (session as SessionLike).tick(PHYSICS_DT * 1000), bus: {} } as unknown as Message)
       const ports = link.ports()
       robot.apply(ports, PHYSICS_DT)
@@ -161,9 +169,16 @@ async function runOnField(m: Mission, state: object, seconds: number): Promise<R
       const c = robot.footprint()
       const pts = [...c, ...c.map((p, i) => ({ x: (p.x + c[(i + 1) % 4].x) / 2, z: (p.z + c[(i + 1) % 4].z) / 2 }))]
       if (pts.some((p) => mountainAt(p.x, p.z) >= 0)) touched = true
+      if (trail.hasMoved && trail.time - trail.lastMoveTime >= 1) {
+        why = 'rest'
+        break
+      }
     }
     assert.notEqual(link.state, 'error', `chương trình lỗi: ${link.error}`)
-    return { start: m.start, end: robot.pose, trail: { distance: trail.distance, turned: trail.turned, time: trail.time }, touchedMountain: touched, events: [], program: state }
+    return {
+      start: m.start, end: robot.pose, trail: { distance: trail.distance, turned: trail.turned, time: trail.lastMoveTime },
+      touchedMountain: touched, events: [], program: state, gradedAt: trail.time, why,
+    }
   } finally {
     world.rapier.free()
   }
@@ -338,23 +353,71 @@ test('dọn Khu Chữa Cháy (nhiệm vụ 9) và trận đầu (nhiệm vụ 12
 })
 
 // ---------- Giải được trên sân thật ----------
-test('nhiệm vụ 7 có lời giải: «lặp lại 4» + tiến (0.72) + rẽ trái (90) chạy trên sân đạt ≥ 2 sao', async () => {
-  const r = await runOnField(M7, SOLVED, 16)
+test('nhiệm vụ 7 có lời giải: «lặp lại 4» + tiến (0.72) + rẽ trái (90) chạy trên sân đạt ≥ 2 sao', async (t) => {
+  const r = await runOnField(M7, SOLVED)
   const g = grade(M7, r)
-  console.log(`nhiệm vụ 7 lời giải mẫu: sai số cuối ${(err(r) * 100).toFixed(1)} cm, quãng ${r.trail.distance.toFixed(2)} m, góc ${r.trail.turned.toFixed(0)}°, chạm núi ${r.touchedMountain}, ${g.stars} sao`)
+  t.diagnostic(`sai số cuối ${(err(r) * 100).toFixed(1)} cm, quãng ${r.trail.distance.toFixed(2)} m, góc ${r.trail.turned.toFixed(0)}°, dừng lúc ${r.trail.time.toFixed(2)} s, chấm lúc ${r.gradedAt.toFixed(2)} s (${r.why}), ${g.stars} sao`)
+  assert.equal(r.why, 'rest', 'chương trình xong thì robot đứng yên và được chấm trước maxTime')
+  // Các chặng dừng 0,3 s giữa cạnh và góc không bị coi là "đứng yên" (cần ≥ 1 s).
+  assert.ok(r.trail.distance > 2.8, `chấm sớm giữa chừng: quãng ${r.trail.distance}`)
   assert.ok(g.stars >= 2, `${g.stars} sao: ${JSON.stringify(g.goals)}`)
   assert.equal(g.stars, 3)
   assert.equal(r.touchedMountain, false, 'hình vuông quanh Núi A không chạm chân núi')
 })
 
-test('nhiệm vụ 8: chương trình có sẵn chạy trên sân cho vệt không khép; sửa số chia góc rẽ thì đạt ≥ 2 sao', async () => {
+test('nhiệm vụ 8: chương trình có sẵn chạy trên sân cho vệt không khép; sửa số chia góc rẽ thì đạt ≥ 2 sao', async (t) => {
   const m = byN(8)
-  const bad = await runOnField(m, m.starter!, 16)
+  const bad = await runOnField(m, m.starter!)
   const gb = grade(m, bad)
-  console.log(`nhiệm vụ 8 chương trình sai: sai số cuối ${(err(bad) * 100).toFixed(1)} cm, ${gb.stars} sao — ${gb.hint}`)
+  t.diagnostic(`chương trình sai: sai số cuối ${(err(bad) * 100).toFixed(1)} cm, ${gb.stars} sao — ${gb.hint}`)
   assert.equal(gb.done, false)
-  const good = await runOnField(m, turtle(0.7, 131), 16)
+  const good = await runOnField(m, turtle(0.7, 131))
   const gg = grade(m, good)
-  console.log(`nhiệm vụ 8 đã sửa: sai số cuối ${(err(good) * 100).toFixed(1)} cm, chạm núi ${good.touchedMountain}, ${gg.stars} sao`)
+  t.diagnostic(`đã sửa: sai số cuối ${(err(good) * 100).toFixed(1)} cm, chạm núi ${good.touchedMountain}, chấm lúc ${good.gradedAt.toFixed(2)} s (${good.why}), ${gg.stars} sao`)
   assert.ok(gg.stars >= 2, `${gg.stars} sao`)
+})
+
+// ---------- Hợp đồng với match.ts và thời điểm chấm (R57) ----------
+test('hợp đồng sự kiện: Match thật ghi cờ và hết giờ, grade() nhận ra; cờ của robot khác không tính', async () => {
+  const w = await FanrocWorld.create(1)
+  try {
+    const robots = [new RobotBody(w, byN(10).robot, 'red', 0), new RobotBody(w, byN(10).robot, 'blue', 0)]
+    const m = new Match(w, robots, ['Em', 'Bạn'], { seed: 1 })
+    m.t = 5
+    m.step(PHYSICS_DT, [])
+    robots[1].onFlag!(0) // Robot 2 cắm Núi A — không phải robot của em
+    const m10 = byN(10)
+    const quick = { distance: 1, turned: 90, time: 20 }
+    assert.equal(grade(m10, record(m10, { trail: quick, events: [...m.events] })).done, false, 'cờ của Robot 2 không tính cho em')
+    robots[0].onFlag!(0) // đúng đường robot.ts gọi khi cắm được cờ
+    assert.deepEqual([grade(m10, record(m10, { trail: quick, events: [...m.events] })).done, m.flags[0]], [true, true])
+    const m12 = byN(12)
+    assert.equal(grade(m12, record(m12, { events: [...m.events], tally: m.tally() })).done, false, 'trận chưa hết giờ')
+    m.t = MATCH_S - PHYSICS_DT / 2
+    m.step(PHYSICS_DT, [])
+    assert.equal(m.phase, 'end')
+    const r = grade(m12, record(m12, { events: [...m.events], tally: m.tally() }))
+    assert.equal(r.done, true, `không nhận ra sự kiện hết giờ: ${JSON.stringify(m.events.map((e) => e.text))}`)
+  } finally {
+    w.rapier.free()
+  }
+})
+
+test('R57: mọi nhiệm vụ có maxTime; điều kiện ⭐ thời gian nhỏ hơn maxTime; nhiệm vụ trận dùng đồng hồ trận', () => {
+  for (const m of MISSIONS) {
+    assert.ok(m.maxTime > 0, `nhiệm vụ ${m.n}`)
+    for (const g of [...m.goals, ...m.stars.two, ...m.stars.three]) if (g.type === 'time') assert.ok(g.max < m.maxTime, `nhiệm vụ ${m.n}: time ${g.max} ≥ maxTime ${m.maxTime}`)
+  }
+  assert.ok(byN(12).maxTime >= MATCH_S + 10)
+})
+
+test('vùng đích ⭐⭐ / ⭐⭐⭐ nằm trong vùng đích ⭐ (đạt sao cao thì chắc chắn đã đạt sao thấp)', () => {
+  for (const m of MISSIONS) {
+    const base = m.goals.flatMap((g) => (g.type === 'reach' ? [g.rect] : []))
+    for (const g of [...m.stars.two, ...m.stars.three]) {
+      if (g.type !== 'reach') continue
+      const r = g.rect
+      assert.ok(base.some((b) => r.x0 >= b.x0 && r.x1 <= b.x1 && r.z0 >= b.z0 && r.z1 <= b.z1), `nhiệm vụ ${m.n}: ${JSON.stringify(r)} ra ngoài ${JSON.stringify(base)}`)
+    }
+  }
 })

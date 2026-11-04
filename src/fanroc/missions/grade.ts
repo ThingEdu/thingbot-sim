@@ -3,7 +3,7 @@
 //
 // ⭐ = đạt mọi `goals`; ⭐⭐ = ⭐ + `stars.two`; ⭐⭐⭐ = ⭐⭐ + `stars.three` (spec §8.3). Gợi ý = câu của điều kiện đầu
 // tiên chưa đạt trong mức sao thấp nhất còn thiếu có câu gợi ý hợp tình huống; `{d}` thay bằng số (cm, độ hoặc điểm).
-import { readMutation } from '../procedures.ts'
+import { procedureArgCount } from '../procedures.ts'
 import { scoreTally } from '../scoring.ts'
 import type { Pose } from '../layout.ts'
 import type { Goal, GradeResult, HintWhen, Mission, RunRecord } from './types.ts'
@@ -31,15 +31,6 @@ export function programBlocks(program: object | null): Blk[] {
   const stacks = ((program as { blocks?: { blocks?: Blk[] } } | null)?.blocks?.blocks ?? []).filter((b) => HATS.has(b.type ?? ''))
   stacks.forEach(visit)
   return out
-}
-
-const argCount = (b: Blk): number => {
-  try {
-    const ids = JSON.parse(readMutation(b.extraState).argumentids ?? '[]') as unknown
-    return Array.isArray(ids) ? ids.length : 0
-  } catch {
-    return 0
-  }
 }
 
 // ---------- Hình học ----------
@@ -88,12 +79,13 @@ function check(g: Goal, r: RunRecord): Check {
       return ok(g.opcodes.every((op) => types.has(op)))
     }
     case 'paramBlock': {
-      const calls = programBlocks(r.program).filter((b) => b.type === 'procedures_call' && argCount(b) >= 1).length
+      const calls = programBlocks(r.program).filter((b) => b.type === 'procedures_call' && procedureArgCount(b.extraState) >= 1).length
       return ok(calls >= (g.calls ?? 1))
     }
     case 'flag': {
       const text = `cắm cờ Núi ${MOUNTAIN_NAME[g.mountain]}`
-      return ok(r.events.some((e) => e.text.endsWith(text)))
+      // Chỉ cờ do robot của em (Robot 1, chỉ số 0 trong trận) cắm.
+      return ok(r.events.some((e) => e.robot === 0 && e.text.endsWith(text)))
     }
     case 'park': {
       const p = r.tally?.parks.red[0] ?? null

@@ -115,12 +115,13 @@ export const MISSIONS: Mission[] = [
   {
     id: 'lam-quen', stage: 1, n: 1, title: 'Làm quen robot',
     goal: 'Lái robot bằng bàn phím một vòng hình vuông quanh Núi A rồi về chỗ cũ, xem vệt robot vẽ trên sân.',
-    robot: MAKER, start: SQUARE_A.start, balls: false, toolbox: TOOLBOX, starter: TELEOP, kind: 'drive', path: SQUARE_A.path,
+    robot: MAKER, start: SQUARE_A.start, balls: false, toolbox: TOOLBOX, starter: TELEOP, kind: 'drive', maxTime: 60, path: SQUARE_A.path,
     guide: [
       'Robot của em có hai bánh: động cơ M1 quay bánh trái, M2 quay bánh phải. Chương trình lái bằng tay cầm đã có sẵn.',
       'Bấm ▶ rồi giữ W để đi tới, S để lùi, A / D để xoay tại chỗ. Thả phím là robot dừng.',
       'Đi theo đường nét đứt: bốn cạnh, bốn lần rẽ trái, vòng quanh Núi A rồi dừng đúng chỗ xuất phát.',
       'Mỗi lần lệnh động cơ đổi, vệt đổi màu. Em nhìn vệt để biết đoạn nào robot đi thẳng, đoạn nào xoay.',
+      'Robot đứng yên quá 1 giây là được chấm luôn — lái liền một mạch, đừng dừng lại giữa chừng.',
     ],
     goals: [{ type: 'measure', what: 'distance', min: 1.5 }, { type: 'measure', what: 'turned', min: 270 }, { type: 'return', tol: 0.25 }],
     stars: { two: [{ type: 'return', tol: 0.12 }], three: [{ type: 'noMountain' }] },
@@ -133,7 +134,7 @@ export const MISSIONS: Mission[] = [
   {
     id: 'di-thang', stage: 1, n: 2, title: 'Đi thẳng',
     goal: 'Viết chương trình cho robot đi thẳng tới Núi A và dừng ngay trước chân núi, không chạm núi.',
-    robot: MAKER, start: BEFORE_A, balls: false, toolbox: TOOLBOX_WHEELS, starter: EMPTY, kind: 'program',
+    robot: MAKER, start: BEFORE_A, balls: false, toolbox: TOOLBOX_WHEELS, starter: EMPTY, kind: 'program', maxTime: 20,
     path: [{ x: BEFORE_A.x, z: BEFORE_A.z }, { x: BEFORE_A.x, z: 0.8 }],
     guide: [
       'Kéo hai khối «đặt động cơ» vào dưới «khởi động ThingBot»: M1 và M2 cùng chiều tiến, cùng tốc độ 60.',
@@ -142,7 +143,7 @@ export const MISSIONS: Mission[] = [
       'Bấm ▶, xem robot dừng ở đâu. Chưa tới thì tăng thời gian đợi, chạm núi thì giảm.',
     ],
     goals: [{ type: 'reach', rect: rectAround(BEFORE_A.x, 0.82, 0.05, 0.05) }, { type: 'noMountain' }, { type: 'uses', opcodes: ['thingBotC3_setMotor', 'control_wait'] }],
-    stars: { two: [{ type: 'reach', rect: rectAround(BEFORE_A.x, 0.785, 0.04, 0.02) }], three: [{ type: 'time', max: 3 }] },
+    stars: { two: [{ type: 'reach', rect: rectAround(BEFORE_A.x, 0.79, 0.04, 0.02) }], three: [{ type: 'time', max: 3 }] },
     hints: [
       { when: 'uses', text: 'Chương trình cần khối «đặt động cơ» và khối «đợi».' },
       { when: 'short', text: 'Còn hụt {d} cm — thử tăng thời gian đợi?' },
@@ -155,7 +156,7 @@ export const MISSIONS: Mission[] = [
   {
     id: 'cong-va-xoay', stage: 1, n: 3, title: 'Cong và xoay',
     goal: 'Cho robot quay tại chỗ đúng nửa vòng: cuối cùng robot quay mặt ngược lại mà vẫn đứng đúng chỗ cũ.',
-    robot: MAKER, start: CORNER, balls: false, toolbox: TOOLBOX_WHEELS, starter: EMPTY, kind: 'program',
+    robot: MAKER, start: CORNER, balls: false, toolbox: TOOLBOX_WHEELS, starter: EMPTY, kind: 'program', maxTime: 20,
     guide: [
       'Thử trước: M1 = 60, M2 = 30 thì robot đi cong — bánh nhanh hơn ở phía ngoài vòng cong.',
       'Cho hai bánh quay ngược chiều (M1 lùi, M2 tiến, cùng tốc độ) thì robot xoay tại chỗ.',
@@ -175,20 +176,21 @@ export const MISSIONS: Mission[] = [
   {
     id: 'do-robot', stage: 1, n: 4, title: 'Đo robot',
     goal: 'Đo xem robot đi được bao xa trong 1 giây và xoay được bao nhiêu độ trong 1 giây, ở tốc độ 60.',
-    robot: MAKER, start: CORNER, balls: false, toolbox: TOOLBOX_WHEELS, starter: EMPTY, kind: 'program',
+    robot: MAKER, start: CORNER, balls: false, toolbox: TOOLBOX_WHEELS, starter: EMPTY, kind: 'program', maxTime: 20,
     guide: [
       'Cho M1 = M2 = 60 trong 1 giây rồi dừng. Đọc ô "quãng đã đi" — đó là số mét robot đi được trong 1 giây.',
       'Tiếp theo cho M1 lùi 60, M2 tiến 60 trong 1 giây rồi dừng. Đọc ô "góc đã quay" — số độ xoay được trong 1 giây.',
       'Ghi hai số này lại: chặng sau em dùng chúng để robot đi đúng số mét, quay đúng số độ.',
       'Đo vài lần cho chắc. Robot còn trôi một chút sau khi dừng — số đo đã tính cả đoạn trôi đó.',
+      'Robot đứng yên quá 1 giây là được chấm luôn, nên giữa hai phép đo chỉ dừng ngắn thôi.',
     ],
     goals: [{ type: 'measure', what: 'distance', min: 0.2 }, { type: 'measure', what: 'turned', min: 90 }, { type: 'uses', opcodes: ['thingBotC3_setMotor', 'control_wait'] }],
-    stars: { two: [{ type: 'noMountain' }], three: [{ type: 'time', max: 3 }] },
+    stars: { two: [{ type: 'noMountain' }], three: [{ type: 'time', max: 3.5 }] },
     hints: [
       { when: 'uses', text: 'Chương trình cần khối «đặt động cơ» và khối «đợi».' },
       { when: 'measure', text: 'Chưa đủ hai phép đo — em cho robot đi thẳng 1 giây và xoay 1 giây chưa?' },
       { when: 'noMountain', text: 'Robot chạm núi — đi thẳng trước rồi mới xoay, hoặc xoay trước rồi đi.' },
-      { when: 'time', text: 'Chương trình chạy lâu quá — chỉ cần 1 giây đi thẳng và 1 giây xoay.' },
+      { when: 'time', text: 'Chương trình chạy lâu quá — chỉ cần 1 giây đi thẳng, dừng thật ngắn, rồi 1 giây xoay.' },
     ],
   },
 
@@ -196,7 +198,7 @@ export const MISSIONS: Mission[] = [
   {
     id: 'khoi-tien', stage: 2, n: 5, title: 'Khối "tiến (m)"',
     goal: 'Tạo khối của em «tiến (mét)» có một ô số, rồi dùng nó cho robot đi đúng 1 mét dọc mép sân.',
-    robot: MAKER, start: ALONG, balls: false, toolbox: TOOLBOX_TURTLE, starter: EMPTY, kind: 'program',
+    robot: MAKER, start: ALONG, balls: false, toolbox: TOOLBOX_TURTLE, starter: EMPTY, kind: 'program', maxTime: 40,
     path: [{ x: ALONG.x, z: ALONG.z }, { x: ALONG.x + 1, z: ALONG.z }],
     guide: [
       'Mở mục "Khối của em", bấm "Tạo khối", đặt tên "tiến" và thêm một ô số tên "mét".',
@@ -216,7 +218,7 @@ export const MISSIONS: Mission[] = [
   {
     id: 'khoi-re', stage: 2, n: 6, title: 'Khối "rẽ phải/trái (độ)"',
     goal: 'Tạo khối của em «rẽ trái (độ)» và dùng nó cho robot quay trái đúng 90° tại chỗ.',
-    robot: MAKER, start: CORNER, balls: false, toolbox: TOOLBOX_TURTLE, starter: EMPTY, kind: 'program',
+    robot: MAKER, start: CORNER, balls: false, toolbox: TOOLBOX_TURTLE, starter: EMPTY, kind: 'program', maxTime: 40,
     guide: [
       'Tạo khối «rẽ trái» với một ô số tên "độ".',
       'Trong khối định nghĩa: M1 lùi 60, M2 tiến 60, đợi (độ ÷ số độ xoay trong 1 giây em đo), rồi dừng.',
@@ -235,7 +237,7 @@ export const MISSIONS: Mission[] = [
   {
     id: 'hinh-vuong', stage: 2, n: 7, title: 'Hình vuông',
     goal: 'Cho robot đi một hình vuông cạnh 0,72 m vòng quanh Núi A rồi về đúng chỗ xuất phát.',
-    robot: MAKER, start: SQUARE_A.start, balls: false, toolbox: TOOLBOX_TURTLE, starter: EMPTY, kind: 'program', path: SQUARE_A.path,
+    robot: MAKER, start: SQUARE_A.start, balls: false, toolbox: TOOLBOX_TURTLE, starter: EMPTY, kind: 'program', maxTime: 40, path: SQUARE_A.path,
     guide: [
       'Một hình vuông là 4 lần: đi một cạnh rồi rẽ trái 90°. Robot rẽ trái nên đi ngược chiều kim đồng hồ quanh núi.',
       'Tạo lại hai khối của em «tiến (mét)» và «rẽ trái (độ)» như nhiệm vụ 5 và 6.',
@@ -253,7 +255,7 @@ export const MISSIONS: Mission[] = [
   {
     id: 'go-loi', stage: 2, n: 8, title: 'Gỡ lỗi',
     goal: 'Chương trình có sẵn muốn đi hình vuông quanh Núi D nhưng vệt không khép. Tìm chỗ sai và sửa.',
-    robot: MAKER, start: SQUARE_D.start, balls: false, toolbox: TOOLBOX_TURTLE, starter: BUGGY_SQUARE, kind: 'program', path: SQUARE_D.path,
+    robot: MAKER, start: SQUARE_D.start, balls: false, toolbox: TOOLBOX_TURTLE, starter: BUGGY_SQUARE, kind: 'program', maxTime: 40, path: SQUARE_D.path,
     guide: [
       'Bấm ▶ và quan sát vệt. Robot sai ở cạnh hay ở góc rẽ?',
       'Mỗi màu vệt là một lệnh động cơ. Đếm xem robot quay được bao nhiêu độ ở mỗi góc.',
@@ -273,14 +275,15 @@ export const MISSIONS: Mission[] = [
   {
     id: 'don-khu-chua-chay', stage: 3, n: 9, title: 'Dọn Khu Chữa Cháy',
     goal: 'Lái robot đẩy hết bóng xanh ra khỏi Khu Chữa Cháy — ở đó chỉ nên có bóng cam.',
-    robot: MAKER, start: ROBOT1, balls: true, toolbox: TOOLBOX, starter: TELEOP, kind: 'drive',
+    robot: MAKER, start: ROBOT1, balls: true, toolbox: TOOLBOX, starter: TELEOP, kind: 'drive', maxTime: 90,
     guide: [
       'Khu Chữa Cháy là hai ô vuông ở hai góc xa, phía Hộp Phân Phối. Bóng xanh nằm trong đó bị trừ điểm.',
       'Lái robot tới Khu Chữa Cháy, dùng thân xe đẩy bóng xanh ra ngoài vạch.',
       'Cẩn thận đừng đẩy bóng cam ra theo — bóng cam trong khu được cộng điểm.',
+      'Robot đứng yên quá 1 giây là được chấm luôn — lái liền một mạch, đừng dừng lại giữa chừng.',
     ],
     goals: [{ type: 'fireClear', max: 0 }, { type: 'measure', what: 'distance', min: 1 }],
-    stars: { two: [{ type: 'time', max: 90 }], three: [{ type: 'time', max: 45 }, { type: 'noMountain' }] },
+    stars: { two: [{ type: 'time', max: 60 }], three: [{ type: 'time', max: 40 }, { type: 'noMountain' }] },
     hints: [
       { when: 'fireClear', text: 'Khu Chữa Cháy còn bóng xanh — đẩy nốt ra ngoài vạch nhé.' },
       { when: 'measure', text: 'Robot chưa tới Khu Chữa Cháy — khu ở góc xa, phía Hộp Phân Phối.' },
@@ -291,15 +294,16 @@ export const MISSIONS: Mission[] = [
   {
     id: 'cam-co', stage: 3, n: 10, title: 'Cắm cờ',
     goal: 'Lái robot tới Núi A, vươn tay S1 lên và cắm cờ vào lỗ trên đỉnh núi.',
-    robot: MAKER, start: ROBOT1, balls: true, toolbox: TOOLBOX, starter: TELEOP, kind: 'drive',
+    robot: MAKER, start: ROBOT1, balls: true, toolbox: TOOLBOX, starter: TELEOP, kind: 'drive', maxTime: 60,
     path: [{ x: ROBOT1.x, z: ROBOT1.z }, { x: HOLE_A.x, z: HOLE_A.z }],
     guide: [
       'Robot đang kẹp sẵn một lá cờ. Tay S1 nâng lên bằng L1, hạ xuống bằng L2; □ mở kẹp thả cờ.',
       'Lái robot sát Núi A, mặt hướng vào đỉnh núi.',
       'Nâng tay S1 cho cờ ở trên lỗ, rồi mở kẹp để cờ rơi vào lỗ.',
+      'Robot đứng yên quá 1 giây là được chấm luôn — lái liền một mạch, đừng dừng lại giữa chừng.',
     ],
     goals: [{ type: 'flag', mountain: 0 }],
-    stars: { two: [{ type: 'time', max: 60 }], three: [{ type: 'time', max: 30 }] },
+    stars: { two: [{ type: 'time', max: 45 }], three: [{ type: 'time', max: 25 }] },
     hints: [
       { when: 'flag', text: 'Cờ chưa vào lỗ Núi A — đưa đầu tay thẳng trên lỗ rồi mới mở kẹp.' },
       { when: 'time', text: 'Cắm được rồi! Thử lại nhanh hơn: lái thẳng tới núi, nâng tay trong lúc đi.' },
@@ -307,11 +311,12 @@ export const MISSIONS: Mission[] = [
   },
   {
     id: 've-vung-bao-ve', stage: 3, n: 11, title: 'Về Vùng Bảo Vệ',
-    goal: 'Viết chương trình đưa robot từ ô xuất phát vào hẳn Vùng Bảo Vệ đỏ và đỗ ở đó tới hết giờ.',
-    robot: MAKER, start: ROBOT1, balls: true, toolbox: TOOLBOX_TURTLE, starter: EMPTY, kind: 'program',
+    goal: 'Viết chương trình đưa robot từ ô xuất phát vào hẳn Vùng Bảo Vệ đỏ, đỗ ở đó và đứng yên.',
+    robot: MAKER, start: ROBOT1, balls: true, toolbox: TOOLBOX_TURTLE, starter: EMPTY, kind: 'program', maxTime: 60,
     path: [{ x: ROBOT1.x, z: ROBOT1.z }, { x: -1.0, z: 0.95 }, { x: -1.0, z: (SAFE.z0 + SAFE.z1) / 2 }],
     guide: [
       'Vùng Bảo Vệ đỏ là ô vuông sát rào trái, giữa sân. Cuối trận robot đỗ trong đó được cộng điểm.',
+      'Robot dừng hẳn là được chấm: lúc đó robot phải đang nằm trong vạch.',
       'Cả thân robot nằm trong vạch là đỗ toàn phần (nhiều điểm hơn), một phần thân là đỗ một phần.',
       'Dùng khối của em «tiến» và «rẽ trái» của chặng 2: tính xem cần đi mấy mét, rẽ mấy độ.',
     ],
@@ -328,7 +333,7 @@ export const MISSIONS: Mission[] = [
   {
     id: 'tran-dau-tien', stage: 4, n: 12, title: 'Trận đầu tiên',
     goal: 'Chơi một trận đầy đủ cùng ba robot máy mức Dễ: em lái Robot 1 bằng bàn phím, cả bốn đội chung một điểm trận.',
-    robot: MAKER, start: ROBOT1, balls: true, toolbox: TOOLBOX, starter: TELEOP, kind: 'match',
+    robot: MAKER, start: ROBOT1, balls: true, toolbox: TOOLBOX, starter: TELEOP, kind: 'match', maxTime: 190,
     guide: [
       '10 giây đầu bóng được xả xuống sân, robot chưa chạy. Sau đó có 180 giây thi đấu.',
       'Bóng cam vào Khu Chữa Cháy, bóng xanh lên rãnh núi, cắm cờ lên đỉnh núi đều được điểm.',
