@@ -134,6 +134,10 @@ const CSS = `
 .pk-acts button { display: inline-flex; gap: 6px; align-items: center; font: 800 15px var(--font); border-radius: 10px; padding: 10px 18px; cursor: pointer; border: 1px solid #fff4; background: #0006; color: #eef2fa; }
 .pk-acts button.main { background: #1fa860; border-color: #1fa860; color: #fff; }
 .pk-note { font-size: 12.5px; color: #aab3c7; }
+.pk-draft { background: #f2a51626; border: 1px solid #f2a51677; border-radius: 8px; padding: 6px 10px; }
+.pk-draft .pk-note { color: #ffcf5a; font-weight: 700; }
+.pk-draft button { font: 700 12.5px var(--font); color: #eef2fa; background: #0006; border: 1px solid #fff4; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+.pk-note[data-ok="false"] { color: #ff8a7a; }
 `
 
 function injectCss(): void {
@@ -307,9 +311,15 @@ export interface PickState {
   alliance: Alliance
   skill: Skill
   runMine: boolean
+  /** Có bản nháp chưa lưu ở Xưởng cho (bạn p, robot cfg) không (R94). */
+  draft(p: 0 | 1, cfg: RobotConfig): boolean
+  /** Dòng báo sau khi bấm Lưu bản nháp (null = không có). */
+  draftMsg: { text: string; ok: boolean } | null
 }
 
 export interface PickActions {
+  saveDraft(p: 0 | 1, cfg: RobotConfig): void
+  dropDraft(p: 0 | 1, cfg: RobotConfig): void
   setPlayer(p: 0 | 1): void
   setCfg(p: 0 | 1, cfg: RobotConfig): void
   setPractice(v: boolean): void
@@ -401,6 +411,20 @@ export function createPick(root: HTMLElement, get: () => PickState, act: PickAct
     if (v !== null) {
       rows.push(row('Robot của em chạy', segment([['mine', `Của em v${v}`], ['default', 'Mặc định']], s.runMine ? 'mine' : 'default', (m) => act.setRunMine(m === 'mine'))))
     } else rows.push(el('div', 'pk-note', 'Robot của em chạy chương trình mặc định. Vào Xưởng lập trình để sửa và lưu chương trình của em.'))
+    if (s.draft(p, chosen)) {
+      // Trận chạy bản đã lưu (hoặc Mặc định); bản đang sửa ở Xưởng chỉ vào trận khi em lưu.
+      const note = el('div', 'pk-row pk-draft')
+      note.dataset.role = 'draft'
+      note.append(el('span', 'pk-note', 'Chương trình đang sửa ở Xưởng chưa lưu'), btn('Lưu', () => act.saveDraft(p, chosen)), btn('Bỏ', () => act.dropDraft(p, chosen)))
+      rows.push(note)
+    }
+    if (s.draftMsg) {
+      const m = el('div', 'pk-note', s.draftMsg.text)
+      m.dataset.role = 'draft-msg'
+      m.dataset.ok = String(s.draftMsg.ok)
+      m.setAttribute('role', 'status')
+      rows.push(m)
+    }
     const acts = el('div', 'pk-acts')
     const go = btn('', act.start, 'main')
     go.append(icon('play', 18), s.practice ? 'Vào đấu tập' : 'Vào trận')

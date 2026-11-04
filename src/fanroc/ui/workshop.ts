@@ -30,6 +30,40 @@ export function resetVerified(store: Pick<Store, 'resetProgram' | 'program'>, p:
   return store.program(p, cfg) === null ? { ok: true, text: 'Đã về chương trình mặc định' } : { ok: false, text: RESET_FAILED }
 }
 
+// ---------- Bản nháp (R94) ----------
+/** Khoá bản nháp: bạn + cấu hình robot (như khoá chương trình của store). */
+export const draftKey = (p: 0 | 1, c: RobotConfig) => `${p}:${c.type}/${c.drive}/${c.actuator}`
+
+/**
+ * Bản nháp chưa lưu của Xưởng, chỉ trong phiên (không ghi localStorage). Mỗi bản giữ cả `base`: chương trình lúc
+ * mở Xưởng (bản đã lưu, hoặc Mặc định như vùng khối đã nạp) — bản nháp giống hệt `base` thì không phải bản nháp.
+ */
+export class Drafts {
+  private readonly m = new Map<string, { state: object; base: object }>()
+
+  /** Ghi lại chương trình đang sửa; giống `base` ⇒ xoá bản nháp (không có gì chưa lưu). */
+  keep(p: 0 | 1, cfg: RobotConfig, state: object, base: object): void {
+    const k = draftKey(p, cfg)
+    if (same(state, base)) this.m.delete(k)
+    else this.m.set(k, { state, base })
+  }
+
+  get(p: 0 | 1, cfg: RobotConfig): { state: object; base: object } | null {
+    return this.m.get(draftKey(p, cfg)) ?? null
+  }
+
+  has(p: 0 | 1, cfg: RobotConfig): boolean {
+    return this.m.has(draftKey(p, cfg))
+  }
+
+  drop(p: 0 | 1, cfg: RobotConfig): void {
+    this.m.delete(draftKey(p, cfg))
+  }
+}
+
+/** Hai chương trình (dạng lưu của vùng khối) giống hệt nhau. */
+export const sameProgram = same
+
 // ---------- DOM ----------
 export interface WorkshopView {
   player: 0 | 1

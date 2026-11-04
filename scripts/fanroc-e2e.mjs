@@ -2,7 +2,7 @@
  * Phép thử đầu-cuối của sân FANROC trên trình duyệt thật (Playwright, lấy từ checkout ThingBlock như ftc-e2e.mjs
  * của nhánh spike/ursim).
  *
- *   npm run e2e:fanroc                 # tự bật Vite dev trên một cổng trống, chạy N3–N6, N2c (màn chính / ⚙ / Xưởng Task 13), N1, N1b, N1c (vỏ Task 11), N2, N2b (bảng điểm Task 12) và E1–E11 (E5 bỏ qua), tắt Vite
+ *   npm run e2e:fanroc                 # tự bật Vite dev trên một cổng trống, chạy N3–N6, N6b–N6d, N2c (màn chính / ⚙ / Xưởng Task 13), N1, N1b, N1c (vỏ Task 11), N2, N2b (bảng điểm Task 12) và E1–E11 (E5 bỏ qua), tắt Vite
  *   FANROC_URL=http://localhost:5191/mo-phong/fanroc.html npm run e2e:fanroc   # dùng trang đang chạy sẵn
  *   npm run e2e:fanroc -- E3 E5        # chỉ chạy các phép thử có tên bắt đầu như vậy
  *
@@ -616,6 +616,38 @@ async function gameTests() {
     const blurDrift = dist(b2, await pose(page, me))
     await page.keyboard.up('KeyW')
     expect(blurDrift < 0.01, `blur khi giữ W: robot vẫn chạy ${blurDrift.toFixed(4)} m`)
+    // Tab bị ẩn (visibilitychange, document.hidden = true) khi đang giữ W ⇒ nhả hết phím, robot dừng.
+    await place(page, me)
+    await page.waitForTimeout(200)
+    const v0 = await pose(page, me)
+    await page.keyboard.down('KeyW')
+    await page.waitForTimeout(800)
+    const v1 = await pose(page, me)
+    expect(v0.z - v1.z > 0.1, `giữ W trước khi ẩn tab chỉ đi ${(v0.z - v1.z).toFixed(3)} m`)
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' })
+      document.dispatchEvent(new Event('visibilitychange'))
+      delete document.hidden
+      delete document.visibilityState
+    })
+    await page.waitForTimeout(500)
+    const v2 = await pose(page, me)
+    await page.waitForTimeout(500)
+    const hideDrift = dist(v2, await pose(page, me))
+    await page.keyboard.up('KeyW')
+    expect(hideDrift < 0.01, `ẩn tab khi giữ W: robot vẫn chạy ${hideDrift.toFixed(4)} m`)
+    // Phím tắt Ctrl+W / ⌘+W không lái.
+    await place(page, me)
+    await page.waitForTimeout(200)
+    const k0 = await pose(page, me)
+    await page.keyboard.down('Control')
+    await page.keyboard.down('KeyW')
+    await page.waitForTimeout(700)
+    await page.keyboard.up('KeyW')
+    await page.keyboard.up('Control')
+    const ctrlDrift = dist(k0, await pose(page, me))
+    expect(ctrlDrift < 0.01, `Ctrl+W mà robot đi ${ctrlDrift.toFixed(3)} m`)
     // Thẻ robot của em góc dưới trái.
     const card = await page.locator('.rc-me').innerText()
     expect(/Mẫu Maker · 2 bánh/.test(card) && /Chương trình: Mặc định/.test(card) && /Lái: Bàn phím/.test(card), `thẻ robot: ${card}`)
@@ -633,7 +665,7 @@ async function gameTests() {
     await page.keyboard.up('KeyW')
     const typed = dist(t0, await pose(page, me))
     expect(typed < 0.01, `gõ chữ W vào ô nhập mà robot đi ${typed.toFixed(3)} m`)
-    return `giữ W 2 s: ${moved.toFixed(3)} m · nhả: trôi ${drift.toFixed(4)} m · blur: trôi ${blurDrift.toFixed(4)} m · gõ: ${typed.toFixed(4)} m`
+    return `giữ W 2 s: ${moved.toFixed(3)} m · nhả: trôi ${drift.toFixed(4)} m · blur: trôi ${blurDrift.toFixed(4)} m · ẩn tab: ${hideDrift.toFixed(4)} m · Ctrl+W: ${ctrlDrift.toFixed(4)} m · gõ: ${typed.toFixed(4)} m`
   })
 
   await test('N5 ⚙: mở / Esc đóng; màn chính có bảng phím; ở trận đủ mục, Nâng cao thu gọn, bấm ra ngoài đóng', async (page) => {
@@ -659,6 +691,13 @@ async function gameTests() {
     const lock = await page.evaluate(() => ({ a: window.__fanroc.editors.anyActive(), s: window.__fanroc.editors.state(0), b: [...document.querySelectorAll('.st-pop button')].filter((b) => b.textContent.startsWith('×')).map((b) => b.textContent + ':' + b.disabled).join(' ') }))
     expect(await pop.locator('button', { hasText: '×40' }).isDisabled(), `×40 không khoá khi robot của em có chương trình: ${JSON.stringify(lock)}`)
     await shot(page, 't13-settings.png')
+    // Nâng cao: đưa bạn 1 sang ghế 3 ⇒ ô chọn ghế 1 tự đổi sang máy (mỗi bạn một ghế), mục vẫn mở.
+    await pop.locator('details[data-role="advanced"] summary').click()
+    await pop.locator('select[data-seat="2"]').selectOption('player-0')
+    await page.waitForTimeout(200)
+    const seat0 = await pop.locator('select[data-seat="0"]').inputValue()
+    const advOpen = await pop.locator('details[data-role="advanced"]').evaluate((d) => d.open)
+    expect(seat0 === 'agent-medium' && advOpen, `sau khi đổi ghế 3: ghế 1 "${seat0}", Nâng cao mở ${advOpen}`)
     await page.mouse.click(1250, 420) // ra ngoài khung (trên sân)
     await page.waitForTimeout(150)
     expect(await pop.isHidden(), 'bấm ra ngoài không đóng ⚙')
@@ -724,6 +763,78 @@ async function gameTests() {
     expect(/^Không lưu được/.test(msg) && ok === 'false', `báo: "${msg}" (${ok})`)
     expect(/Mặc định/.test(await page.locator('.ws-bar .prog').innerText()), 'nhãn đổi dù không lưu được')
     return `"${msg}"`
+  })
+
+  await test('N6c Xưởng: bản đang sửa chưa lưu được giữ; Trước trận nhắc "chưa lưu" + Lưu / Bỏ; vào lại Xưởng ⇒ "Chưa lưu"', async (page) => {
+    await open(page)
+    await page.locator('.hm-tile[data-tile="workshop"]').click()
+    await page.waitForFunction(() => window.__fanroc.screen === 'workshop')
+    const ws = page.locator('.ws-bar')
+    await ws.waitFor()
+    // Sửa: thay bằng Mẫu Auto (như học sinh sửa khối).
+    await page.evaluate(() => window.__fanroc.editors.sample(0, 'auto'))
+    await page.waitForFunction(() => document.querySelector('.ws-bar .prog')?.textContent === 'Chưa lưu', null, { timeout: 3000 })
+    const edited = await page.evaluate(() => JSON.stringify(window.__fanroc.editors.program(0)))
+    await page.locator('.sh-act button[aria-label="Màn chính"]').click()
+    await page.locator('.hm[data-screen="home"]').waitFor()
+    await page.locator('.hm-tile[data-tile="match"]').click()
+    const note = page.locator('.hm[data-screen="pick"] [data-role="draft"]')
+    await note.waitFor({ timeout: 3000 })
+    expect(/chưa lưu/.test(await note.innerText()), 'Trước trận thiếu dòng chưa lưu')
+    expect((await page.locator('.pk-card[aria-pressed="true"] .prog').innerText()) === 'Mặc định', 'trận phải chạy bản đã lưu / Mặc định')
+    // Về Xưởng ⇒ bản đang sửa còn nguyên, nhãn Chưa lưu.
+    await page.locator('.pk-acts button', { hasText: 'Về màn chính' }).click()
+    await page.locator('.hm-tile[data-tile="workshop"]').click()
+    await page.waitForFunction(() => window.__fanroc.screen === 'workshop')
+    const back = await page.evaluate(() => JSON.stringify(window.__fanroc.editors.program(0)))
+    expect(back === edited, 'vào lại Xưởng mà bản đang sửa đã mất')
+    expect((await ws.locator('.prog').innerText()) === 'Chưa lưu', `nhãn Xưởng: ${await ws.locator('.prog').innerText()}`)
+    await ws.locator('button', { hasText: 'Lưu cho robot của em' }).click()
+    const msg = await ws.locator('.ws-msg').innerText()
+    expect(msg === 'Đã lưu v1' && (await ws.locator('.prog').innerText()) === 'Của em v1', `lưu: "${msg}"`)
+    // Trận vào bằng Mặc định ⇒ bản đã lưu chạy (không phải bản nháp) — sửa tiếp, ra Trước trận: Lưu từ đó ⇒ v2.
+    await page.evaluate(() => window.__fanroc.editors.sample(0, 'teleop'))
+    await page.waitForFunction(() => document.querySelector('.ws-bar .prog')?.textContent === 'Chưa lưu', null, { timeout: 3000 })
+    await page.locator('.sh-act button[aria-label="Màn chính"]').click()
+    await page.locator('.hm-tile[data-tile="match"]').click()
+    await note.waitFor()
+    await note.locator('button', { hasText: 'Lưu' }).click()
+    const pmsg = await page.locator('.hm[data-screen="pick"] [data-role="draft-msg"]').innerText()
+    const prog2 = await page.locator('.pk-card[aria-pressed="true"] .prog').innerText()
+    expect(pmsg === 'Đã lưu v2' && prog2 === 'Của em v2' && (await note.count()) === 0, `Lưu ở Trước trận: "${pmsg}", nhãn "${prog2}"`)
+    // Bỏ: sửa lần nữa, Bỏ ⇒ Xưởng mở bản đã lưu v2.
+    await page.locator('.pk-acts button', { hasText: 'Về màn chính' }).click()
+    await page.locator('.hm-tile[data-tile="workshop"]').click()
+    await page.waitForFunction(() => window.__fanroc.screen === 'workshop')
+    await page.evaluate(() => window.__fanroc.editors.sample(0, 'auto'))
+    await page.locator('.sh-act button[aria-label="Màn chính"]').click()
+    await page.locator('.hm-tile[data-tile="match"]').click()
+    await note.locator('button', { hasText: 'Bỏ' }).click()
+    expect((await note.count()) === 0, 'Bỏ mà dòng chưa lưu còn')
+    await go(page, 'workshop')
+    expect((await ws.locator('.prog').innerText()) === 'Của em v2', `sau Bỏ: ${await ws.locator('.prog').innerText()}`)
+    return `giữ bản nháp · "${msg}" · Lưu ở Trước trận "${pmsg}" · Bỏ ⇒ Của em v2`
+  })
+
+  await test('N6d đổi màn chính ⇄ trận ⇄ Xưởng ×3 không rò bo ảo (Worker)', async (page) => {
+    await open(page)
+    const w0 = await page.evaluate(() => window.__fanroc.workers())
+    const seen = []
+    for (let k = 0; k < 3; k++) {
+      for (const s of ['match', 'home', 'workshop', 'practice', 'home']) {
+        await go(page, s)
+        seen.push(await page.evaluate(() => window.__fanroc.workers()))
+      }
+    }
+    // Trận có ghế "chương trình của bạn 1" (bo đồng đội) rồi rời trận ⇒ bo đó phải được dọn.
+    await go(page, 'match')
+    await seat(page, 2, 'copy-0')
+    await closeSettings(page)
+    const withCopy = await page.evaluate(() => window.__fanroc.workers())
+    await go(page, 'home')
+    const w1 = await page.evaluate(() => window.__fanroc.workers())
+    expect(seen.every((n) => n === w0) && withCopy === w0 + 1 && w1 === w0, `bo ảo: đầu ${w0}, các màn ${seen.join(' ')}, có đồng đội ${withCopy}, cuối ${w1}`)
+    return `bo ảo luôn ${w0} (đồng đội +1 rồi dọn)`
   })
 
   await test('N2c màn kết quả: báo nổi / đếm ngược bị xoá; "Về màn chính" ⇒ màn chính', async (page) => {

@@ -21,7 +21,7 @@ import type { RobotConfig } from './robots.ts'
 import { PadSeats, PS2_NEUTRAL, type SeatStatus } from './gamepad.ts'
 import { KeyPad, layoutFor, mergePad, typing } from './keys.ts'
 import { effectiveSpeed } from './pace.ts'
-import { configControls, createEditors } from './editor.ts'
+import { configControls, createEditors, workerCount } from './editor.ts'
 import { defaultConfig, sample } from './programs.ts'
 import { NEUTRAL } from './ports.ts'
 import { MISSIONS } from './missions/data.ts'
@@ -35,7 +35,7 @@ import { createShell, highlightCpp, serialNews, serialPatch, type InputKind, typ
 import { chrome, defaultCamera, type Screen } from './ui/router.ts'
 import { createHome, createPick, createPlaceholder, programText, robotName, type HomeInfo, type TileId } from './ui/home.ts'
 import { assignSeat, createSettings, defaultSeats, playerSeat, seatOf, seatOptions, type SeatMode, type SettingsCtx } from './ui/settings.ts'
-import { createWorkshopBar, resetVerified, saveVerified } from './ui/workshop.ts'
+import { createWorkshopBar, Drafts, resetVerified, saveVerified, sameProgram } from './ui/workshop.ts'
 import { createRobotCards, type CardInfo } from './ui/robotcard.ts'
 
 const shell = createShell(document.querySelector<HTMLElement>('#app')!)
@@ -191,7 +191,8 @@ async function start(): Promise<void> {
   const showTabs = () =>
     editors.tabs(
       PLAYERS.map((p) => {
-        const used = p === 0 || players() === 2 || modes.some((m) => modeOwner(m) === p)
+        // Xưởng: chỉ thẻ của bạn đang sửa (Chạy / Lưu cùng tác động lên một chương trình).
+        const used = screen === 'workshop' ? p === wsPlayer : p === 0 || players() === 2 || modes.some((m) => modeOwner(m) === p)
         return used ? `${names[p]} · ${robotName(cfgOf(p))}` : null
       }),
     )
@@ -279,7 +280,7 @@ async function start(): Promise<void> {
       get screen() {
         return screen
       },
-      mySeat, keypads: () => keypads,
+      mySeat, keypads: () => keypads, workers: workerCount,
       pause: () => setPaused(true), resume: () => setPaused(false), stepBlock: () => stepBlock(),
       pose: (i: number) => {
         const p = game.robots[i].pose
@@ -401,6 +402,7 @@ async function start(): Promise<void> {
       if (t === 'match') {
         home.hide()
         pickPlayer = 0
+        pickMsg = null
         pick.show()
       } else void go(t === 'workshop' ? 'workshop' : t === 'missions' ? 'missions' : 'tournament')
     },
@@ -412,8 +414,23 @@ async function start(): Promise<void> {
       practice: pickPractice, players: players(), player: pickPlayer, names, cfg: cfgOf,
       saved: (p, cfg) => saved(p, cfg)?.version ?? null,
       alliance: settings.alliance, skill: settings.skill, runMine,
+      draft: (p, cfg) => drafts.has(p, cfg),
+      draftMsg: pickMsg,
     }),
     {
+      saveDraft(p, cfg) {
+        const d = drafts.get(p, cfg)
+        if (!d) return
+        const r = saveVerified(store, p, cfg, d.state)
+        if (r.ok) drafts.drop(p, cfg)
+        pickMsg = r
+        pick.render()
+      },
+      dropDraft(p, cfg) {
+        drafts.drop(p, cfg)
+        pickMsg = { text: 'Đã bỏ bản đang sửa — robot của em chạy bản đã lưu', ok: true }
+        pick.render()
+      },
       setPlayer: (p) => ((pickPlayer = p), pick.render()),
       setCfg: (p, cfg) => (editors.setConfig(p, cfg), pick.render()),
       setPractice: (v) => ((pickPractice = v), pick.render()),
@@ -429,24 +446,73 @@ async function start(): Promise<void> {
 
   // ---------- Xưởng lập trình ----------
   const wsControls = PLAYERS.map((p) => configControls(() => cfgOf(p), (cfg) => editors.setConfig(p, cfg)))
+  /**
+   * Bản nháp chưa lưu (R94, chỉ trong phiên): rời Xưởng hay đổi robot / đế ở Xưởng thì giữ chương trình đang sửa theo
+   * (bạn, cấu hình lúc mở); vào lại Xưởng với đúng (bạn, robot) đó thì nạp lại bản nháp, nhãn "Chưa lưu". Trận vẫn
+   * chạy bản ĐÃ LƯU (hoặc Mặc định).
+   */
+  const drafts = new Drafts()
+  /** Cấu hình robot và chương trình gốc (bản đã lưu / Mặc định, dạng lưu của vùng khối) lúc nạp vào Xưởng. */
+  let wsCfg: RobotConfig | null = null
+  let wsBase: object = {}
+  const wsDirty = () => screen === 'workshop' && !sameProgram(editors.program(wsPlayer), wsBase)
+  const captureDraft = () => {
+    if (screen === 'workshop' && wsCfg) drafts.keep(wsPlayer, wsCfg, editors.program(wsPlayer), wsBase)
+  }
+  /** Nạp chương trình của bạn wsPlayer vào Xưởng: bản nháp nếu có, không thì bản đã lưu / Mặc định. */
+  const loadWorkshop = () => {
+    const cfg = cfgOf(wsPlayer)
+    const d = drafts.get(wsPlayer, cfg)
+    if (d) {
+      editors.load(wsPlayer, d.state)
+      wsBase = d.base
+    } else {
+      const rec = saved(wsPlayer, cfg)
+      editors.load(wsPlayer, rec ? rec.state : sample(cfg, 'teleop'))
+      wsBase = editors.program(wsPlayer)
+    }
+    wsCfg = cfg
+  }
+  let pickMsg: { text: string; ok: boolean } | null = null
   const wsBar = createWorkshopBar((p) => wsControls[p], {
     setPlayer: (p) => void go('workshop', { player: p }),
     save() {
-      const r = saveVerified(store, wsPlayer, cfgOf(wsPlayer), editors.program(wsPlayer))
+      const state = editors.program(wsPlayer)
+      const r = saveVerified(store, wsPlayer, cfgOf(wsPlayer), state)
+      if (r.ok) {
+        wsBase = state
+        drafts.drop(wsPlayer, cfgOf(wsPlayer))
+      }
       wsBar.message(r.text, r.ok)
       showWorkshop()
     },
     reset() {
       const r = resetVerified(store, wsPlayer, cfgOf(wsPlayer))
-      if (r.ok) editors.load(wsPlayer, sample(cfgOf(wsPlayer), 'teleop'))
+      if (r.ok) {
+        drafts.drop(wsPlayer, cfgOf(wsPlayer))
+        editors.load(wsPlayer, sample(cfgOf(wsPlayer), 'teleop'))
+        wsBase = editors.program(wsPlayer)
+      }
       wsBar.message(r.text, r.ok)
       showWorkshop()
     },
     download: () => editors.download(wsPlayer),
   })
   shell.side.blocks.prepend(wsBar.el)
-  const showWorkshop = () =>
-    wsBar.show({ player: wsPlayer, players: players(), names, label: programText(saved(wsPlayer), true) })
+  let shownDirty = false
+  const showWorkshop = () => {
+    shownDirty = wsDirty()
+    wsBar.show({ player: wsPlayer, players: players(), names, label: shownDirty ? 'Chưa lưu' : programText(saved(wsPlayer), true) })
+  }
+  // Nhãn Xưởng đổi "Chưa lưu" ⇄ "Của em vN / Mặc định" khi vùng khối đổi (chờ 200 ms, chỉ vẽ lại khi trạng thái đổi).
+  let dirtyTimer = 0
+  editors.onChange(() => {
+    if (screen !== 'workshop') return
+    clearTimeout(dirtyTimer)
+    dirtyTimer = window.setTimeout(() => {
+      if (screen === 'workshop' && wsDirty() !== shownDirty) showWorkshop()
+    }, 200)
+  })
 
   // Đổi robot / đế / cơ cấu (Trước trận, ⚙, Xưởng): nhớ vào cài đặt; ở trận / Xưởng nạp chương trình của robot mới.
   editors.onConfig((p, cfg) => {
@@ -458,8 +524,8 @@ async function start(): Promise<void> {
       editors.load(p, programFor(p as Player))
       void restart()
     } else if (screen === 'workshop' && p === wsPlayer) {
-      const rec = saved(wsPlayer)
-      editors.load(p, rec ? rec.state : sample(cfg, 'teleop'))
+      captureDraft() // giữ bản đang sửa của robot cũ (wsCfg) trước khi nạp chương trình của robot mới
+      loadWorkshop()
       wsBar.message(null)
       showWorkshop()
       void restart()
@@ -469,6 +535,14 @@ async function start(): Promise<void> {
   // ---------- ⚙ ----------
   const stControls = PLAYERS.map((p) => configControls(() => cfgOf(p), (cfg) => editors.setConfig(p, cfg)))
   const reopen = () => popover.open(settingsCtx())
+  /** "Của em v2" (một bạn) hoặc "Của em (Bạn 1 v2 · Bạn 2 chưa lưu)"; null khi không bạn nào có bản lưu. */
+  const mineText = (): string | null => {
+    const ps = PLAYERS.slice(0, players())
+    const vs = ps.map((p) => saved(p)?.version ?? null)
+    if (vs.every((v) => v === null)) return null
+    if (ps.length === 1) return `Của em v${vs[0]}`
+    return `Của em (${ps.map((p, k) => `${names[p]} ${vs[k] === null ? 'chưa lưu' : `v${vs[k]}`}`).join(' · ')})`
+  }
   const settingsCtx = (): SettingsCtx => ({
     screen,
     camera: cam === 'orbit' ? 'field' : cam,
@@ -504,8 +578,13 @@ async function start(): Promise<void> {
           skill: settings.skill,
           setSkill: (s) => ((settings.skill = s), saveSettings(), void go(screen).then(reopen)),
           runMine,
-          saved: saved(0) ? `Của em v${saved(0)!.version}` : null,
-          setRunMine: (v) => ((runMine = v), void go(screen).then(reopen)),
+          saved: mineText(),
+          setRunMine: (v) => {
+            // Không về ghế mặc định: chỉ nạp lại chương trình của các bạn đang lái rồi dựng lại trận.
+            runMine = v
+            for (const p of PLAYERS) if (playerSeat(modes, p) >= 0) editors.load(p, programFor(p))
+            void restart().then(reopen)
+          },
           speeds: SPEEDS,
           speed: speedNow,
           locked: () => editors.anyActive(),
@@ -514,7 +593,10 @@ async function start(): Promise<void> {
             modes,
             labels: [0, 1, 2, 3].map((i) => `Robot ${i + 1} · ${ALLIANCE_SEAT[i]}`),
             options: seatOptions(names, players()),
-            set: (i, m) => setMode(i, m),
+            set: (i, m) => {
+              setMode(i, m)
+              reopen() // ô chọn ghế khác có thể đã đổi (mỗi bạn một ghế — assignSeat)
+            },
           },
         }
       : undefined,
@@ -524,6 +606,7 @@ async function start(): Promise<void> {
   // ---------- Đổi màn ----------
   /** Phần giao diện của màn (không dựng lại phiên). */
   const enter = (next: Screen, arg?: { player?: Player }) => {
+    captureDraft() // rời Xưởng (kể cả đổi bạn): giữ bản đang sửa
     popover.close()
     home.hide()
     pick.hide()
@@ -545,8 +628,7 @@ async function start(): Promise<void> {
     } else clearFollowers()
     if (next === 'workshop') {
       wsPlayer = players() === 2 ? (arg?.player ?? 0) : 0
-      const rec = saved(wsPlayer)
-      editors.load(wsPlayer, rec ? rec.state : sample(cfgOf(wsPlayer), 'teleop'))
+      loadWorkshop()
       editors.show(wsPlayer)
       wsBar.message(null)
       showWorkshop()
@@ -585,7 +667,8 @@ async function start(): Promise<void> {
       if (home.key(e)) e.preventDefault()
       return
     }
-    if (!driving() || typing(e.target)) return
+    // Phím tắt (Ctrl / ⌘ / Alt + phím) không lái robot: Ctrl+S, ⌘+W… không được thành "chạy tới".
+    if (!driving() || typing(e.target) || e.ctrlKey || e.metaKey || e.altKey) return
     let used = false
     for (const k of keypads) used = k.down(e.code) || used
     if (used) e.preventDefault()

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { resetVerified, RESET_FAILED, SAVE_FAILED, saveVerified } from './workshop.ts'
+import { Drafts, resetVerified, RESET_FAILED, SAVE_FAILED, saveVerified } from './workshop.ts'
 import { createStore, type KV } from '../store.ts'
 import { defaultConfig } from '../programs.ts'
 
@@ -45,4 +45,21 @@ test('resetVerified: xoá được ⇒ về mặc định; vẫn còn bản lưu
   assert.equal(s.program(0, maker), null)
   const stuck = { resetProgram() {}, program: () => ({ version: 1, state: prog }) }
   assert.deepEqual(resetVerified(stuck, 0, maker), { ok: false, text: RESET_FAILED })
+})
+
+test('Drafts: khác base ⇒ là bản nháp theo (bạn, robot); giống base ⇒ không; bỏ ⇒ hết', () => {
+  const d = new Drafts()
+  const base = { blocks: { languageVersion: 0, blocks: [] } }
+  d.keep(0, maker, prog, base)
+  assert.ok(d.has(0, maker))
+  assert.deepEqual(d.get(0, maker), { state: prog, base })
+  assert.equal(d.has(1, maker), false, 'bạn 2 không dính bản nháp của bạn 1')
+  assert.equal(d.has(0, defaultConfig('ui')), false, 'robot khác không dính')
+  assert.equal(d.has(0, { ...maker, drive: 'omni' }), false, 'đế khác không dính')
+  // Sửa lại y như cũ ⇒ không còn gì chưa lưu.
+  d.keep(0, maker, JSON.parse(JSON.stringify(base)), base)
+  assert.equal(d.has(0, maker), false)
+  d.keep(1, maker, prog, base)
+  d.drop(1, maker)
+  assert.equal(d.get(1, maker), null)
 })

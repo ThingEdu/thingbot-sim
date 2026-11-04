@@ -213,8 +213,13 @@ export function createSettings(): SettingsPopover {
   let speedNote: HTMLElement | null = null
   let ctx: SettingsCtx | null = null
   let opener: Element | null = null
+  /** Mục Nâng cao đang mở: giữ khi vẽ lại (đổi ghế ⇒ ô chọn khác đổi theo), thu lại khi đóng ⚙. */
+  let advOpen = false
 
-  const render = (c: SettingsCtx) => {
+  const render = (c: SettingsCtx, redraw: boolean) => {
+    // Vẽ lại khi đang mở: đọc thẳng trạng thái mục Nâng cao (sự kiện toggle đến chậm hơn một nhịp).
+    const prev = redraw ? pop.querySelector<HTMLDetailsElement>('details[data-role="advanced"]') : null
+    if (prev) advOpen = prev.open
     const parts: HTMLElement[] = [el('h3', undefined, 'Cài đặt')]
     const m = c.match
     if (m) {
@@ -249,6 +254,8 @@ export function createSettings(): SettingsPopover {
     if (m) {
       const adv = el('details')
       adv.dataset.role = 'advanced'
+      adv.open = advOpen
+      adv.ontoggle = () => (advOpen = adv.open)
       adv.append(el('summary', undefined, 'Nâng cao: ai lái từng robot'))
       const seats = el('div', 'st-row')
       m.seats.modes.forEach((mode, i) => {
@@ -274,14 +281,16 @@ export function createSettings(): SettingsPopover {
     },
     open(c) {
       ctx = c
-      opener = document.activeElement
+      const redraw = !pop.hidden
+      if (!redraw) opener = document.activeElement
       pop.hidden = false // trước render: update() trong render chỉ chạy khi khung đang hiện
-      render(c)
+      render(c, redraw)
     },
     close() {
       if (pop.hidden) return
       pop.hidden = true
       ctx = null
+      advOpen = false
       if (opener instanceof HTMLElement && opener.isConnected) opener.focus()
     },
     toggle(c) {

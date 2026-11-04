@@ -121,12 +121,24 @@ async function download(robot: RobotType, program: object): Promise<void> {
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
+let liveWorkers = 0
+/** Số bo ảo (Worker) đang sống — kiểm thử trình duyệt dò rò rỉ khi đổi màn nhiều lần. */
+export const workerCount = () => liveWorkers
+
 /** Một bo ThingBot ảo: Worker + RobotLink. */
 function board(): { link: RobotLink; dispose(): void } {
   const worker = new SimWorker()
+  liveWorkers++
   const link = new RobotLink((c) => worker.postMessage(c))
   worker.onmessage = ({ data }: MessageEvent<Message>) => link.receive(data)
-  return { link, dispose: () => worker.terminate() }
+  let alive = true
+  return {
+    link,
+    dispose: () => {
+      if (alive) (liveWorkers--, (alive = false))
+      worker.terminate()
+    },
+  }
 }
 
 /**
