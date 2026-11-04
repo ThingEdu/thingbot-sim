@@ -140,7 +140,7 @@ function ideal(m: Mission): RunRecord {
 async function runOnField(m: Mission, state: object): Promise<RunRecord & { gradedAt: number; why: 'rest' | 'maxTime' }> {
   const g = H.generate(state)
   assert.equal(g.error, undefined, `sinh mã lỗi: ${g.error}`)
-  const world = await FanrocWorld.create(1)
+  const world = await FanrocWorld.create(1, { balls: false })
   try {
     const robot = new RobotBody(world, m.robot, 'red', 0)
     robot.setPose(m.start)

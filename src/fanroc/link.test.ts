@@ -183,3 +183,27 @@ test('tạm dừng: tay cầm vẫn gửi (lần chạy từng khối kế đọ
   link.input({ ...PS2_NEUTRAL, ps2_PSS_LY: 0 })
   assert.equal(inputs(sent).adcps2_PSS_LY, 0)
 })
+
+test('step() xong đúng lúc snapshot trả lời của nó tới (sau trả lời load / pause, bỏ qua nhịp chạy)', async () => {
+  const { link, sent } = setup()
+  const reply = (run: number, t: number, running: boolean) =>
+    link.receive({ type: 'snapshot', run, snapshot: { pwm: pwm({}), t, running }, bus: {} } as unknown as Message)
+  link.load('x')
+  const run = runOf(sent)
+  link.start()
+  link.pause()
+  let done = false
+  const p = link.step().then(() => (done = true))
+  reply(run, 0, false) // trả lời load
+  reply(run, 16_000, true) // nhịp chạy gửi trước khi worker nhận pause
+  reply(run, 20_000, false) // trả lời pause
+  await Promise.resolve()
+  assert.equal(done, false, 'chưa tới trả lời của step')
+  reply(run, 1_020_000, false) // trả lời step
+  await p
+  assert.equal(link.virtualT, 1_020_000)
+  // Dừng giữa chừng: lời hứa của step xong luôn (không treo nút).
+  const q = link.step()
+  link.stop()
+  await q
+})

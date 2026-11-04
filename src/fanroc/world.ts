@@ -1,4 +1,5 @@
 // Thế giới vật lý FANROC (Rapier 3D): sàn, rào, 4 Ngọn Núi (lưới tam giác CAD), 300 bóng xả từ Hộp Phân Phối.
+// Tuỳ chọn `balls: false` (nhiệm vụ con rùa, spec §8.6): sân không có bóng, `release` không làm gì.
 // Chạy được cả trong Node (phép thử, không đồ hoạ) lẫn trình duyệt. Mọi nhiễu lấy từ PRNG theo `seed`.
 import RAPIER from '@dimforge/rapier3d-compat'
 import { BALL_R, DISPENSER, FIELD, MOUNTAINS, PEAK_Y, TIERS, TIER_GROOVE, WALL_H, WALL_T, ZONES, holeCentres, mountainAt, type Rect } from './layout.ts'
@@ -72,23 +73,25 @@ export class FanrocWorld {
   private readonly mountainColliders = new Set<number>()
   private lastSpawnX = Number.NaN
 
-  private constructor(seed: number) {
+  private constructor(seed: number, balls: boolean) {
     this.rapier = new RAPIER.World({ x: 0, y: -9.81, z: 0 })
     this.rapier.timestep = PHYSICS_DT
     this.rnd = mulberry32(seed)
     this.balls = []
-    for (let i = 0; i < BALL_COUNT.o + BALL_COUNT.g; i++) this.balls.push({ color: i < BALL_COUNT.o ? 'o' : 'g', st: 'box', body: null })
+    const count = balls ? BALL_COUNT.o + BALL_COUNT.g : 0
+    for (let i = 0; i < count; i++) this.balls.push({ color: i < BALL_COUNT.o ? 'o' : 'g', st: 'box', body: null })
     this.releaseOrder = []
     for (let i = BALL_COUNT.o; i < this.balls.length; i++) this.releaseOrder.push(i)
-    for (let i = 0; i < BALL_COUNT.o; i++) this.releaseOrder.push(i)
+    for (let i = 0; i < Math.min(BALL_COUNT.o, this.balls.length); i++) this.releaseOrder.push(i)
     this.buildField()
     MOUNTAINS.forEach((m) => this.buildMountain(m))
     this.rapier.updateSceneQueries() // tally dò tia được cả trước bước vật lý đầu tiên
   }
 
-  static async create(seed: number): Promise<FanrocWorld> {
+  /** `opts.balls = false` ⇒ sân không bóng (`balls` rỗng, `release` không làm gì); mặc định có 300 bóng. */
+  static async create(seed: number, opts: { balls?: boolean } = {}): Promise<FanrocWorld> {
     await RAPIER.init()
-    return new FanrocWorld(seed)
+    return new FanrocWorld(seed, opts.balls ?? true)
   }
 
   private fixed(desc: RAPIER.ColliderDesc, friction = MTN_FRICTION): RAPIER.Collider {
@@ -129,6 +132,7 @@ export class FanrocWorld {
   /** Gọi mỗi bước trong 10 s xả bóng với t = thời gian của giai đoạn xả; thả dần để hết 300 bóng trước RELEASE_END. */
   release(t: number): void {
     const n = this.releaseOrder.length
+    if (n === 0) return // sân không bóng
     const target = Math.min(n, Math.floor((n * Math.max(0, t)) / RELEASE_END) + 1)
     while (this.released < target) {
       const i = this.releaseOrder[this.released++]

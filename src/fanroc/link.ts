@@ -33,7 +33,8 @@ export class RobotLink {
   error: string | null = null
   /** Mã của lần nạp gần nhất (để robot khác chạy cùng chương trình). */
   code: string | null = null
-  /** Khối vừa chạy (snapshot mới nhất), để trang tô sáng; undefined khi chưa chạy khối nào. */
+  /** Khối SẼ chạy tiếp (snapshot mới nhất, kiểu thanh Debug tô dòng sắp chạy), để trang tô sáng; undefined khi chưa
+   *  tới khối nào. */
   block: string | undefined = undefined
   /** Chữ Serial bo ảo đã in, cộng dồn từ lần nạp (giữ SERIAL_MAX ký tự cuối). */
   serial = ''
@@ -47,6 +48,11 @@ export class RobotLink {
   private run = 0
   private pwm: number[] | null = null
   private pad: Ps2State | null = null
+  /**
+   * Thư trả lời đang chờ của các lệnh load / pause / step (mỗi lệnh đúng một snapshot `running: false`, theo thứ tự
+   * gửi). Nhờ hàng này `step()` biết snapshot nào là kết quả của nó (snapshot nhịp chạy trước đó có `running: true`).
+   */
+  private pending: { kind: 'load' | 'pause' | 'step'; done?: () => void }[] = []
 
   constructor(post: (c: Command) => void) {
     this.post = post
@@ -65,6 +71,8 @@ export class RobotLink {
     this.serial = ''
     this.virtualT = 0
     this.error = null
+    this.settle()
+    this.pending.push({ kind: 'load' })
     this.post({ type: 'load', code, run: this.run })
     // Bo ảo mới: đặt đủ mọi khoá tay cầm (cần ở giữa = 128, không phải 0).
     this.post({ type: 'input', key: `adc${PRESENT_KEY}`, value: 1 })
@@ -80,11 +88,16 @@ export class RobotLink {
     this.set('running')
   }
 
-  /** Tạm dừng (⏸): chỉ khi đang chạy. Robot giữ lệnh cuối; trang quyết có chạy vật lý không. */
-  pause(): void {
-    if (this.state !== 'running') return
+  /**
+   * Tạm dừng (⏸): chỉ khi đang chạy. Robot giữ lệnh cuối; trang quyết có chạy vật lý không. Lời hứa xong khi snapshot
+   * trả lời tới (`virtualT` = đúng lúc bo dừng), hoặc ngay nếu không đang chạy.
+   */
+  pause(): Promise<void> {
+    if (this.state !== 'running') return Promise.resolve()
+    const done = new Promise<void>((resolve) => this.pending.push({ kind: 'pause', done: resolve }))
     this.post({ type: 'pause' })
     this.set('paused')
+    return done
   }
 
   /** Chạy tiếp sau tạm dừng (▶). */
@@ -94,16 +107,22 @@ export class RobotLink {
     this.set('running')
   }
 
-  /** Chạy từng khối (⏭): tới khối kế rồi tạm dừng. */
-  step(): void {
-    if (this.state !== 'running' && this.state !== 'paused' && this.state !== 'loaded') return
+  /**
+   * Chạy từng khối (⏭): tới khối kế rồi tạm dừng. Lời hứa xong khi snapshot trả lời của lệnh này tới (`virtualT`,
+   * `block`, cổng đã cập nhật), hoặc khi link dừng / lỗi / nạp lại; xong ngay nếu không có chương trình để chạy.
+   */
+  step(): Promise<void> {
+    if (this.state !== 'running' && this.state !== 'paused' && this.state !== 'loaded') return Promise.resolve()
+    const done = new Promise<void>((resolve) => this.pending.push({ kind: 'step', done: resolve }))
     this.post({ type: 'step' })
     this.set('paused')
+    return done
   }
 
   stop(): void {
     if (this.live()) this.post({ type: 'stop' })
     this.pwm = null
+    this.settle()
     if (this.state !== 'error' && this.state !== 'idle') this.set('stopped')
   }
 
@@ -124,6 +143,9 @@ export class RobotLink {
       if (typeof s.t === 'number') this.virtualT = s.t
       if (s.error) this.fail(s.error)
       else this.pwm = s.pwm
+      // Snapshot `running: false` = trả lời lệnh load / pause / step cũ nhất (nhịp chạy gửi `running: true`; riêng
+      // chương trình đã chạy hết thì nhịp cũng `false` — khi đó step xong sớm, sân không có gì để chạy thêm).
+      if (s.running === false) this.pending.shift()?.done?.()
     }
   }
 
@@ -141,9 +163,17 @@ export class RobotLink {
     for (const [k, v] of Object.entries(this.feed.next(this.pad))) this.post({ type: 'input', key: `adc${k}`, value: v })
   }
 
+  /** Bỏ mọi thư trả lời đang chờ; lời hứa của step() xong luôn. */
+  private settle(): void {
+    const p = this.pending
+    this.pending = []
+    for (const x of p) x.done?.()
+  }
+
   private fail(message: string, vietnamese = false): void {
     if (this.live()) this.post({ type: 'stop' })
     this.pwm = null
+    this.settle()
     this.error = errorText(message, vietnamese)
     this.set('error')
     this.onError?.(this.error)

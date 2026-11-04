@@ -100,7 +100,7 @@ const MAKER: RobotConfig = { type: 'maker', drive: 'diff2', actuator: 'tt' }
 test('lặp lại (spec §8.2): M1 = M2 = 60 trong 1 s, 5 lần ⇒ distance lệch nhau ≤ 0,01 m', async () => {
   const dists: number[] = []
   for (let run = 0; run < 5; run++) {
-    const w = await FanrocWorld.create(1)
+    const w = await FanrocWorld.create(1, { balls: false })
     try {
       const r = new RobotBody(w, MAKER, 'red', 0)
       r.setPose({ x: 0, z: 0.9, yaw: 0 })
