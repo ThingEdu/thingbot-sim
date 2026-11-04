@@ -2,7 +2,8 @@
  * Trang ThingBot FanRoc Game: vỏ giao diện kiểu VS Code (ui/shell.ts) quanh sân 3D và các màn của game (ui/router.ts):
  * màn chính kiểu game (ui/home.ts, mở trang là vào đây), Trước trận (chọn robot như chọn đội), Trận lẻ / Đấu tập, Xưởng
  * lập trình (ui/workshop.ts), Nhiệm vụ con rùa (ui/missions.ts: danh sách ①, làm nhiệm vụ ② có vệt, số đo, chấm ⭐);
- * Giải đấu tạm là màn chờ (Task 15). `go(screen, arg?)` đổi màn và dựng lại phiên chơi (GameSession, game.ts) của màn
+ * Giải đấu (ui/tournament.ts: ghi danh, thử phím, lịch, Pit, trận có người chơi ở màn 'tmatch', trận máy chạy ngầm bằng
+ * playAgents, Xem nhanh ở màn 'treplay', bục trao giải; chỉ ghi kết quả khi trận đấu xong). `go(screen, arg?)` đổi màn và dựng lại phiên chơi (GameSession, game.ts) của màn
  * đó; trang chỉ khởi tạo, nối nút và vẽ. Vệt robot chỉ có ở màn ② (`scene.trail`; màn khác xoá vệt).
  *
  * Người chơi và ghế: bạn 1 (và bạn 2 khi "Hai bạn chơi") mỗi bạn một thẻ khối (editors tab 0 / 1), một bo ThingBot ảo,
@@ -42,6 +43,12 @@ import { createHome, createPick, createPlaceholder, programText, robotName, type
 import { assignSeat, createSettings, defaultSeats, playerSeat, seatOf, seatOptions, type SeatMode, type SettingsCtx } from './ui/settings.ts'
 import { createWorkshopBar, Drafts, resetVerified, saveVerified, sameProgram } from './ui/workshop.ts'
 import { createRobotCards, type CardInfo } from './ui/robotcard.ts'
+import { penaltyPoints, playAgents } from './quickmatch.ts'
+import { nextMatch, record, type Played, type TournamentState } from './tournament.ts'
+import {
+  createTournamentScreen, matchSeed, newTournament, pendingMachines, played, playersIn, progressText, SAVE_TOUR_FAILED,
+  saveTournamentVerified, seatIds, standingRows, type PitView,
+} from './ui/tournament.ts'
 import { createMissionHud, createMissionList, mergeProgress, missionCards, pendingGoals, renderSideList, saveMissionVerified, totalStars } from './ui/missions.ts'
 
 const shell = createShell(document.querySelector<HTMLElement>('#app')!)
@@ -58,8 +65,12 @@ const SPEEDS = [1, 4, 40]
 const CAMERAS: CameraView[] = ['field', 'follow', 'driver']
 const PLAYERS = [0, 1] as const
 type Player = 0 | 1
+/** Tham số của `go`: bạn nào (Xưởng), nhiệm vụ nào, Xưởng mở từ Pit của giải. */
+type GoArg = { player?: Player; id?: string; returnTo?: 'tournament' }
 /** Thẻ thử thách tự tích ✓ trong lúc chạy: chấm thử tối đa chừng này lần mỗi giây (đếm bóng tốn). */
 const PREVIEW_HZ = 4
+/** Trận máy chạy ngầm: mỗi lát chừng này ms rồi nhường cho khung hình / nút bấm. */
+const MACHINE_SLICE_MS = 24
 /** Lưu chương trình đang làm của nhiệm vụ sau khi vùng khối thôi đổi chừng này ms. */
 const MISSION_SAVE_MS = 1000
 
@@ -108,6 +119,47 @@ async function start(): Promise<void> {
   let matchMission: Mission | null = null
   /** Ai lái từng ghế ở trận lẻ / đấu tập (R27); vào trận ⇒ về mặc định theo liên minh / mức máy / số bạn. */
   let modes: SeatMode[] = defaultSeats(settings.alliance, settings.skill, players())
+  // ---------- Giải đấu ----------
+  const loadedTour = store.tournament()
+  /** Giải đang có (dở hoặc đã xong); null = chưa có / vừa bỏ. */
+  let tour: TournamentState | null = loadedTour === 'corrupt' ? null : loadedTour
+  /** Giải lưu trong trình duyệt bị hỏng (màn chính báo, màn giải đấu mời Giải mới). */
+  let tourCorrupt = loadedTour === 'corrupt'
+  /** Trận của giải đang chơi ('tmatch') hay đang Xem nhanh ('treplay'). */
+  let tourIndex = -1
+  /** Ghi danh: số bạn, số trận mỗi đội. */
+  const reg = { players: players() as 1 | 2, perTeam: 4 }
+  /** Lần lưu giải gần nhất không đọc lại được (bộ nhớ chặn / đầy). */
+  let tourSaveFailed = false
+  /** Dòng báo ở Pit (vừa lưu chương trình ở Xưởng…), xoá khi rời Pit. */
+  let tourNote: { text: string; ok: boolean } | null = null
+  /** Đổi giải (Giải mới) ⇒ trận máy đang chạy ngầm của giải cũ bỏ kết quả. */
+  let tourToken = 0
+  /** Đang chạy ngầm trận máy (đặt trước khi chạy: vẽ Pit trong lúc chạy không khởi động thêm lần nữa). */
+  let machineRun = false
+  let machineBusy: string | null = null
+  /** Phép thử trình duyệt đặt seed bốc thăm (`__fanroc.setTournamentSeed`). */
+  let tourSeed: number | null = null
+  /** Xưởng mở từ Pit: lưu xong quay lại Pit, robot giữ như lúc ghi danh. */
+  let wsReturn: 'tournament' | null = null
+  /** Đội của bạn p trong giải. */
+  const tourEntrant = (p: Player) => tour?.entrants.find((e) => e.kind === 'player' && e.player === p) ?? null
+  /** Ghế của bạn p ở trận giải đang chơi (−1: bạn đó không đấu trận này). */
+  const tourSeat = (p: Player): number => {
+    if (screen !== 'tmatch' || !tour || tourIndex < 0) return -1
+    return playersIn(tour, tourIndex).find((x) => x.player === p)?.seat ?? -1
+  }
+  /** Nhãn chương trình của bạn p trong giải: bản lưu ở Xưởng cho robot của giải, không thì Mặc định (Review Focus 5). */
+  const tourLabel = (p: Player) => {
+    const e = tourEntrant(p)
+    return programText(e ? store.program(p, e.robot) : null)
+  }
+  const tourProgram = (p: Player) => {
+    const e = tourEntrant(p)
+    const cfg = e?.robot ?? cfgOf(p)
+    return store.program(p, cfg)?.state ?? sample(cfg, 'teleop')
+  }
+
   const followers: ({ link: ReturnType<typeof editors.follow>['link']; dispose(): void } | null)[] = [null, null, null, null]
   /** Bo ảo không chương trình: ghế đứng yên (Xưởng: sân chỉ có robot của em chạy thử). */
   const idle = [0, 1, 2, 3].map(() => new RobotLink(() => {}))
@@ -131,6 +183,7 @@ async function start(): Promise<void> {
   const seatOfPlayer = (p: Player): number => {
     if (screen === 'workshop') return p === wsPlayer ? seatOf(p, settings.alliance) : -1
     if (screen === 'mission') return p === 0 ? 0 : -1
+    if (screen === 'tmatch') return tourSeat(p)
     return isMatch() ? playerSeat(modes, p) : -1
   }
   /** Ghế camera "Theo robot" bám theo: robot của bạn đang mở thẻ khối, không có thì Robot 1. */
@@ -164,6 +217,19 @@ async function start(): Promise<void> {
       teamNames = [names[0]]
       const seats = [{ cfg: mission.robot, team: names[0], driver: { kind: 'program', link: editors.link(0) } as Driver }]
       return GameSession.create({ mode: 'mission', seed: MISSION_SEED, seats, balls: mission.balls, start: mission.start })
+    }
+    if ((screen === 'tmatch' || screen === 'treplay') && tour && tourIndex >= 0) {
+      // Trận của giải: đội theo lịch bốc thăm (ghế SEATS), bạn lái robot của mình bằng chương trình khối, đội máy là
+      // agent; Xem nhanh: cả 4 là agent (trận máy). Sân theo seed của trận (đấu lại / Xem nhanh cùng sân).
+      const t = tour
+      list = seatIds(t.schedule[tourIndex]).map((id) => {
+        const e = t.entrants.find((x) => x.id === id)!
+        const driver: Driver =
+          e.kind === 'player' && screen === 'tmatch' ? { kind: 'program', link: editors.link(e.player ?? 0) } : { kind: 'agent', skill: e.skill ?? 'medium' }
+        return { cfg: e.robot, team: e.name, driver }
+      })
+      teamNames = list.map((x) => x.team)
+      return GameSession.create({ mode: 'match', seed: matchSeed(t, tourIndex), seats: list })
     }
     if (isMatch()) {
       mode = screen === 'practice' ? 'practice' : 'match'
@@ -200,6 +266,10 @@ async function start(): Promise<void> {
   /** Nhãn chương trình từng ghế trên bảng điểm. */
   const programs = () =>
     game.robots.map((_, i) => {
+      if (screen === 'tmatch') {
+        const p = PLAYERS.find((x) => tourSeat(x) === i)
+        return p === undefined ? programLabel(game.driver(i)) : tourLabel(p)
+      }
       if (!isMatch()) return programLabel(game.driver(i))
       const m = modes[i]
       const p = modeOwner(m)
@@ -217,6 +287,7 @@ async function start(): Promise<void> {
       PLAYERS.map((p) => {
         // Xưởng: chỉ thẻ của bạn đang sửa (Chạy / Lưu cùng tác động lên một chương trình).
         if (screen === 'mission') return p === 0 && mission ? `${names[0]} · Nhiệm vụ ${mission.n}` : null
+        if (screen === 'tmatch') return tourSeat(p) >= 0 ? `${names[p]} · ${robotName(cfgOf(p))}` : null
         const used = screen === 'workshop' ? p === wsPlayer : p === 0 || players() === 2 || modes.some((m) => modeOwner(m) === p)
         return used ? `${names[p]} · ${robotName(cfgOf(p))}` : null
       }),
@@ -301,7 +372,22 @@ async function start(): Promise<void> {
   const expose = () => {
     ;(window as unknown as { __fanroc: unknown }).__fanroc = {
       world: game.world, robots: game.robots, match: game.match, humans: game.humans, setSpeed, editors, session: game, shell, store,
-      go: (s: Screen, arg?: { player?: Player; id?: string }) => go(s, arg),
+      go: (s: Screen, arg?: GoArg) => go(s, arg),
+      /** Giải đấu: trạng thái, ghế của từng bạn ở trận giải đang chơi, đặt seed bốc thăm cho phép thử. */
+      tour: {
+        get state() {
+          return tour
+        },
+        get view() {
+          return tScreen.view
+        },
+        get index() {
+          return tourIndex
+        },
+        seat: (p: Player) => tourSeat(p),
+        busy: () => machineBusy,
+      },
+      setTournamentSeed: (n: number | null) => void (tourSeed = n),
       get screen() {
         return screen
       },
@@ -357,6 +443,11 @@ async function start(): Promise<void> {
             )
             if (matchMission && screen === 'match') game.match.log(`Nhiệm vụ ${matchMission.n} · ${matchMission.title}: chơi hết trận cùng ba robot máy mức Dễ`)
           }
+          if (screen === 'tmatch' && tour) {
+            for (const p of PLAYERS) if (tourSeat(p) >= 0) editors.run(p)
+            game.match.log(`Giải đấu · trận ${tourIndex + 1}/${tour.schedule.length}: robot của em chạy chương trình khi hết 10 giây xả bóng`)
+          }
+          if (screen === 'treplay') game.match.log(`Xem nhanh trận ${tourIndex + 1} (×40) — kết quả đã ghi không đổi`)
           if (screen === 'mission') missionReady()
           expose()
           scene.camera(cam, mySeat())
@@ -422,7 +513,8 @@ async function start(): Promise<void> {
       if (screen === 'mission') pressMission() // Dừng giữa lần chạy nhiệm vụ = bấm Chấm (R57 b)
       editors.stop(editors.active)
     },
-    reset: () => void restart(),
+    // Trận giải đã ghi kết quả thì không đấu lại (về Pit); chưa xong thì đấu lại từ đầu.
+    reset: () => void (screen === 'tmatch' && tour && nextMatch(tour) !== tourIndex ? go('tournament') : restart()),
     download: () => editors.download(editors.active),
     camera() {
       const k = CAMERAS.indexOf(cam)
@@ -438,6 +530,7 @@ async function start(): Promise<void> {
     player: names[0],
     stars: totalStars(store),
     missions: { done: MISSIONS.filter((m) => store.mission(m.id).done).length, total: MISSIONS.length },
+    tournament: tourCorrupt ? { text: 'Không đọc được giải đang dở', corrupt: true } : tour ? { text: progressText(tour), corrupt: false } : null,
   })
   const overlay = document.body
   const home = createHome(overlay, {
@@ -485,6 +578,39 @@ async function start(): Promise<void> {
     },
   )
   const placeholder = createPlaceholder(overlay, () => void go('home'))
+  const tScreen = createTournamentScreen(overlay, {
+    setPlayers: (n) => {
+      reg.players = n
+      setPlayersCount(n)
+      showTour()
+    },
+    setName: (p, name) => {
+      names[p] = name
+      store.saveProfile(profile)
+      showTabs()
+      showTour()
+    },
+    setPerTeam: (n) => ((reg.perTeam = n), showTour()),
+    register: () => (reg.players === 2 ? showTour('keytest') : drawTour()),
+    keysDone: () => drawTour(),
+    pit: () => showTour('pit'),
+    schedule: () => showTour('schedule'),
+    workshop: (p) => void tourWorkshop(p),
+    play: () => void playTour(),
+    replay: (i) => {
+      tourIndex = i
+      void go('treplay')
+    },
+    newTour: () => {
+      tourToken++
+      tour = null
+      tourCorrupt = false
+      tourSaveFailed = !saveTournamentVerified(store, null)
+      showTour('register')
+    },
+    home: () => void go('home'),
+  })
+  const tControls = PLAYERS.map((p) => configControls(() => cfgOf(p), (cfg) => editors.setConfig(p, cfg)))
   const missionList = createMissionList(overlay, { open: (id) => void go('mission', { id }), home: () => void go('home') })
   shell.onHome(() => void go('home'))
 
@@ -519,7 +645,7 @@ async function start(): Promise<void> {
   }
   let pickMsg: { text: string; ok: boolean } | null = null
   const wsBar = createWorkshopBar((p) => wsControls[p], {
-    setPlayer: (p) => void go('workshop', { player: p }),
+    setPlayer: (p) => void (wsReturn ? tourWorkshop(p) : go('workshop', { player: p })),
     save() {
       const state = editors.program(wsPlayer)
       const r = saveVerified(store, wsPlayer, cfgOf(wsPlayer), state)
@@ -529,7 +655,13 @@ async function start(): Promise<void> {
       }
       wsBar.message(r.text, r.ok)
       showWorkshop()
+      // Mở từ Pit: lưu được thì quay lại Pit, trận sau chạy bản vừa lưu.
+      if (r.ok && wsReturn === 'tournament') {
+        tourNote = { text: `${r.text} — trận sau robot của ${names[wsPlayer]} chạy bản này`, ok: true }
+        void go('tournament')
+      }
     },
+    back: () => void go('tournament'),
     reset() {
       const r = resetVerified(store, wsPlayer, cfgOf(wsPlayer))
       if (r.ok) {
@@ -546,7 +678,7 @@ async function start(): Promise<void> {
   let shownDirty = false
   const showWorkshop = () => {
     shownDirty = wsDirty()
-    wsBar.show({ player: wsPlayer, players: players(), names, label: shownDirty ? 'Chưa lưu' : programText(saved(wsPlayer), true) })
+    wsBar.show({ player: wsPlayer, players: players(), names, label: shownDirty ? 'Chưa lưu' : programText(saved(wsPlayer), true), tournament: wsReturn === 'tournament' })
   }
   // Nhãn Xưởng đổi "Chưa lưu" ⇄ "Của em vN / Mặc định" khi vùng khối đổi (chờ 200 ms, chỉ vẽ lại khi trạng thái đổi).
   let dirtyTimer = 0
@@ -567,6 +699,8 @@ async function start(): Promise<void> {
     if (isMatch()) {
       editors.load(p, programFor(p as Player))
       void restart()
+    } else if (screen === 'tournament') {
+      if (tScreen.view === 'register') showTour()
     } else if (screen === 'workshop' && p === wsPlayer) {
       captureDraft() // giữ bản đang sửa của robot cũ (wsCfg) trước khi nạp chương trình của robot mới
       loadWorkshop()
@@ -767,7 +901,7 @@ async function start(): Promise<void> {
 
   // ---------- Đổi màn ----------
   /** Phần giao diện của màn (không dựng lại phiên). */
-  const enter = (next: Screen, arg?: { player?: Player }) => {
+  const enter = (next: Screen, arg?: GoArg) => {
     captureDraft() // rời Xưởng (kể cả đổi bạn): giữ bản đang sửa
     flushMissionProgram() // rời / đổi nhiệm vụ: lưu ngay bản đang làm cho đúng nhiệm vụ đó
     wsMission = null
@@ -775,10 +909,12 @@ async function start(): Promise<void> {
     home.hide()
     pick.hide()
     placeholder.hide()
+    tScreen.hide()
     missionList.hide()
     if (next !== 'mission') missionHud.hide()
     mrun = null
     scene.trail(null) // vệt chỉ có ở màn ②, vẽ lại từ khung sau
+    const prevScreen = screen
     screen = next
     const c = chrome(next)
     shell.activity(c.activity)
@@ -786,7 +922,11 @@ async function start(): Promise<void> {
     board.visible(c.scoreboard)
     board.hideResult()
     board.clearFx()
-    cards.visible(isMatch() || next === 'workshop')
+    cards.visible(isMatch() || next === 'workshop' || next === 'tmatch')
+    // Xem nhanh chạy ×40 (không có chương trình nào nên R24 không khoá); rời Xem nhanh về ×1.
+    if (next === 'treplay') requested = 40
+    else if (prevScreen === 'treplay') requested = 1
+    if (next !== 'tournament') tourNote = null
     keypads.forEach((k) => k.releaseAll())
     editors.stopAll()
     if (isMatch()) {
@@ -794,6 +934,7 @@ async function start(): Promise<void> {
       clearFollowers()
       for (const p of PLAYERS) if (playerSeat(modes, p) >= 0) editors.load(p, programFor(p))
     } else clearFollowers()
+    if (next === 'tmatch') for (const p of PLAYERS) if (tourSeat(p) >= 0) editors.load(p, tourProgram(p))
     // Nhiệm vụ: hộp công cụ của nhiệm vụ; màn khác: hộp công cụ đầy đủ.
     editors.setToolbox(0, next === 'mission' && mission ? mission.toolbox : TOOLBOX)
     if (next === 'mission' && mission) {
@@ -805,6 +946,7 @@ async function start(): Promise<void> {
       shell.open('blocks')
       missionHud.show(mission, prog.stars)
     } else if (next === 'workshop') {
+      wsReturn = arg?.returnTo ?? null
       wsPlayer = players() === 2 ? (arg?.player ?? 0) : 0
       loadWorkshop()
       editors.show(wsPlayer)
@@ -817,6 +959,7 @@ async function start(): Promise<void> {
     }
     showTabs()
     if (next === 'workshop' || isMatch()) editors.show(next === 'workshop' ? wsPlayer : 0)
+    if (next === 'tmatch') editors.show(Math.max(0, PLAYERS.findIndex((p) => tourSeat(p) >= 0)))
     cam = defaultCamera(next)
   }
   /** Sau khi phiên mới đã dựng: hiện màn phủ (màn chính / màn chờ). */
@@ -825,11 +968,11 @@ async function start(): Promise<void> {
     if (next === 'home') home.show(homeInfo())
     else if (next === 'missions') missionList.show(missionCards(store))
     else if (next === 'mission') showSide()
-    else if (next === 'tournament') placeholder.show(next)
+    else if (next === 'tournament') showTour(tourCorrupt ? 'corrupt' : !tour ? 'register' : nextMatch(tour) === null ? 'podium' : 'pit')
   }
   let going = Promise.resolve()
   /** Đổi màn; 'mission' cần `arg.id` (thiếu ⇒ nhiệm vụ vừa làm). Nhiệm vụ trận (12) mở màn Trận lẻ, robot máy mức Dễ. */
-  const go = (next: Screen, arg?: { player?: Player; id?: string }): Promise<void> => {
+  const go = (next: Screen, arg?: GoArg): Promise<void> => {
     going = going
       .then(async () => {
         flushMissionProgram() // trước khi `mission` đổi sang nhiệm vụ mới
@@ -850,8 +993,124 @@ async function start(): Promise<void> {
     return going
   }
 
+  // ---------- Giải đấu: các màn phủ sân, trận máy chạy ngầm, ghi kết quả ----------
+  const tourPlayers = (t: TournamentState): 1 | 2 => (t.entrants.filter((e) => e.kind === 'player').length === 2 ? 2 : 1)
+  /** Số bạn của giải ⇒ bàn phím một bạn (solo) / chia đôi (left / right), như ⚙ › Hai bạn chơi. */
+  const setPlayersCount = (n: 1 | 2) => {
+    if (players() === n) return
+    settings.layout2p = n === 2
+    saveSettings()
+    makePads()
+    showTabs()
+  }
+  const padText = (st: SeatStatus | undefined, n: number) =>
+    st === 'ok' ? `Tay PS2 thứ ${n}: đã nhận` : st === 'nonstandard' ? `Tay thứ ${n} không chuẩn — dùng bàn phím` : `Chưa có tay PS2 thứ ${n} — dùng bàn phím`
+  const pitView = (t: TournamentState): PitView => ({
+    state: t,
+    rows: standingRows(t, (e) => tourLabel(e.player ?? 0)),
+    next: nextMatch(t),
+    busy: machineBusy,
+    notes: [...(tourSaveFailed ? [{ text: SAVE_TOUR_FAILED, ok: false }] : []), ...(tourNote ? [tourNote] : [])],
+    players: t.entrants.flatMap((e) => (e.kind === 'player' ? [{ player: e.player ?? 0, name: e.name }] : [])),
+  })
+  /** Vẽ màn giải đấu `v` (mặc định: màn đang hiện). Chỉ khi đang ở màn 'tournament'. */
+  const showTour = (v = tScreen.view ?? 'register') => {
+    if (screen !== 'tournament') return
+    // Ghi danh, Thử phím: chưa có giải (bốc thăm mới tạo); các màn khác cần giải.
+    if (!tour && v !== 'corrupt' && v !== 'keytest') v = 'register'
+    if (tour && v === 'pit' && nextMatch(tour) === null) v = 'podium'
+    setPlayersCount(tour ? tourPlayers(tour) : reg.players)
+    if (v === 'register')
+      tScreen.register({ players: reg.players, perTeam: reg.perTeam, names, cfg: cfgOf, program: (p) => programText(saved(p)), controls: (p) => tControls[p] })
+    else if (v === 'keytest') {
+      const st = seats.read().status
+      tScreen.keytest(names, [padText(st[0], 1), padText(st[1], 2)])
+    } else if (v === 'corrupt') tScreen.corrupt()
+    else if (tour && v === 'schedule') tScreen.schedule(tour)
+    else if (tour && v === 'podium') tScreen.podium(tour, standingRows(tour, (e) => tourLabel(e.player ?? 0)))
+    else if (tour) {
+      tScreen.pit(pitView(tour))
+      runMachines()
+    }
+  }
+  /** Bốc thăm: giải mới từ phần ghi danh (robot của từng bạn lúc này), lưu ngay (đọc lại để chắc). */
+  const drawTour = () => {
+    tourToken++
+    machineFailed = false
+    const seed = tourSeed ?? Math.floor(Math.random() * 2147483646) + 1
+    tour = newTournament({ names, cfgs: [cfgOf(0), cfgOf(1)], players: reg.players, perTeam: reg.perTeam, seed })
+    tourCorrupt = false
+    tourSaveFailed = !saveTournamentVerified(store, tour)
+    showTour('schedule')
+  }
+  /** Robot của bạn p về đúng robot đã ghi danh (Trận lẻ có thể đã đổi robot). */
+  const tourRobot = (p: Player) => {
+    const e = tourEntrant(p)
+    if (e && JSON.stringify(cfgOf(p)) !== JSON.stringify(e.robot)) editors.setConfig(p, e.robot)
+  }
+  const tourWorkshop = (p: Player) => {
+    if (!tourEntrant(p)) return
+    tourRobot(p)
+    return go('workshop', { player: p, returnTo: 'tournament' })
+  }
+  /** Vào trận kế tiếp của giải (trận có người chơi; trận máy trước đó đã chạy xong). */
+  const playTour = () => {
+    if (!tour || machineBusy) return
+    const i = nextMatch(tour)
+    if (i === null || !playersIn(tour, i).length) return
+    for (const x of playersIn(tour, i)) tourRobot(x.player)
+    tourIndex = i
+    return go('tmatch')
+  }
+  /** Ghi kết quả trận i, lưu (đọc lại), chạy tiếp các trận máy, vẽ lại màn giải. */
+  const commitTour = (i: number, p: Played) => {
+    if (!tour || tour.results[i] !== null) return
+    tour = record(tour, i, p)
+    tourSaveFailed = !saveTournamentVerified(store, tour)
+    runMachines()
+    showTour()
+  }
+  /** Hết giờ trận giải có người chơi: ghi điểm đội + phạt theo ghế (như trận máy ngầm). Trận dở không bao giờ ghi. */
+  const finishTourMatch = (m: GameSession['match']) => {
+    if (!tour || m !== game.match || m.phase !== 'end' || nextMatch(tour) !== tourIndex) return
+    const r = m.result()
+    const teams = r.teams.map((t, k) => ({ score: t.score, penalty: penaltyPoints(m.pens[k], r.score.total) }))
+    commitTour(tourIndex, played(seatIds(tour.schedule[tourIndex]), teams, r.score.total))
+  }
+  /** Trận máy lỗi (không dựng được sân…): báo ở Pit, không chạy lại vòng vòng. */
+  let machineFailed = false
+  /** Chạy ngầm các trận toàn máy từ trận kế tiếp (từng lát, sân / nút vẫn mượt) và ghi ngay khi xong. */
+  const runMachines = () => {
+    if (machineRun || machineFailed || !tour || !pendingMachines(tour).length) return
+    const token = tourToken
+    machineRun = true
+    void (async () => {
+      try {
+        for (;;) {
+          const t = tour
+          if (!t || token !== tourToken) return
+          const i = pendingMachines(t)[0]
+          if (i === undefined) return
+          machineBusy = `Đang chơi các trận máy… (trận ${i + 1}/${t.schedule.length})`
+          showTour()
+          const es = seatIds(t.schedule[i]).map((id) => t.entrants.find((e) => e.id === id)!)
+          const r = await playAgents({ cfgs: es.map((e) => e.robot), skills: es.map((e) => e.skill ?? 'medium'), teams: es.map((e) => e.name), seed: matchSeed(t, i), sliceMs: MACHINE_SLICE_MS })
+          if (!tour || token !== tourToken) return
+          commitTour(i, played(seatIds(t.schedule[i]), r.teams, r.match))
+        }
+      } catch (e) {
+        machineFailed = true
+        tourNote = { text: `Không chơi được trận máy: ${e instanceof Error ? e.message : String(e)}`, ok: false }
+      } finally {
+        machineRun = false
+        machineBusy = null
+        showTour()
+      }
+    })()
+  }
+
   // ---------- Bàn phím ----------
-  const driving = () => isMatch() || screen === 'workshop' || screen === 'mission'
+  const driving = () => isMatch() || screen === 'tmatch' || screen === 'workshop' || screen === 'mission' || (screen === 'tournament' && tScreen.view === 'keytest')
   document.addEventListener('keydown', (e) => {
     if (popover.shown) return
     if (home.shown) {
@@ -905,7 +1164,7 @@ async function start(): Promise<void> {
   }
 
   const showCards = (status: SeatStatus[]) => {
-    if (!(isMatch() || screen === 'workshop')) return
+    if (!(isMatch() || screen === 'workshop' || screen === 'tmatch')) return
     const list: CardInfo[] = []
     for (const p of PLAYERS) {
       const seat = seatOfPlayer(p)
@@ -914,7 +1173,7 @@ async function start(): Promise<void> {
       list.push({
         player: names[p],
         robot: robotName(cfgOf(p)),
-        program: screen === 'workshop' ? 'đang sửa ở Xưởng' : label(p),
+        program: screen === 'workshop' ? 'đang sửa ở Xưởng' : screen === 'tmatch' ? tourLabel(p) : label(p),
         input: inputOf(p, status),
         pad: { n: p + 1, status: status[p] },
         held: r ? r.stored.length : 0,
@@ -953,10 +1212,16 @@ async function start(): Promise<void> {
       if (m.phase === 'end' && !resultShown) {
         resultShown = true
         sound.whistle(true)
-        board.result(resultView(m, game.robots, programs(), teamNames), {
-          again: () => void restart(),
-          home: () => void go('home'),
-        })
+        const view = resultView(m, game.robots, programs(), teamNames)
+        if (screen === 'tmatch') {
+          finishTourMatch(m)
+          board.result(view, { home: () => void go('home'), next: () => void go('tournament') })
+        } else if (screen === 'treplay') board.result(view, { home: () => void go('home'), next: () => void go('tournament'), nextLabel: 'Về Pit' })
+        else
+          board.result(view, {
+            again: () => void restart(),
+            home: () => void go('home'),
+          })
         if (matchMission && screen === 'match') finishMatchMission(matchMission)
       }
     }
@@ -968,12 +1233,17 @@ async function start(): Promise<void> {
   const frame = (now: number) => {
     const { pads, status } = seats.read()
     for (const p of PLAYERS) editors.input(p, padOf(p, pads))
+    if (screen === 'tournament' && tScreen.view === 'keytest') {
+      const live = (p: Player) => keypads[p]?.active() || (!!pads[p] && mergePad(pads[p], PS2_NEUTRAL) === pads[p])
+      tScreen.lit([live(0), live(1)], [padText(status[0], 1), padText(status[1], 2)])
+    }
     editors.release()
     const speed = speedNow()
     const dt = Math.min(100, now - last) / 1000
     if (now > last) fps += (1000 / (now - last) - fps) * 0.05
     last = now
-    if (chrome(screen).live) game.advance(dt, speed, { steps: MAX_STEPS * Math.max(1, speed), ms: STEP_BUDGET_MS })
+    // Trận máy đang chạy ngầm (màn giải đấu): sân nền đứng yên để nhường máy cho trận ngầm.
+    if (chrome(screen).live && !(screen === 'tournament' && machineRun)) game.advance(dt, speed, { steps: MAX_STEPS * Math.max(1, speed), ms: STEP_BUDGET_MS })
     if (screen === 'mission' && mission) {
       // Vệt + đường gợi ý, ô số đo, thẻ thử thách tự tích ✓ (chấm thử ≤ PREVIEW_HZ lần/giây).
       const tr = mrun?.trail

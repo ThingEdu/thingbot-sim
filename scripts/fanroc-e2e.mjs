@@ -2,7 +2,7 @@
  * Phép thử đầu-cuối của sân FANROC trên trình duyệt thật (Playwright, lấy từ checkout ThingBlock như ftc-e2e.mjs
  * của nhánh spike/ursim).
  *
- *   npm run e2e:fanroc                 # tự bật Vite dev trên một cổng trống, chạy N3–N6, N6b–N6d, N2c (màn chính / ⚙ / Xưởng Task 13), N7, N8 (nhiệm vụ Task 14), N1, N1b, N1c (vỏ Task 11), N2, N2b (bảng điểm Task 12) và E1–E11 (E5 bỏ qua), tắt Vite
+ *   npm run e2e:fanroc                 # tự bật Vite dev trên một cổng trống, chạy N3–N6, N6b–N6d, N2c (màn chính / ⚙ / Xưởng Task 13), N7, N8 (nhiệm vụ Task 14), N9, N10, N9b–N9d (giải đấu Task 15), N1, N1b, N1c (vỏ Task 11), N2, N2b (bảng điểm Task 12) và E1–E11 (E5 bỏ qua), tắt Vite
  *   FANROC_URL=http://localhost:5191/mo-phong/fanroc.html npm run e2e:fanroc   # dùng trang đang chạy sẵn
  *   npm run e2e:fanroc -- E3 E5        # chỉ chạy các phép thử có tên bắt đầu như vậy
  *
@@ -17,6 +17,8 @@ import { mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { ZONES } from '../src/fanroc/layout.ts'
 import { straight, turtle } from '../src/fanroc/missions/solutions.ts'
+import { newTournament, playersIn, played, seatIds } from '../src/fanroc/ui/tournament.ts'
+import { record } from '../src/fanroc/tournament.ts'
 
 const ROOT = resolve(import.meta.dirname, '..')
 const THINGBLOCK = resolve(process.env.THINGBLOCK_EDITOR ?? resolve(ROOT, '../thingblock-editor-sim'))
@@ -228,6 +230,7 @@ async function main() {
   browser = await chromium.launch({ args: ['--use-angle=metal', '--ignore-gpu-blocklist'] })
   await gameTests()
   await missionTests()
+  await tournamentTests()
   await shellTests()
 
   await test('E1 trang tải, không lỗi console, tiêu đề và chữ bảng điểm tiếng Việt', async (page) => {
@@ -981,6 +984,260 @@ async function gameTests() {
     expect(await page.locator('.sb-result').isHidden(), 'màn kết quả còn hiện ở màn chính')
     return 'xoá chữ nổi + đếm ngược · Về màn chính'
   })
+}
+
+// ---------- Phép thử giải đấu (Task 15) ----------
+const MAKER = { type: 'maker', drive: 'diff2', actuator: 'tt' }
+const TOUR_KEY = 'fanroc.v1.fanroc-2026.tournament'
+/** Seed bốc thăm đầu tiên thoả `ok` (lịch chỉ phụ thuộc seed + số bạn). */
+const findSeed = (players, ok) => {
+  for (let seed = 1; seed < 5000; seed++) if (ok(newTournament({ names: ['Bạn 1', 'Bạn 2'], cfgs: [MAKER, MAKER], players, perTeam: 4, seed }))) return seed
+  throw new Error('không tìm được seed')
+}
+const tourView = (page) => page.evaluate(() => window.__fanroc.tour.view)
+const recordedN = (page) =>
+  page.evaluate(() => {
+    const t = window.__fanroc.store.tournament()
+    return t && t !== 'corrupt' ? t.results.filter((r) => r !== null).length : -1
+  })
+const tn = (page) => page.locator('.hm[data-screen="tournament"]:not([hidden])')
+/** Tua trận đang chơi tới hết giờ: chạy thật vật lý 4 s mỗi lần (như ×40) bằng phiên đang chạy — giao diện vẫn khoá ×1 (R24). */
+async function fastForward(page) {
+  for (let k = 0; k < 120; k++) {
+    const phase = await page.evaluate(() => {
+      const g = window.__fanroc.session
+      g.advance(4, 1, { steps: 240 })
+      return g.match.phase
+    })
+    if (phase === 'end') return
+  }
+  throw new Error('tua 480 s mà trận chưa hết giờ')
+}
+/** Ở Pit chờ các trận máy chạy ngầm xong, nút Vào trận bấm được. */
+async function waitPlayable(page) {
+  await page.waitForFunction(() => window.__fanroc.tour.view === 'pit' && !document.querySelector('.hm[data-screen="tournament"] button[data-role="play"]')?.disabled, null, { timeout: 180000 })
+}
+
+async function tournamentTests() {
+  await test('N9 giải 1 bạn, 4 trận/đội: trận máy tự ghi; trận của em (Mặc định) tua tới hết ⇒ ghi, Pit 8 dòng; tải lại giữa trận kế ⇒ "Đấu tiếp", số trận đã ghi không đổi, trận dở đấu lại', async (page) => {
+    // Trận 1 toàn máy: thấy trận máy tự ghi trước trận của em.
+    const seed = findSeed(1, (t) => playersIn(t, 0).length === 0)
+    await open(page)
+    await page.evaluate((s) => window.__fanroc.setTournamentSeed(s), seed)
+    await page.locator('.hm-tile[data-tile="tournament"]').click()
+    await page.waitForFunction(() => window.__fanroc.tour.view === 'register')
+    const machines = await tn(page).locator('[data-role="machines"] span').count()
+    const per = await tn(page).locator('select[data-role="per-team"]').inputValue()
+    const prog = await tn(page).locator('[data-role="program"]').allInnerTexts()
+    expect(machines === 7 && per === '4' && prog.length === 1 && prog[0] === 'Mặc định', `ghi danh: ${machines} đội máy, ${per} trận, chương trình ${prog.join('/')}`)
+    await shot(page, 't15-register.png')
+    await tn(page).locator('button', { hasText: 'Bốc thăm lịch đấu' }).click()
+    await page.waitForFunction(() => window.__fanroc.tour.view === 'schedule')
+    const rows = await tn(page).locator('[data-role="schedule"] > div').count()
+    const mine = await tn(page).locator('[data-role="schedule"] > div[data-mine="true"]').count()
+    expect(rows === 8 && mine === 4, `lịch ${rows} trận, ${mine} trận có em`)
+    expect((await recordedN(page)) === 0, 'bốc thăm xong đã có trận ghi')
+    await tn(page).locator('button', { hasText: 'Vào Pit' }).click()
+    await page.waitForFunction(() => window.__fanroc.tour.view === 'pit')
+    const busySeen = await page.evaluate(() => window.__fanroc.tour.busy())
+    await waitPlayable(page)
+    const afterMachines = await recordedN(page)
+    expect(afterMachines >= 1, `trận máy chưa tự ghi (${afterMachines})`)
+    // Trận của em: Mặc định, ghế người lái chương trình, 3 đội máy.
+    await tn(page).locator('button[data-role="play"]').click()
+    await page.waitForFunction(() => window.__fanroc.screen === 'tmatch' && window.__fanroc.editors.state(0) === 'loaded', null, { timeout: 30000 })
+    const me = await page.evaluate(() => window.__fanroc.tour.seat(0))
+    const kinds = await page.evaluate(() => [0, 1, 2, 3].map((i) => window.__fanroc.session.driver(i).kind))
+    expect(me >= 0 && kinds[me] === 'program' && kinds.filter((k) => k === 'agent').length === 3, `ghế em ${me}, người lái ${kinds.join(',')}`)
+    const sb = await page.locator('.sb').innerText()
+    expect(/Mặc định/.test(sb) && /Máy (Dễ|Vừa|Khó)/.test(sb), `bảng điểm: ${sb.replace(/\n/g, ' ').slice(0, 120)}`)
+    await skipRelease(page)
+    await page.waitForFunction(() => window.__fanroc.editors.state(0) === 'running', null, { timeout: 15000 })
+    const locked = await page.evaluate(() => window.__fanroc.setSpeed(40))
+    expect(locked === 1, `chương trình đang chạy mà tốc độ ×${locked} (R24)`)
+    const before = await recordedN(page)
+    await fastForward(page)
+    await page.locator('.sb-result:not([hidden])').waitFor({ timeout: 15000 })
+    const acts = await page.locator('.sb-result .sb-acts button').allInnerTexts()
+    expect(acts.includes('Trận kế tiếp') && !acts.includes('Chơi lại'), `nút kết quả: ${acts.join(', ')}`)
+    const after = await recordedN(page)
+    expect(after === before + 1, `ghi ${before} ⇒ ${after} trận`)
+    await page.locator('.sb-result button', { hasText: 'Trận kế tiếp' }).click()
+    await page.waitForFunction(() => window.__fanroc.tour.view === 'pit')
+    const standing = await tn(page).locator('[data-role="standings"] tr[data-id]').count()
+    const myScores = await tn(page).locator('[data-role="standings"] tr[data-id="p0"] td').nth(2).innerText()
+    expect(standing === 8 && myScores !== '—', `Pit ${standing} dòng xếp hạng, điểm các trận của em "${myScores}"`)
+    await shot(page, 't15-pit.png')
+    // Trận kế của em: chơi dở 20 s rồi tải lại trang.
+    await waitPlayable(page)
+    const nBefore = await recordedN(page)
+    const nextIdx = await page.evaluate(() => window.__fanroc.store.tournament().results.indexOf(null))
+    await tn(page).locator('button[data-role="play"]').click()
+    await page.waitForFunction(() => window.__fanroc.screen === 'tmatch', null, { timeout: 30000 })
+    await skipRelease(page)
+    await page.evaluate(() => window.__fanroc.session.advance(20, 1, { steps: 1200 }))
+    const midT = await page.evaluate(() => window.__fanroc.match.t)
+    await page.reload()
+    await page.waitForFunction(() => window.__fanroc?.editors && window.__fanroc.screen === 'home', null, { timeout: 60000 })
+    const tile = await page.locator('.hm-tile[data-tile="tournament"]').innerText()
+    const nAfter = await recordedN(page)
+    expect(/Đấu tiếp · trận \d\/4/.test(tile) && nAfter === nBefore, `ô Giải đấu "${tile.replace(/\n/g, ' ')}", đã ghi ${nBefore} ⇒ ${nAfter}`)
+    await page.locator('.hm-tile[data-tile="tournament"]').click()
+    await page.waitForFunction(() => window.__fanroc.tour.view === 'pit')
+    await waitPlayable(page)
+    await tn(page).locator('button[data-role="play"]').click()
+    await page.waitForFunction(() => window.__fanroc.screen === 'tmatch', null, { timeout: 30000 })
+    const again = await page.evaluate(() => ({ i: window.__fanroc.tour.index, t: window.__fanroc.match.t }))
+    expect(again.i === nextIdx && again.t < -9 && (await recordedN(page)) === nBefore, `đấu lại trận ${again.i} (cần ${nextIdx}) từ t = ${again.t.toFixed(1)} s`)
+    return `seed ${seed} · máy tự ghi ${afterMachines} trận${busySeen ? ' ("Đang chơi các trận máy…")' : ''} · trận em ghi ${before}⇒${after} · Pit ${standing} dòng · tải lại ở t = ${midT.toFixed(0)} s ⇒ "${tile.match(/Đấu tiếp[^\n]*/)?.[0]}", vẫn ${nAfter} trận, đấu lại trận ${again.i + 1} từ đầu`
+  })
+
+  await test('N10 hai bạn chia đôi bàn phím: thử phím đúng robot; trong trận giữ W chỉ robot bạn 1 chạy, giữ ↑ chỉ robot bạn 2', async (page) => {
+    const seed = findSeed(2, (t) => playersIn(t, 0).length === 2)
+    await open(page)
+    await page.evaluate((s) => window.__fanroc.setTournamentSeed(s), seed)
+    await page.locator('.hm-tile[data-tile="tournament"]').click()
+    await page.waitForFunction(() => window.__fanroc.tour.view === 'register')
+    await tn(page).locator('.pk-seg button[data-value="2"]').click()
+    await page.waitForFunction(() => window.__fanroc.keypads().length === 2 && document.querySelectorAll('.hm[data-screen="tournament"] .tn-players .tn-box').length === 2)
+    const machines = await tn(page).locator('[data-role="machines"] span').count()
+    expect(machines === 6, `2 bạn mà ${machines} đội máy`)
+    await tn(page).locator('button', { hasText: 'Thử phím' }).click()
+    await page.waitForFunction(() => window.__fanroc.tour.view === 'keytest')
+    const note = await tn(page).innerText()
+    expect(/Một số bàn phím không nhận nhiều phím bấm cùng lúc/.test(note), 'thiếu ghi chú bàn phím')
+    const lit = () => page.evaluate(() => [...document.querySelectorAll('.tn-mini')].map((m) => m.dataset.lit))
+    await page.locator('#stage canvas').click({ position: { x: 5, y: 5 }, force: true }).catch(() => {})
+    await page.keyboard.down('KeyW')
+    await page.waitForTimeout(200)
+    const w = await lit()
+    await page.keyboard.up('KeyW')
+    await page.keyboard.down('ArrowUp')
+    await page.waitForTimeout(200)
+    const up = await lit()
+    await page.keyboard.up('ArrowUp')
+    expect(w.join() === 'true,false' && up.join() === 'false,true', `thử phím: W ⇒ ${w}, ↑ ⇒ ${up}`)
+    await tn(page).locator('button', { hasText: 'Bốc thăm lịch đấu' }).click()
+    await tn(page).locator('button', { hasText: 'Vào Pit' }).click()
+    await waitPlayable(page)
+    await tn(page).locator('button[data-role="play"]').click()
+    await page.waitForFunction(() => window.__fanroc.screen === 'tmatch', null, { timeout: 30000 })
+    const s = await page.evaluate(() => [window.__fanroc.tour.seat(0), window.__fanroc.tour.seat(1)])
+    expect(s[0] >= 0 && s[1] >= 0, `ghế hai bạn ${s}`)
+    await skipRelease(page)
+    await page.waitForFunction(() => window.__fanroc.editors.state(0) === 'running' && window.__fanroc.editors.state(1) === 'running', null, { timeout: 15000 })
+    await page.waitForTimeout(300)
+    await page.locator('#stage canvas').click({ position: { x: 5, y: 5 } })
+    const hold = async (key) => {
+      const a = [await pose(page, s[0]), await pose(page, s[1])]
+      await page.keyboard.down(key)
+      await page.waitForTimeout(1500)
+      await page.keyboard.up(key)
+      const b = [await pose(page, s[0]), await pose(page, s[1])]
+      await page.waitForTimeout(600)
+      return [dist(a[0], b[0]), dist(a[1], b[1])]
+    }
+    const kw = await hold('KeyW')
+    const ku = await hold('ArrowUp')
+    expect(kw[0] > 0.15 && kw[1] < 0.05, `giữ W: bạn 1 đi ${kw[0].toFixed(3)} m, bạn 2 đi ${kw[1].toFixed(3)} m`)
+    expect(ku[1] > 0.15 && ku[0] < 0.05, `giữ ↑: bạn 1 đi ${ku[0].toFixed(3)} m, bạn 2 đi ${ku[1].toFixed(3)} m`)
+    return `seed ${seed} · thử phím W ⇒ ${w}, ↑ ⇒ ${up} · W: ${kw.map((d) => d.toFixed(2)).join(' / ')} m · ↑: ${ku.map((d) => d.toFixed(2)).join(' / ')} m`
+  })
+
+  await test('N9b giải đã xong (nạp sẵn) ⇒ ô "Giải đã xong", bục trao giải hạng 1–3 + bảng 8 dòng; Giải mới ⇒ ghi danh, xoá giải', async (page) => {
+    let t = newTournament({ names: ['Tuấn', 'Bạn 2'], cfgs: [MAKER, MAKER], players: 1, perTeam: 4, seed: 7 })
+    t.schedule.forEach((slot, i) => {
+      const ids = seatIds(slot)
+      const score = 100 + ((i * 37) % 90)
+      t = record(t, i, played(ids, ids.map((id) => ({ score: id === 'p0' ? score + 40 : score, penalty: 0 })), score))
+    })
+    await open(page)
+    await page.evaluate((v) => window.__fanroc.store.saveTournament(v), t)
+    await page.reload()
+    await page.waitForFunction(() => window.__fanroc?.editors && window.__fanroc.screen === 'home', null, { timeout: 60000 })
+    const tile = await page.locator('.hm-tile[data-tile="tournament"]').innerText()
+    expect(/Giải đã xong/.test(tile), `ô Giải đấu: ${tile}`)
+    await page.locator('.hm-tile[data-tile="tournament"]').click()
+    await page.waitForFunction(() => window.__fanroc.tour.view === 'podium')
+    const steps = await tn(page).locator('[data-role="podium"] .tn-step').evaluateAll((es) => es.map((e) => `${e.dataset.rank}:${e.querySelector('span').textContent}`))
+    const rows = await tn(page).locator('[data-role="standings"] tr[data-id]').count()
+    expect(steps.length === 3 && steps.includes('1:Tuấn') && rows === 8, `bục ${steps.join(' ')}, bảng ${rows} dòng`)
+    await shot(page, 't15-podium.png')
+    await tn(page).locator('button', { hasText: 'Giải mới' }).click()
+    await page.waitForFunction(() => window.__fanroc.tour.view === 'register')
+    const gone = await page.evaluate(() => window.__fanroc.store.tournament())
+    expect(gone === null, 'Giải mới mà giải cũ còn lưu')
+    return `bục ${steps.join(' · ')} · bảng ${rows} dòng · Giải mới ⇒ ghi danh`
+  })
+
+  await test('N9d Pit: Xem nhanh trận máy ×40 (không ghi thêm) ⇒ Về Pit; Vào Xưởng (robot giữ nguyên) ⇒ Lưu ⇒ tự về Pit, nhãn "Của em v1"', async (page) => {
+    const seed = findSeed(1, (t) => playersIn(t, 0).length === 0)
+    let t = newTournament({ names: ['Bạn 1', 'Bạn 2'], cfgs: [MAKER, MAKER], players: 1, perTeam: 4, seed })
+    const ids = seatIds(t.schedule[0])
+    t = record(t, 0, played(ids, ids.map(() => ({ score: 222, penalty: 0 })), 222))
+    await open(page)
+    await page.evaluate((v) => window.__fanroc.store.saveTournament(v), t)
+    await page.reload()
+    await page.waitForFunction(() => window.__fanroc?.editors && window.__fanroc.screen === 'home', null, { timeout: 60000 })
+    await page.locator('.hm-tile[data-tile="tournament"]').click()
+    await page.waitForFunction(() => window.__fanroc.tour.view === 'pit')
+    await tn(page).locator('[data-role="machine-results"] button', { hasText: 'Xem nhanh' }).click()
+    await page.waitForFunction(() => window.__fanroc.screen === 'treplay', null, { timeout: 30000 })
+    const kinds = await page.evaluate(() => [0, 1, 2, 3].map((i) => window.__fanroc.session.driver(i).kind))
+    const sp = await page.evaluate(() => window.__fanroc.setSpeed(40))
+    const t0 = await page.evaluate(() => window.__fanroc.match.t)
+    await page.waitForTimeout(1000)
+    const t1 = await page.evaluate(() => window.__fanroc.match.t)
+    expect(kinds.every((k) => k === 'agent') && sp === 40 && t1 - t0 > 4, `Xem nhanh: người lái ${kinds}, tốc độ ×${sp}, 1 s thật = ${(t1 - t0).toFixed(1)} s trận`)
+    await fastForward(page)
+    await page.locator('.sb-result:not([hidden])').waitFor({ timeout: 15000 })
+    await page.locator('.sb-result button', { hasText: 'Về Pit' }).click()
+    await page.waitForFunction(() => window.__fanroc.tour.view === 'pit')
+    expect((await recordedN(page)) === 1, `Xem nhanh mà số trận đã ghi thành ${await recordedN(page)}`)
+    // Xưởng từ Pit: không có ô đổi robot; Lưu ⇒ tự về Pit, bảng xếp hạng ghi "Của em v1".
+    await tn(page).locator('button', { hasText: 'Vào Xưởng sửa chương trình' }).click()
+    await page.waitForFunction(() => window.__fanroc.screen === 'workshop', null, { timeout: 30000 })
+    const fixed = await page.locator('[data-role="workshop"] [data-role="tour-note"]').isVisible()
+    const cfgSel = await page.locator('[data-role="workshop"] .fe-cfg').count()
+    expect(fixed && cfgSel === 0, `Xưởng từ Pit: ghi chú ${fixed}, ô đổi robot ${cfgSel}`)
+    await page.locator('[data-role="workshop"] button', { hasText: 'Lưu cho robot của em' }).click()
+    await page.waitForFunction(() => window.__fanroc.screen === 'tournament' && window.__fanroc.tour.view === 'pit', null, { timeout: 30000 })
+    const note = await tn(page).locator('.tn-note[data-ok="true"]').innerText()
+    const me = await tn(page).locator('[data-role="standings"] tr[data-id="p0"]').innerText()
+    expect(/Đã lưu v1/.test(note) && /Của em v1/.test(me), `Pit sau khi lưu: "${note}" · "${me.replace(/\s+/g, ' ')}"`)
+    return `Xem nhanh ×${sp} (${(t1 - t0).toFixed(1)} s trận / 1 s) ⇒ Về Pit, vẫn 1 trận · Xưởng ⇒ "${note}"`
+  })
+
+  await test('N9c giải lưu hỏng ⇒ "Không đọc được giải đang dở" + Giải mới; bộ nhớ đầy ⇒ Pit báo không lưu được; điện thoại không cuộn ngang', async (page) => {
+    await open(page)
+    await page.evaluate((k) => localStorage.setItem(k, '{"version":1,"seed":1,"perTeam":4,"entrants":[],"schedule":[],"results":[]}'), TOUR_KEY)
+    await page.reload()
+    await page.waitForFunction(() => window.__fanroc?.editors && window.__fanroc.screen === 'home', null, { timeout: 60000 })
+    const tile = await page.locator('.hm-tile[data-tile="tournament"]').innerText()
+    expect(/Không đọc được giải đang dở/.test(tile), `ô Giải đấu: ${tile}`)
+    await page.locator('.hm-tile[data-tile="tournament"]').click()
+    await page.waitForFunction(() => window.__fanroc.tour.view === 'corrupt')
+    await tn(page).locator('button', { hasText: 'Giải mới' }).click()
+    await page.waitForFunction(() => window.__fanroc.tour.view === 'register')
+    const wide = async () => page.evaluate(() => document.scrollingElement.scrollWidth - innerWidth)
+    const w1 = await wide()
+    // Bộ nhớ đầy khi lưu giải: Pit phải báo, không im lặng.
+    await page.evaluate((k) => {
+      const set = Storage.prototype.setItem
+      Storage.prototype.setItem = function (key, v) {
+        if (key === k) throw new DOMException('đầy', 'QuotaExceededError')
+        return set.call(this, key, v)
+      }
+    }, TOUR_KEY)
+    await tn(page).locator('button', { hasText: 'Bốc thăm lịch đấu' }).click()
+    await tn(page).locator('button', { hasText: 'Vào Pit' }).click()
+    await page.waitForFunction(() => window.__fanroc.tour.view === 'pit')
+    const warn = await tn(page).locator('.tn-note[data-ok="false"]').allInnerTexts()
+    const w2 = await wide()
+    expect(warn.some((x) => x === 'Không lưu được giải — tải lại trang sẽ mất tiến độ'), `Pit không báo lỗi lưu: ${warn.join(' | ')}`)
+    expect(w1 <= 0 && w2 <= 0, `cuộn ngang ở 390 px: ghi danh ${w1} px, Pit ${w2} px`)
+    return `hỏng ⇒ Giải mới · đầy ⇒ "${warn[0]}" · không cuộn ngang`
+  }, { width: 390, height: 844 })
 }
 
 // ---------- Phép thử giao diện mới (Task 11+) ----------

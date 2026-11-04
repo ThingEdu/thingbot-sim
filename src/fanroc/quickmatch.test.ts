@@ -17,7 +17,12 @@ test('playAgents: cùng seed ⇒ cùng điểm trận; điểm đội = teamScor
   const t0 = performance.now()
   const a = await playAgents(opts(5))
   const secs = (performance.now() - t0) / 1000
-  const b = await playAgents(opts(5))
+  // Chạy từng lát (giải đấu chạy ngầm trên trang): cùng kết quả, và nhường luồng cho hẹn giờ khác chạy giữa chừng.
+  let ticks = 0
+  const timer = setInterval(() => ticks++, 1)
+  const b = await playAgents({ ...opts(5), sliceMs: 5 })
+  clearInterval(timer)
+  assert.ok(ticks > 10, `chạy từng lát mà hẹn giờ chỉ chạy ${ticks} lần`)
   console.log(`quickmatch: trận ${a.match} điểm trong ${secs.toFixed(1)} s`)
   assert.ok(secs < 60, `trận ngầm ${secs.toFixed(1)} s ≥ 60 s`)
   assert.equal(b.match, a.match)

@@ -152,7 +152,8 @@ export interface Scoreboard {
   update(line: ScoreLine, pops: string[]): void
   /** 3 · 2 · 1; 0 = "BẮT ĐẦU!". */
   countdown(n: 3 | 2 | 1 | 0): void
-  result(r: ResultView, actions: { again(): void; home(): void; next?(): void }): void
+  /** Màn kết quả. Giải đấu: không có Chơi lại (trận đã ghi), `next` = Trận kế tiếp / Về Pit (`nextLabel`). */
+  result(r: ResultView, actions: { again?(): void; home(): void; next?(): void; nextLabel?: string }): void
   hideResult(): void
   /** Xoá chữ báo điểm nổi và chữ đếm ngược đang hiện (hiện màn kết quả, sang trận mới, rời màn trận). */
   clearFx(): void
@@ -365,8 +366,8 @@ export function createScoreboard(stage: HTMLElement): Scoreboard {
         b.onclick = on
         return b
       }
-      acts.append(btn('Chơi lại', actions.again, !actions.next))
-      if (actions.next) acts.append(btn('Trận kế tiếp', actions.next, true))
+      if (actions.again) acts.append(btn('Chơi lại', actions.again, !actions.next))
+      if (actions.next) acts.append(btn(actions.nextLabel ?? 'Trận kế tiếp', actions.next, true))
       acts.append(btn('Về màn chính', actions.home))
       const card = el('div', 'sb-card')
       card.append(el('h2', undefined, 'HẾT GIỜ — KẾT QUẢ TRẬN'), cols, acts)

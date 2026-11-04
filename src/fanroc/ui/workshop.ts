@@ -71,6 +71,8 @@ export interface WorkshopView {
   names: [string, string]
   /** "Của em v2" / "Mặc định". */
   label: string
+  /** Vào từ Pit của giải: robot giữ nguyên suốt giải (ẩn ô đổi robot), có nút quay lại Pit. */
+  tournament?: boolean
 }
 
 export interface WorkshopBar {
@@ -111,7 +113,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
  */
 export function createWorkshopBar(
   controls: (p: 0 | 1) => { el: HTMLElement; refresh(): void },
-  on: { setPlayer(p: 0 | 1): void; save(): void; reset(): void; download(): void },
+  on: { setPlayer(p: 0 | 1): void; save(): void; reset(): void; download(): void; back?(): void },
 ): WorkshopBar {
   if (!document.getElementById('ws-css')) {
     const s = el('style')
@@ -156,13 +158,22 @@ export function createWorkshopBar(
         }
         rows.push(who)
       }
-      const c = controls(v.player)
-      c.refresh()
-      const cfgRow = el('div', 'ws-row')
-      cfgRow.append(c.el)
+      if (v.tournament) {
+        // Giải đấu: robot + đế chọn lúc ghi danh, giữ suốt giải; lưu xong tự về Pit.
+        const note = el('div', 'ws-row', 'Giải đấu: robot giữ nguyên như lúc ghi danh. Lưu xong em quay lại Pit.')
+        note.dataset.role = 'tour-note'
+        rows.push(note)
+      } else {
+        const c = controls(v.player)
+        c.refresh()
+        const cfgRow = el('div', 'ws-row')
+        cfgRow.append(c.el)
+        rows.push(cfgRow)
+      }
       const acts = el('div', 'ws-row')
       acts.append(save, reset, dl)
-      rows.push(cfgRow, acts, msg)
+      if (v.tournament && on.back) acts.append(button('Về Pit', on.back, undefined, 'trophy'))
+      rows.push(acts, msg)
       bar.replaceChildren(...rows)
       bar.hidden = false
     },

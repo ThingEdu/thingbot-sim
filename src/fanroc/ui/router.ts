@@ -3,9 +3,11 @@
 import type { CameraView } from '../view/scene.ts'
 import type { Activity } from './shell.ts'
 
-export type Screen = 'home' | 'match' | 'practice' | 'workshop' | 'missions' | 'mission' | 'tournament'
+/** 'tournament' = các màn giải đấu phủ sân (ghi danh, thử phím, lịch, Pit, bục trao giải); 'tmatch' = trận của giải có
+ * người chơi; 'treplay' = Xem nhanh một trận máy đã chơi ngầm (×40, không ghi kết quả). */
+export type Screen = 'home' | 'match' | 'practice' | 'workshop' | 'missions' | 'mission' | 'tournament' | 'tmatch' | 'treplay'
 
-export const SCREENS: readonly Screen[] = ['home', 'match', 'practice', 'workshop', 'missions', 'mission', 'tournament']
+export const SCREENS: readonly Screen[] = ['home', 'match', 'practice', 'workshop', 'missions', 'mission', 'tournament', 'tmatch', 'treplay']
 
 /**
  * Camera mặc định khi vào màn (spec §6.5; camera không lưu — §8.7): màn chính quay chậm quanh sân, trận / đấu tập /
@@ -18,6 +20,7 @@ export function defaultCamera(s: Screen): CameraView {
     case 'match':
     case 'practice':
     case 'workshop':
+    case 'tmatch':
       return 'follow'
     default:
       return 'field'
@@ -42,7 +45,10 @@ export function chrome(s: Screen): ScreenChrome {
       return { activity: [], runbar: false, scoreboard: false, live: true }
     case 'match':
     case 'practice':
+    case 'tmatch':
       return { activity: ['blocks', 'code', 'serial'], runbar: true, scoreboard: true, live: true }
+    case 'treplay':
+      return { activity: [], runbar: false, scoreboard: true, live: true }
     case 'workshop':
       return { activity: ['blocks', 'code', 'serial'], runbar: true, scoreboard: false, live: true }
     case 'mission':

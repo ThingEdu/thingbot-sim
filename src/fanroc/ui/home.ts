@@ -186,6 +186,8 @@ export interface HomeInfo {
   player: string
   stars: number
   missions: { done: number; total: number }
+  /** Giải đang dở / đã xong ("Đấu tiếp · trận x/y"), hay giải lưu bị hỏng; null = chưa có giải. */
+  tournament?: { text: string; corrupt: boolean } | null
 }
 
 export interface Home {
@@ -197,7 +199,13 @@ export interface Home {
 }
 
 const TILE_TEXT: Record<TileId, { title: string; text: (i: HomeInfo) => (string | Node)[] }> = {
-  tournament: { title: 'Giải đấu', text: () => ['Đúng luật FANROC: vòng xếp hạng 4–10 trận, bốc thăm liên minh, 1–2 bạn chơi.'] },
+  tournament: {
+    title: 'Giải đấu',
+    text: (i) =>
+      i.tournament
+        ? [Object.assign(document.createElement('b'), { textContent: i.tournament.text }), i.tournament.corrupt ? ' · bấm để mở Giải mới' : '']
+        : ['Đúng luật FANROC: vòng xếp hạng 4–10 trận, bốc thăm liên minh, 1–2 bạn chơi.'],
+  },
   match: { title: 'Trận lẻ · Đấu tập', text: () => ['Một trận 10 s + 3 phút với 3 robot máy, hoặc sân tự do không tính giờ.'] },
   missions: { title: 'Nhiệm vụ', text: (i) => [`Con rùa robot · ${i.missions.total} nhiệm vụ · ${i.missions.done}/${i.missions.total} `, icon('check', 14)] },
   workshop: {

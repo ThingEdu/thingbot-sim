@@ -57,7 +57,14 @@ test('router: camera mặc định theo màn (trận / đấu tập / Xưởng T
   assert.equal(defaultCamera('mission'), 'field')
   assert.equal(defaultCamera('missions'), 'field')
   assert.equal(defaultCamera('tournament'), 'field')
-  assert.equal(SCREENS.length, 7)
+  assert.equal(defaultCamera('tmatch'), 'follow')
+  assert.equal(defaultCamera('treplay'), 'field')
+  assert.equal(SCREENS.length, 9)
+})
+
+test('router: trận giải đấu như trận lẻ (khối, thanh chạy, bảng điểm); Xem nhanh chỉ bảng điểm, không thanh chạy', () => {
+  assert.deepEqual(chrome('tmatch'), chrome('match'))
+  assert.deepEqual(chrome('treplay'), { activity: [], runbar: false, scoreboard: true, live: true })
 })
 
 test('router: màn chính không có cột biểu tượng / thanh chạy / bảng điểm; trận có; Xưởng không bảng điểm', () => {

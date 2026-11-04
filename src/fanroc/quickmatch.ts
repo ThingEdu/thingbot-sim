@@ -25,6 +25,11 @@ export interface QuickOpts {
   order?: Seat[]
   /** Móc quan sát mỗi bước (agent.test dùng để đếm lệnh bánh vào vùng chết). */
   onStep?: (ports: PortValues[], match: Match) => void
+  /**
+   * Chạy từng lát chừng này ms rồi nhường luồng (setTimeout 0) — giải đấu chạy trận máy ngầm trên trang mà sân, nút
+   * vẫn chạy mượt. Bỏ trống: chạy một mạch (phép thử). Kết quả không đổi: số bước vật lý vẫn y như vậy.
+   */
+  sliceMs?: number
 }
 
 export interface QuickResult {
@@ -55,7 +60,12 @@ export async function playAgents(o: QuickOpts): Promise<QuickResult> {
     const humans = (['red', 'blue'] as const).map((a) => new HumanPlayer(a))
     humans.forEach((h) => (h.onEvent = (s) => m.log(s)))
     const agents = robots.map((r, i) => new Agent(r, o.cfgs[i], o.skills[i], o.seed * 10 + i))
+    let t0 = performance.now()
     while (m.phase !== 'end') {
+      if (o.sliceMs !== undefined && performance.now() - t0 >= o.sliceMs) {
+        await new Promise((ok) => setTimeout(ok, 0))
+        t0 = performance.now()
+      }
       const view = { world: w, robots, match: m, humans }
       const ports = agents.map((a) => a.update(view, PHYSICS_DT))
       o.onStep?.(ports, m)

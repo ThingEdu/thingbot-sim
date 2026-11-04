@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { createStore, defaultSettings, keys, type KV } from './store.ts'
 import { defaultConfig } from './programs.ts'
 import { FANROC_2026 } from './season.ts'
-import type { TournamentState } from './tournament.ts'
+import { createTournament, record, type TournamentState } from './tournament.ts'
 
 const fake = (): KV & { m: Map<string, string> } => {
   const m = new Map<string, string>()
@@ -12,7 +12,7 @@ const fake = (): KV & { m: Map<string, string> } => {
 const boom: KV = { getItem() { throw new Error('chặn') }, setItem() { throw new Error('chặn') } }
 const maker = { type: 'maker', drive: 'diff2', actuator: 'tt' } as const
 const ui = { type: 'ui', drive: 'diff2', actuator: 'tt' } as const
-const T: TournamentState = { version: 1, seed: 1, perTeam: 3, entrants: [], schedule: [], results: [] }
+const T: TournamentState = createTournament({ players: [{ name: 'Bạn 1', robot: maker }], perTeam: 4, seed: 1 })
 
 test('khoá theo mùa', () => {
   assert.equal(keys(FANROC_2026.id).missions, 'fanroc.v1.fanroc-2026.missions')
@@ -69,6 +69,43 @@ test('JSON sai dạng: mặc định; giải ⇒ corrupt; vắng ⇒ null', () =
   assert.equal(s.tournament(), 'corrupt')
   kv.m.set(keys('s').tournament, '{"version":2,"entrants":[],"schedule":[],"results":[]}')
   assert.equal(s.tournament(), 'corrupt')
+})
+
+test('giải: dạng sâu sai (seed, perTeam, phần tử entrants / schedule / results) ⇒ corrupt; giải đúng, có kết quả ⇒ đọc được', () => {
+  const kv = fake()
+  const s = createStore('s', kv)
+  const played = record(T, 0, { matchScore: 120, teams: Object.fromEntries(T.schedule[0].red.concat(T.schedule[0].blue).map((id) => [id, { score: 120, penalty: 0 }])) })
+  const put = (v: unknown) => kv.m.set(keys('s').tournament, JSON.stringify(v))
+  put(played)
+  assert.deepEqual(s.tournament(), played)
+  const bad: [string, (t: any) => void][] = [
+    ['seed không phải số', (t) => (t.seed = 'x')],
+    ['seed vô hạn', (t) => (t.seed = null)],
+    ['perTeam ngoài 4–10', (t) => (t.perTeam = 11)],
+    ['perTeam lẻ thập phân', (t) => (t.perTeam = 4.5)],
+    ['thiếu đội', (t) => t.entrants.pop()],
+    ['đội thiếu tên', (t) => delete t.entrants[0].name],
+    ['đội loại lạ', (t) => (t.entrants[1].kind = 'alien')],
+    ['robot không có thật', (t) => (t.entrants[0].robot = { type: 'xe', drive: 'diff2', actuator: 'tt' })],
+    ['đội máy thiếu mức', (t) => delete t.entrants[3].skill],
+    ['người chơi sai số', (t) => (t.entrants[0].player = 3)],
+    ['trùng id', (t) => (t.entrants[2].id = t.entrants[1].id)],
+    ['lịch thiếu trận', (t) => t.schedule.pop()],
+    ['ô lịch sai dạng', (t) => (t.schedule[1] = { red: ['p0'], blue: [] })],
+    ['ô lịch id lạ', (t) => (t.schedule[2].red[0] = 'zz')],
+    ['ô lịch trùng đội', (t) => (t.schedule[2].blue[0] = t.schedule[2].red[0])],
+    ['kết quả lệch độ dài', (t) => t.results.pop()],
+    ['kết quả thiếu điểm trận', (t) => delete t.results[0].matchScore],
+    ['kết quả điểm đội sai', (t) => (t.results[0].teams[t.schedule[0].red[0]].score = 'nhiều')],
+    ['kết quả đội lạ', (t) => (t.results[0].teams.zz = { score: 1, penalty: 0 })],
+    ['kết quả là số', (t) => (t.results[3] = 7)],
+  ]
+  for (const [why, mutate] of bad) {
+    const t = JSON.parse(JSON.stringify(played))
+    mutate(t)
+    put(t)
+    assert.equal(s.tournament(), 'corrupt', why)
+  }
 })
 
 test('giải: lưu, đọc, xoá bằng null', () => {

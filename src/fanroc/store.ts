@@ -2,7 +2,7 @@
 import type { Skill } from './agent.ts'
 import type { Alliance } from './layout.ts'
 import { ROBOTS, type RobotConfig } from './robots.ts'
-import type { TournamentState } from './tournament.ts'
+import { TEAM_COUNT, type TournamentState } from './tournament.ts'
 import type { Quality } from './view/scene.ts'
 
 export type { Quality }
@@ -53,6 +53,42 @@ function robotConfig(v: unknown): RobotConfig | null {
   if (!def.drives.includes(v.drive as RobotConfig['drive'])) return null
   if (v.actuator !== 'tt' && v.actuator !== 's360') return null
   return { type: def.type, drive: v.drive as RobotConfig['drive'], actuator: v.actuator }
+}
+
+const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+const SKILLS = new Set(['easy', 'medium', 'hard'])
+
+/**
+ * Giải đọc từ bộ nhớ có đúng dạng để đấu tiếp không (màn giải đấu dùng thẳng): seed, perTeam (số nguyên 4–10), đủ
+ * TEAM_COUNT đội (id không trùng, tên, loại, robot có thật, đội máy có mức, người chơi 0 / 1), lịch đủ 2·perTeam trận
+ * (mỗi trận 4 đội khác nhau có trong danh sách), kết quả cùng độ dài lịch (null hoặc điểm trận + điểm / phạt từng đội).
+ */
+function validTournament(v: unknown): v is TournamentState {
+  if (!isObj(v) || v.version !== 1 || !finite(v.seed)) return false
+  const perTeam = v.perTeam
+  if (!Number.isInteger(perTeam) || (perTeam as number) < 4 || (perTeam as number) > 10) return false
+  const { entrants, schedule, results } = v
+  if (!Array.isArray(entrants) || entrants.length !== TEAM_COUNT) return false
+  const ids = new Set<string>()
+  for (const e of entrants) {
+    if (!isObj(e) || typeof e.id !== 'string' || typeof e.name !== 'string' || robotConfig(e.robot) === null) return false
+    if (e.kind === 'machine' ? !SKILLS.has(e.skill as string) : e.kind !== 'player' || (e.player !== 0 && e.player !== 1)) return false
+    if (ids.has(e.id)) return false
+    ids.add(e.id)
+  }
+  const pair = (a: unknown) => Array.isArray(a) && a.length === 2 && a.every((id) => typeof id === 'string' && ids.has(id))
+  if (!Array.isArray(schedule) || schedule.length !== 2 * (perTeam as number)) return false
+  for (const slot of schedule) {
+    if (!isObj(slot) || !pair(slot.red) || !pair(slot.blue)) return false
+    if (new Set([...(slot.red as string[]), ...(slot.blue as string[])]).size !== 4) return false
+  }
+  if (!Array.isArray(results) || results.length !== schedule.length) return false
+  for (const r of results) {
+    if (r === null) continue
+    if (!isObj(r) || !finite(r.matchScore) || !isObj(r.teams)) return false
+    for (const [id, t] of Object.entries(r.teams)) if (!ids.has(id) || !isObj(t) || !finite(t.score) || !finite(t.penalty)) return false
+  }
+  return true
 }
 
 function defaultKV(): KV | null {
@@ -136,8 +172,7 @@ export function createStore(season: string, kvArg?: KV | null): Store {
       if (!raw) return null
       let v: unknown
       try { v = JSON.parse(raw) } catch { return 'corrupt' }
-      if (!isObj(v) || v.version !== 1 || !Array.isArray(v.entrants) || !Array.isArray(v.schedule) || !Array.isArray(v.results)) return 'corrupt'
-      return v as unknown as TournamentState
+      return validTournament(v) ? v : 'corrupt'
     },
     saveTournament(s) {
       if (s === null) write(K.tournament, '')
