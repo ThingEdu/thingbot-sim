@@ -1,0 +1,70 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { programText, robotName, robotStats, tileMove, TILES } from './home.ts'
+import { chrome, defaultCamera, SCREENS } from './router.ts'
+import { ROBOTS } from '../robots.ts'
+import { V_MAX } from '../robot.ts'
+import { defaultConfig } from '../programs.ts'
+
+test('TILES: 4 ô, Giải đấu đầu tiên (chọn sẵn)', () => {
+  assert.deepEqual([...TILES], ['tournament', 'match', 'missions', 'workshop'])
+})
+
+test('tileMove: phím mũi tên đi theo lưới ô; ra ngoài lưới / phím khác thì đứng yên', () => {
+  const rows: [Parameters<typeof tileMove>[0], string, string][] = [
+    ['tournament', 'ArrowRight', 'match'], ['tournament', 'ArrowLeft', 'tournament'], ['tournament', 'ArrowDown', 'tournament'], ['tournament', 'ArrowUp', 'tournament'],
+    ['match', 'ArrowLeft', 'tournament'], ['match', 'ArrowRight', 'missions'], ['match', 'ArrowDown', 'workshop'], ['match', 'ArrowUp', 'match'],
+    ['missions', 'ArrowLeft', 'match'], ['missions', 'ArrowDown', 'workshop'], ['missions', 'ArrowRight', 'missions'], ['missions', 'ArrowUp', 'missions'],
+    ['workshop', 'ArrowUp', 'match'], ['workshop', 'ArrowLeft', 'tournament'], ['workshop', 'ArrowRight', 'workshop'], ['workshop', 'ArrowDown', 'workshop'],
+    ['match', 'Enter', 'match'], ['missions', 'KeyW', 'missions'],
+  ]
+  for (const [from, key, to] of rows) assert.equal(tileMove(from, key), to, `${from} + ${key}`)
+})
+
+test('programText: có bản lưu ⇒ "Của em vN"; chưa lưu hoặc chọn Mặc định ⇒ "Mặc định"', () => {
+  assert.equal(programText({ version: 3 }), 'Của em v3')
+  assert.equal(programText({ version: 1 }, true), 'Của em v1')
+  assert.equal(programText({ version: 3 }, false), 'Mặc định')
+  assert.equal(programText(null), 'Mặc định')
+})
+
+test('robotStats: thanh lấy từ ROBOTS (storage/10 kẹp 1, cờ = có kẹp + tầm vươn), tốc độ V_MAX, đế 4 bánh đi ngang', () => {
+  const maker = robotStats(defaultConfig('maker'))
+  const ui = robotStats(defaultConfig('ui'))
+  const co = robotStats(defaultConfig('co'))
+  const sort = robotStats(defaultConfig('sort'))
+  assert.equal(maker.storage, ROBOTS.maker.storage / 10)
+  assert.equal(ui.storage, 1) // 15 bóng: kẹp 1
+  assert.equal(sort.storage, 1)
+  assert.equal(ui.flag, 0)
+  assert.equal(sort.flag, 0)
+  assert.equal(maker.flag, 0.5) // kẹp cờ, không vươn
+  assert.equal(co.flag, 1) // tay vươn 14 cm
+  assert.ok(co.flag > maker.flag)
+  for (const s of [maker, ui, co, sort]) assert.ok(s.speed > 0 && s.speed <= 1)
+  assert.match(maker.speedText, new RegExp(`^${String(V_MAX).replace('.', ',')} m/s$`))
+  assert.match(robotStats({ type: 'maker', drive: 'omni', actuator: 's360' }).speedText, /đi ngang được/)
+  assert.equal(ui.flagText, 'Không cắm cờ')
+  assert.equal(co.flagText, 'Kẹp cờ · tay vươn 14 cm')
+  assert.equal(robotName(defaultConfig('maker')), 'Mẫu Maker · 2 bánh')
+})
+
+test('router: camera mặc định theo màn (trận / đấu tập / Xưởng Theo robot, nhiệm vụ Toàn sân, màn chính quay chậm)', () => {
+  assert.equal(defaultCamera('home'), 'orbit')
+  assert.equal(defaultCamera('match'), 'follow')
+  assert.equal(defaultCamera('practice'), 'follow')
+  assert.equal(defaultCamera('workshop'), 'follow')
+  assert.equal(defaultCamera('mission'), 'field')
+  assert.equal(defaultCamera('missions'), 'field')
+  assert.equal(defaultCamera('tournament'), 'field')
+  assert.equal(SCREENS.length, 7)
+})
+
+test('router: màn chính không có cột biểu tượng / thanh chạy / bảng điểm; trận có; Xưởng không bảng điểm', () => {
+  assert.deepEqual(chrome('home'), { activity: [], runbar: false, scoreboard: false, live: true })
+  assert.equal(chrome('match').scoreboard, true)
+  assert.equal(chrome('practice').runbar, true)
+  assert.equal(chrome('workshop').scoreboard, false)
+  assert.ok(chrome('workshop').activity.includes('blocks'))
+  assert.equal(chrome('mission').scoreboard, false)
+})

@@ -6,7 +6,7 @@
 import type { Match } from '../match.ts'
 import type { RobotBody } from '../robot.ts'
 import type { Skill } from '../agent.ts'
-import { allianceShare, type ScoreBreakdown } from '../scoring.ts'
+import { allianceShare, scoreTally, teamScore, type ScoreBreakdown } from '../scoring.ts'
 import { penaltyPoints } from '../quickmatch.ts'
 import { matchClock } from '../view/hud.ts'
 
@@ -41,23 +41,27 @@ export function phaseOf(m: Match): ScorePhase {
 }
 
 /**
- * Dòng bảng điểm của trận lúc này. `programs[i]`: nhãn chương trình của robot i (thiếu ⇒ "Mặc định"). Không giả định
- * đủ 4 robot (nhiệm vụ chỉ có Robot 1: bên Xanh rỗng). Tốn hai lần tally — người gọi giới hạn SCORE_HZ (ScoreTicker).
+ * Dòng bảng điểm của trận lúc này. `programs[i]`: nhãn chương trình của robot i (thiếu ⇒ "Mặc định"); `names[i]`: tên
+ * đội của robot i. Không giả định đủ 4 robot (nhiệm vụ chỉ có Robot 1: bên Xanh rỗng). Có `names` thì chỉ một lần
+ * tally (dò tia trên 300 bóng) cho cả dòng; thiếu `names` thì lấy tên từ `match.result()` (thêm một lần tally).
+ * Người gọi vẫn giới hạn SCORE_HZ (ScoreTicker).
  */
-export function scoreLine(match: Match, robots: RobotBody[], programs: string[] = []): ScoreLine {
-  const res = match.result()
-  const share = allianceShare(match.tally())
-  const total = res.score.total
+export function scoreLine(match: Match, robots: RobotBody[], programs: string[] = [], names?: string[]): ScoreLine {
+  const tally = match.tally()
+  const score = scoreTally(tally)
+  const share = allianceShare(tally)
+  const total = score.total
+  const teamNames = names ?? match.result().teams.map((t) => t.team)
   const side = (a: 'red' | 'blue'): AllianceLine => ({
     teams: robots.flatMap((r, i) =>
       r.alliance === a
-        ? [{ name: res.teams[i].team, score: res.teams[i].score, penalty: penaltyPoints(match.pens[i], total), program: programs[i] ?? 'Mặc định' }]
+        ? [{ name: teamNames[i] ?? `Robot ${i + 1}`, score: teamScore(total, match.pens[i]), penalty: penaltyPoints(match.pens[i], total), program: programs[i] ?? 'Mặc định' }]
         : [],
     ),
     park: share[a].park,
     bonus: share[a].bonus,
   })
-  return { red: side('red'), blue: side('blue'), total, clock: matchClock(match.t, match.practice), phase: phaseOf(match), score: res.score }
+  return { red: side('red'), blue: side('blue'), total, clock: matchClock(match.t, match.practice), phase: phaseOf(match), score }
 }
 
 const ITEMS: [Exclude<keyof ScoreBreakdown, 'total'>, string][] = [
@@ -95,14 +99,14 @@ export class ScoreTicker {
   private prev: ScoreBreakdown | null = null
   private phase: ScorePhase | null = null
 
-  tick(nowMs: number, match: Match, robots: RobotBody[], programs: string[] = []): { line: ScoreLine; pops: string[] } | null {
+  tick(nowMs: number, match: Match, robots: RobotBody[], programs: string[] = [], names?: string[]): { line: ScoreLine; pops: string[] } | null {
     if (match !== this.match) {
       this.match = match
       this.prev = null
       this.phase = null
     } else if (phaseOf(match) === this.phase && nowMs - this.last < 1000 / SCORE_HZ) return null
     this.last = nowMs
-    const line = scoreLine(match, robots, programs)
+    const line = scoreLine(match, robots, programs, names)
     // Mốc so sánh phải lấy trong lúc thi đấu: lần đầu sau xả bóng chỉ đặt mốc (bóng còn lăn từ lúc xả không phải ghi điểm).
     const playing = (p: ScorePhase | null) => p === 'ĐIỀU KHIỂN' || p === 'VỀ VÙNG BẢO VỆ' || p === 'LUYỆN TẬP'
     const scoring = playing(this.phase) && (playing(line.phase) || line.phase === 'HẾT GIỜ')
@@ -120,8 +124,8 @@ export interface ResultView {
 }
 
 /** Màn kết quả: lấy `match.result()` (đã chốt lúc hết giờ). */
-export function resultView(match: Match, robots: RobotBody[], programs: string[] = []): ResultView {
-  const line = scoreLine(match, robots, programs)
+export function resultView(match: Match, robots: RobotBody[], programs: string[] = [], names?: string[]): ResultView {
+  const line = scoreLine(match, robots, programs, names)
   const s = line.score
   return {
     line,
@@ -150,6 +154,8 @@ export interface Scoreboard {
   countdown(n: 3 | 2 | 1 | 0): void
   result(r: ResultView, actions: { again(): void; home(): void; next?(): void }): void
   hideResult(): void
+  /** Xoá chữ báo điểm nổi và chữ đếm ngược đang hiện (hiện màn kết quả, sang trận mới, rời màn trận). */
+  clearFx(): void
   /** Ẩn / hiện cả bảng điểm (nhiệm vụ không dùng bảng điểm trận). */
   visible(v: boolean): void
 }
@@ -239,8 +245,8 @@ export function createScoreboard(stage: HTMLElement): Scoreboard {
     s.textContent = CSS
     document.head.append(s)
   }
+  // Không role="status": bảng đổi 4 lần/giây, trình đọc màn hình sẽ đọc liên tục. Chữ báo điểm nổi đã aria-live.
   const bar = el('div', 'sb')
-  bar.setAttribute('role', 'status')
   bar.setAttribute('aria-label', 'Bảng điểm')
   const mkSide = (a: 'red' | 'blue') => {
     const box = el('div', 'sb-side')
@@ -323,6 +329,7 @@ export function createScoreboard(stage: HTMLElement): Scoreboard {
       countTimer = window.setTimeout(() => count.replaceChildren(), n === 0 ? 1200 : 900)
     },
     result(r, actions) {
+      api.clearFx()
       const col = (a: 'red' | 'blue') => {
         const line = r.line[a]
         const c = el('section', 'sb-col')
@@ -369,6 +376,11 @@ export function createScoreboard(stage: HTMLElement): Scoreboard {
     hideResult() {
       result.hidden = true
       result.replaceChildren()
+    },
+    clearFx() {
+      pops.replaceChildren()
+      clearTimeout(countTimer)
+      count.replaceChildren()
     },
     visible(v) {
       bar.hidden = !v

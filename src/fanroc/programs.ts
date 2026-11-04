@@ -179,6 +179,40 @@ function teleop(cfg: RobotConfig): object {
   )
 }
 
+/** Nút PS2 của bảng phím (⚙ › Phím điều khiển). */
+export type Ps2Button = 'TRIANGLE' | 'CROSS' | 'SQUARE' | 'CIRCLE' | 'L1' | 'R1' | 'L2' | 'R2'
+
+/**
+ * Nút nào làm gì trong mẫu TeleOp của robot `cfg` — cùng điều kiện với `teleop` ngay trên (phép thử programs.test.ts
+ * so với các khối `ps2_getButton` của chính mẫu). Nút không có trong bảng là mẫu không dùng.
+ */
+export function teleopButtons(cfg: RobotConfig): Partial<Record<Ps2Button, string>> {
+  const def = ROBOTS[cfg.type]
+  const ports = portMap(cfg)
+  const out: Partial<Record<Ps2Button, string>> = {}
+  if (ports.intake) out.R1 = `Giữ: ${def.mech.M3!.toLowerCase()}`
+  if (ports.lift) {
+    const what = def.mech.M4!.toLowerCase()
+    out.TRIANGLE = `Giữ: ${what} lên`
+    out.CROSS = `Giữ: ${what} xuống`
+  }
+  if (cfg.type === 'ui') {
+    out.TRIANGLE = 'Nâng gàu hớt'
+    out.CROSS = 'Hạ gàu hớt'
+  }
+  if (def.arm) {
+    out.L1 = cfg.type === 'co' ? 'Vươn tay cờ' : 'Nâng tay'
+    out.L2 = cfg.type === 'co' ? 'Thu tay cờ' : 'Hạ tay'
+  }
+  if (def.flag) out.SQUARE = 'Giữ: mở kẹp cờ'
+  if (cfg.type === 'sort') {
+    out.L1 = 'Chọn ngăn cam'
+    out.L2 = 'Chọn ngăn xanh'
+  }
+  if (def.servos.S3) out.CIRCLE = cfg.type === 'sort' ? 'Giữ: mở cửa ngăn đang chọn' : 'Giữ: mở cửa xả'
+  return out
+}
+
 // ---------- Auto: chuỗi «set motor» + «đợi» ----------
 /** Tốc độ của Auto (TT có vùng chết 20 %: 60 % ⇒ ≈ 0,28 m/s). */
 const AUTO_SPEED = 60

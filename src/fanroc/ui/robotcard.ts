@@ -1,0 +1,90 @@
+// Thẻ nhỏ "robot của em" góc dưới trái màn trận (spec §6.1 ③): tên robot, nhãn chương trình, cách lái (bàn phím / tay
+// PS2), bóng đang chứa, tình trạng tay cầm và cảnh báo vùng chết 20 % của động cơ TT (deadZoneLines). Hai bạn ⇒ hai thẻ.
+// Phần thuần (cardText) chạy được trong Node (robotcard.test.ts); createRobotCards dựng DOM, chỉ vẽ lại khi chữ đổi.
+import type { SeatStatus } from '../gamepad.ts'
+import { icon } from './icons.ts'
+
+export interface CardInfo {
+  player: string
+  robot: string
+  program: string
+  /** Tay PS2 thật đang lái (thắng bàn phím khi có tín hiệu) hay bàn phím. */
+  input: 'Bàn phím' | 'Tay PS2'
+  /** Số thứ tự tay cầm của bạn này (1, 2) và tình trạng. */
+  pad: { n: number; status: SeatStatus }
+  held: number
+  storage: number
+  warnings: string[]
+}
+
+/** Dòng tình trạng tay cầm (null = không có gì để báo: chưa cắm, hoặc đang cắm đúng bố cục). */
+export function padLine(n: number, status: SeatStatus): string | null {
+  if (status === 'lost') return `Tay cầm ${n} đã rút ra — robot đứng yên, bàn phím vẫn lái được`
+  if (status === 'nonstandard') return `Tay cầm ${n} không đúng bố cục chuẩn — robot không nhận tay này, dùng bàn phím`
+  return null
+}
+
+/** Các dòng của thẻ, theo thứ tự hiện. */
+export function cardText(c: CardInfo): string[] {
+  const pad = padLine(c.pad.n, c.pad.status)
+  return [
+    `${c.player} · ${c.robot}`,
+    `Chương trình: ${c.program}`,
+    `Lái: ${c.input} · bóng ${c.held}/${c.storage}`,
+    ...(pad ? [pad] : []),
+    ...c.warnings,
+  ]
+}
+
+const CSS = `
+.rc-me { position: absolute; left: 10px; bottom: 10px; z-index: 6; display: grid; gap: 6px; max-width: min(330px, calc(100% - 20px)); pointer-events: none; }
+.rc-me[hidden] { display: none; }
+.rc-card { display: grid; gap: 2px; padding: 7px 10px; border-radius: 8px; background: #101425e0; color: #eef2fa; border: 1px solid #ffffff22; font: 12px/1.45 var(--font); box-shadow: 0 4px 14px #0007; }
+.rc-card b { font-size: 13px; }
+.rc-card .rc-in { display: inline-flex; gap: 5px; align-items: center; }
+.rc-card .rc-warn { color: #ffcf5a; }
+`
+
+export interface RobotCards {
+  update(cards: CardInfo[]): void
+  visible(v: boolean): void
+}
+
+export function createRobotCards(stage: HTMLElement): RobotCards {
+  if (!document.getElementById('rc-css')) {
+    const s = document.createElement('style')
+    s.id = 'rc-css'
+    s.textContent = CSS
+    document.head.append(s)
+  }
+  const box = document.createElement('div')
+  box.className = 'rc-me'
+  box.setAttribute('aria-label', 'Robot của em')
+  box.setAttribute('aria-live', 'polite')
+  stage.append(box)
+  let key = ''
+  return {
+    update(cards) {
+      const k = JSON.stringify(cards.map(cardText).concat([cards.map((c) => c.input)]))
+      if (k === key) return
+      key = k
+      box.replaceChildren(
+        ...cards.map((c) => {
+          const lines = cardText(c)
+          const card = document.createElement('div')
+          card.className = 'rc-card'
+          const span = (text: string, cls?: string) => Object.assign(document.createElement('span'), { textContent: text, className: cls ?? '' })
+          const title = document.createElement('b')
+          title.textContent = lines[0]
+          const input = span(lines[2], 'rc-in')
+          input.prepend(icon(c.input === 'Tay PS2' ? 'gamepad' : 'keyboard', 14))
+          card.append(title, span(lines[1]), input, ...lines.slice(3).map((t) => span(t, 'rc-warn')))
+          return card
+        }),
+      )
+    },
+    visible(v) {
+      box.hidden = !v
+    },
+  }
+}

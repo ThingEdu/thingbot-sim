@@ -58,6 +58,8 @@ export interface Editors {
   stopAll(): void
   /** Vẽ lại vùng khối của thẻ đang mở theo kích thước mới (vùng khối vừa hiện lại). */
   resize(): void
+  /** Đổi chữ trên thẻ; null ⇒ ẩn thẻ đó (một bạn chơi: chỉ thẻ của bạn 1). Thẻ đang mở bị ẩn ⇒ mở thẻ đầu còn hiện. */
+  tabs(labels: (string | null)[]): void
   /** Một bo ảo nữa chạy theo chương trình của thẻ `src` (robot đồng đội): nạp / chạy / dừng cùng thẻ đó, tay cầm trung tính. */
   follow(src: number, onError: (msg: string) => void): { link: RobotLink; ports(): PortValues; dispose(): void }
 }
@@ -66,6 +68,7 @@ const CSS = `
 .fe-root { display: flex; flex-direction: column; flex: 1; min-height: 0; background: #fff; color: var(--ink); }
 .fe-tabs { display: flex; gap: 4px; padding: 8px 8px 0; border-bottom: 1px solid var(--line); }
 .fe-tabs button { font: 700 13px var(--font); border: 1px solid var(--line); border-bottom: 0; background: #f4f2ee; border-radius: 6px 6px 0 0; padding: 6px 10px; cursor: pointer; }
+.fe-tabs button[hidden] { display: none; }
 .fe-tabs button[aria-selected="true"] { background: #fff; color: var(--teal); }
 .fe-tabs button[data-err="true"]::after { content: ' ●'; color: var(--hi); }
 .fe-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
@@ -355,6 +358,20 @@ export function createEditors(container: HTMLElement, robots: { label: string; c
     },
     resize() {
       fit(tabs[active])
+    },
+    tabs(labels) {
+      tabs.forEach((t, k) => {
+        const label = labels[k] ?? null
+        t.tab.hidden = label === null
+        if (label !== null && t.tab.textContent !== label) {
+          t.tab.textContent = label
+          t.panel.setAttribute('aria-label', label)
+        }
+      })
+      if (tabs[active].tab.hidden) {
+        const first = tabs.findIndex((t) => !t.tab.hidden)
+        if (first >= 0) show(first)
+      }
     },
     follow(src, onError) {
       const b = board()

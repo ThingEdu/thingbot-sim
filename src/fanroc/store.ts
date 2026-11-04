@@ -1,7 +1,7 @@
 /** Lưu trữ an toàn vào localStorage: mọi truy cập bọc try/catch; hỏng / bị chặn ⇒ mặc định, không ném. */
 import type { Skill } from './agent.ts'
 import type { Alliance } from './layout.ts'
-import type { RobotConfig } from './robots.ts'
+import { ROBOTS, type RobotConfig } from './robots.ts'
 import type { TournamentState } from './tournament.ts'
 import type { Quality } from './view/scene.ts'
 
@@ -17,8 +17,8 @@ export const keys = (season: string) => ({
   tournament: `fanroc.v1.${season}.tournament`,
 })
 
-/** Camera không lưu (spec §8.7). */
-export type Settings = { quality?: Quality; sound: boolean; skill: Skill; alliance: Alliance; robot: RobotConfig; layout2p: boolean }
+/** Camera không lưu (spec §8.7). `robot` = robot của bạn 1, `robot2` = robot của bạn 2 (khi hai bạn chơi). */
+export type Settings = { quality?: Quality; sound: boolean; skill: Skill; alliance: Alliance; robot: RobotConfig; robot2: RobotConfig; layout2p: boolean }
 export type MissionProgress = { done: boolean; stars: 0 | 1 | 2 | 3; program: object | null }
 export type Profile = { names: [string, string]; stars: number }
 type ProgramRec = { version: number; state: object }
@@ -37,14 +37,23 @@ export interface Store {
   saveProfile(p: Profile): void
 }
 
-const defaultSettings = (): Settings => ({
+export const defaultSettings = (): Settings => ({
   quality: undefined, sound: true, skill: 'medium', alliance: 'red',
-  robot: { type: 'maker', drive: 'diff2', actuator: 'tt' }, layout2p: false,
+  robot: { type: 'maker', drive: 'diff2', actuator: 'tt' }, robot2: { type: 'maker', drive: 'diff2', actuator: 'tt' }, layout2p: false,
 })
 const defaultProfile = (): Profile => ({ names: ['Bạn 1', 'Bạn 2'], stars: 0 })
 const defaultMission = (): MissionProgress => ({ done: false, stars: 0, program: null })
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+
+/** Cấu hình robot đọc từ bộ nhớ: robot mẫu có thật, đế robot đó có, cơ cấu tt / s360; sai ⇒ null. */
+function robotConfig(v: unknown): RobotConfig | null {
+  if (!isObj(v) || typeof v.type !== 'string' || !Object.hasOwn(ROBOTS, v.type)) return null
+  const def = ROBOTS[v.type as RobotConfig['type']]
+  if (!def.drives.includes(v.drive as RobotConfig['drive'])) return null
+  if (v.actuator !== 'tt' && v.actuator !== 's360') return null
+  return { type: def.type, drive: v.drive as RobotConfig['drive'], actuator: v.actuator }
+}
 
 function defaultKV(): KV | null {
   try { return globalThis.localStorage ?? null } catch { return null }
@@ -86,8 +95,8 @@ export function createStore(season: string, kvArg?: KV | null): Store {
         sound: typeof v.sound === 'boolean' ? v.sound : d.sound,
         skill: v.skill === 'easy' || v.skill === 'medium' || v.skill === 'hard' ? v.skill : d.skill,
         alliance: v.alliance === 'red' || v.alliance === 'blue' ? v.alliance : d.alliance,
-        robot: isObj(v.robot) && typeof v.robot.type === 'string' && typeof v.robot.drive === 'string' && typeof v.robot.actuator === 'string'
-          ? (v.robot as unknown as RobotConfig) : d.robot,
+        robot: robotConfig(v.robot) ?? d.robot,
+        robot2: robotConfig(v.robot2) ?? d.robot2,
         layout2p: typeof v.layout2p === 'boolean' ? v.layout2p : d.layout2p,
       }
     },

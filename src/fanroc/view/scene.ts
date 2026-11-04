@@ -11,7 +11,10 @@ import { servo360, type PortValues } from '../ports.ts'
 import { FLAG_LEN, buildRobotModel, makeFlag, type RobotModel } from './robotModels.ts'
 import mesh from '../assets/mountain-mesh.json' with { type: 'json' }
 
-export type CameraView = 'field' | 'follow' | 'driver'
+/** Ba góc chọn được ở ⚙ (`field | follow | driver`) và `orbit`: quay chậm quanh sân, nền của màn chính. */
+export type CameraView = 'field' | 'follow' | 'driver' | 'orbit'
+/** Vòng quay của camera màn chính, rad/s (một vòng ≈ 2 phút). */
+export const ORBIT_SPEED = 0.05
 export type Quality = 'low' | 'high'
 
 export interface FanrocScene {
@@ -305,6 +308,8 @@ export function createScene(el: HTMLElement): FanrocScene {
 
   // Bóng: 2 InstancedMesh (cam 100, xanh 200); ánh xạ chỉ số bóng → (lưới, ô).
   const sphere = new THREE.SphereGeometry(BALL_R, 16, 12)
+  /** Số ô bóng của hai lưới (cam 100 + xanh 200). */
+  const BALL_SLOTS = 300
   const orange = new THREE.InstancedMesh(sphere, mat(COLORS.orange, { roughness: 0.35 }), 100)
   const green = new THREE.InstancedMesh(sphere, mat(COLORS.green, { roughness: 0.35 }), 200)
   for (const b of [orange, green]) {
@@ -438,6 +443,8 @@ export function createScene(el: HTMLElement): FanrocScene {
         put(i, tmp.set(t.x + (n % TRAY.cols) * 0.042, 0.01 + BALL_R, t.z + row * 0.042))
       } else put(i, null)
     })
+    // Sân không bóng (Xưởng, nhiệm vụ — `balls: false`): ô bóng của sân trước đó phải ẩn đi.
+    for (let i = world.balls.length; i < BALL_SLOTS; i++) put(i, null)
     orange.instanceMatrix.needsUpdate = true
     green.instanceMatrix.needsUpdate = true
   }
@@ -494,11 +501,19 @@ export function createScene(el: HTMLElement): FanrocScene {
   }
 
   function updateCamera(robots: RobotBody[]): void {
+    if (view === 'orbit') {
+      const a = (performance.now() / 1000) * ORBIT_SPEED
+      const r = Math.max(2.6, 2.6 * (1.1 / camera.aspect))
+      camera.position.lerp(tmp.set(Math.sin(a) * r, 1.7, Math.cos(a) * r), 0.04)
+      controls.target.lerp(tmp.set(0, 0.05, 0), 0.04)
+      return
+    }
     if (view === 'follow' && robots[followIdx]) {
       const p = robots[followIdx].pose
       const fx = -Math.sin(p.yaw)
       const fz = -Math.cos(p.yaw)
-      const pos = new THREE.Vector3(p.x - fx * 0.75, 0.55, p.z - fz * 0.75)
+      // Sau-trên robot, đủ cao để nhìn qua rào (cao 0,3 m) khi robot còn ở ô xuất phát sát rào Khu Điều Khiển.
+      const pos = new THREE.Vector3(p.x - fx * 0.6, 1.0, p.z - fz * 0.6)
       const target = new THREE.Vector3(p.x + fx * 0.35, 0.08, p.z + fz * 0.35)
       // Ở tốc độ xem cao robot đi xa mỗi khung: bám thẳng khi lệch nhiều, chỉ làm mượt khi lệch ít.
       const k = camera.position.distanceTo(pos) > 0.12 ? 1 : 0.15
@@ -525,7 +540,7 @@ export function createScene(el: HTMLElement): FanrocScene {
       const gy = BOX.y0 + ((BOX.y1 - BOX.y0) * 0.55) / 2
       dispenser.gate.position.y += ((open ? gy + GATE_OPEN : gy) - dispenser.gate.position.y) * 0.2
       updateCamera(robots)
-      controls.enabled = view !== 'follow'
+      controls.enabled = view !== 'follow' && view !== 'orbit'
       controls.update()
       renderer.render(scene, camera)
     },
@@ -535,7 +550,7 @@ export function createScene(el: HTMLElement): FanrocScene {
       if (v === 'field') setFieldView()
       else if (v === 'driver') {
         // Mắt người lái đứng giữa Khu Điều Khiển của liên minh robot đó.
-        const a = built?.[robot]?.alliance ?? (robot < 2 ? 'red' : 'blue')
+        const a = built?.[robot]?.alliance ?? (robot % 2 === 0 ? 'red' : 'blue') // ghế [Đỏ 0, Xanh 0, Đỏ 1, Xanh 1]
         const x = a === 'red' ? -0.6 : 0.6
         goal = { pos: new THREE.Vector3(x, 1.45, DRIVER_Z.z0 + 0.35), target: new THREE.Vector3(x * 0.3, 0, -0.2) }
       } else goal = null

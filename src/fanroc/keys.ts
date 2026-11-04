@@ -82,3 +82,22 @@ export function mergePad(real: Ps2State | null, virt: Ps2State): Ps2State {
     k.startsWith('ps2_PSS_') ? v < 120 || v > 136 : k.startsWith('ps2_PSB_') && v === 1)
   return live ? real : virt
 }
+
+/** Bố cục bàn phím của người chơi `player`: một bạn dùng cả bàn phím, hai bạn chia đôi (bạn 1 trái, bạn 2 phải). */
+export function layoutFor(player: 0 | 1, twoPlayers: boolean): KeyLayout {
+  return twoPlayers ? (player === 0 ? 'left' : 'right') : 'solo'
+}
+
+/** Đích nhận phím trông như một phần tử DOM (chạy được trong Node bằng đối tượng giả). */
+type TargetLike = { tagName?: string; isContentEditable?: boolean; classList?: { contains(c: string): boolean } } | null
+
+/**
+ * Đang gõ chữ: tiêu điểm ở ô nhập, vùng soạn thảo, ô chọn, hoặc ô sửa chữ / số của Blockly (`blocklyHtmlInput`).
+ * Khi đó bàn phím không lái robot và màn chính không đổi ô (spec §6.4).
+ */
+export function typing(target: EventTarget | TargetLike): boolean {
+  const t = target as TargetLike
+  if (!t) return false
+  const tag = (t.tagName ?? '').toUpperCase()
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable === true || !!t.classList?.contains('blocklyHtmlInput')
+}

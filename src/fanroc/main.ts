@@ -1,174 +1,206 @@
 /**
- * Trang ThingBot FanRoc Game: vỏ giao diện kiểu VS Code (ui/shell.ts) quanh sân 3D, vùng khối ThingBlock thật cho
- * Robot 1 và Robot 2 (mỗi robot một bo ThingBot ảo) trong khung bên "Khối", mã Arduino chỉ xem trong khung "Mã
- * Arduino", Serial và nhật ký trận ở khung đáy, thanh chạy nổi trên sân. Tay cầm làm bộ thu PS2, Human Player tự
- * động, agent đồng đội cho robot không có người lái. Vòng lặp trận nằm trong GameSession (game.ts); trang chỉ khởi
- * tạo, nối nút và vẽ. Màn chính / Xưởng / nhiệm vụ / giải đấu nối vào vỏ ở các task sau.
+ * Trang ThingBot FanRoc Game: vỏ giao diện kiểu VS Code (ui/shell.ts) quanh sân 3D và các màn của game (ui/router.ts):
+ * màn chính kiểu game (ui/home.ts, mở trang là vào đây), Trước trận (chọn robot như chọn đội), Trận lẻ / Đấu tập, Xưởng
+ * lập trình (ui/workshop.ts); Nhiệm vụ và Giải đấu tạm là màn chờ (Task 14 / 15). `go(screen, arg?)` đổi màn và dựng
+ * lại phiên chơi (GameSession, game.ts) của màn đó; trang chỉ khởi tạo, nối nút và vẽ.
  *
- * Thứ tự robot (cũng là số trên bảng điểm): Robot 1 = đỏ ô trái (người lái 1, tay cầm 1), Robot 2 = xanh ô trái
- * (người lái 2, tay cầm 2), Robot 3 = đỏ ô phải (đồng đội Robot 1), Robot 4 = xanh ô phải (đồng đội Robot 2).
+ * Người chơi và ghế: bạn 1 (và bạn 2 khi "Hai bạn chơi") mỗi bạn một thẻ khối (editors tab 0 / 1), một bo ThingBot ảo,
+ * một tay PS2 ảo = tay cầm thật thứ p (R26) gộp với bàn phím (`mergePad`; một bạn dùng cả bàn phím, hai bạn chia đôi).
+ * Ghế theo thứ tự [Đỏ 0, Xanh 0, Đỏ 1, Xanh 1]; robot của bạn 1 ngồi ô trái của liên minh bạn chọn, bạn 2 ô trái liên
+ * minh kia, ghế còn lại là máy (ui/settings.ts `defaultSeats`). ⚙ › Nâng cao chọn tay ai lái từng ghế (R27).
+ * Trận lẻ / Đấu tập: robot của em chạy chương trình đã lưu ở Xưởng ("Của em vN") hoặc Mặc định (TeleOp mẫu); chương
+ * trình nạp sẵn lúc vào trận, chạy khi hết 10 s xả bóng (Đấu tập: chạy ngay). Có chương trình khối thì tốc độ ×1 (R24).
  *
- * Ai lái robot nào (ruling R27): mỗi robot một ô chọn tường minh (trong ⚙) — "Chương trình" (Robot 1 / 2, thẻ khối
- * của mình), "Agent Dễ/Vừa/Khó", hoặc "Chương trình của Robot N" (Robot 3 / 4, bo ảo riêng, tay cầm trung tính). Mặc
- * định Robot 1 = Chương trình, Robot 2–4 = Agent Vừa. Ghế "Chương trình" không bao giờ do agent lái: chưa chạy, Dừng
- * hay lỗi đều là đứng yên (Review Focus 2). Đổi người lái chỉ bắt đầu trận mới khi robot phải đổi kiểu / đế.
- * Trận: chương trình chạy khi hết 10 s xả bóng; Luyện tập: xả bóng tua sẵn lúc tạo trận (R31), chương trình chạy ngay. Tay cầm gắn ghế theo lần cắm đầu (R26).
- * Có chương trình khối đã nạp / đang chạy / tạm dừng thì tốc độ xem khoá ở ×1 (R24).
- * Thanh chạy (spec §6.1b) tác động lên thẻ khối đang mở: Chạy (đang tạm dừng ⇒ chạy tiếp), Tạm dừng / Chạy từng khối
- * (GameSession.pause / stepBlock — vật lý, đồng hồ, agent, Human Player cùng đứng), Dừng, Về chỗ cũ (trận mới), Tải
- * .tb, Đổi góc camera. Khối SẼ chạy tiếp (`link.block`) sáng viền trên vùng khối và hiện ở thanh trạng thái.
- *
- * Mỗi khung: GameSession.advance(thời gian thật × tốc độ xem) chạy vật lý theo PHYSICS_DT (tối đa 4 bước cho mỗi
- * khung ở tốc độ ×1, nhân theo tốc độ xem, và không quá ngân sách thời gian mỗi khung — phần dư bỏ đi để không
- * "xoáy chết"), rồi vẽ một lần. `window.__fanroc` mở cho kiểm thử trình duyệt (ruling R4).
+ * Bàn phím không lái khi đang gõ (ô nhập / ô số của khối — `typing`), và nhả hết phím khi cửa sổ mất tiêu điểm hoặc
+ * bị ẩn (Review Focus 1). `window.__fanroc` mở cho kiểm thử trình duyệt (ruling R4).
  */
-import { GameSession, type Driver } from './game.ts'
+import { GameSession, type Driver, type SeatSpec } from './game.ts'
 import type { Skill } from './agent.ts'
-import type { LinkState, RobotLink } from './link.ts'
+import { RobotLink, type LinkState } from './link.ts'
 import type { RobotConfig } from './robots.ts'
-import { PadSeats, type SeatStatus } from './gamepad.ts'
-import { effectiveSpeed, SPEED_NOTE } from './pace.ts'
+import { PadSeats, PS2_NEUTRAL, type SeatStatus } from './gamepad.ts'
+import { KeyPad, layoutFor, mergePad, typing } from './keys.ts'
+import { effectiveSpeed } from './pace.ts'
 import { configControls, createEditors } from './editor.ts'
-import { defaultConfig } from './programs.ts'
+import { defaultConfig, sample } from './programs.ts'
 import { NEUTRAL } from './ports.ts'
+import { MISSIONS } from './missions/data.ts'
 import { createScene, defaultQuality, type CameraView, type Quality } from './view/scene.ts'
-import { createHud } from './view/hud.ts'
+import { createHud, deadZoneLines } from './view/hud.ts'
 import { countdownCue, createScoreboard, programLabel, resultView, ScoreTicker } from './ui/scoreboard.ts'
 import { createSound } from './ui/sound.ts'
 import { createStore } from './store.ts'
 import { FANROC_2026 } from './season.ts'
 import { createShell, highlightCpp, serialNews, serialPatch, type InputKind, type SerialMark } from './ui/shell.ts'
+import { chrome, defaultCamera, type Screen } from './ui/router.ts'
+import { createHome, createPick, createPlaceholder, programText, robotName, type HomeInfo, type TileId } from './ui/home.ts'
+import { assignSeat, createSettings, defaultSeats, playerSeat, seatOf, seatOptions, type SeatMode, type SettingsCtx } from './ui/settings.ts'
+import { createWorkshopBar, resetVerified, saveVerified } from './ui/workshop.ts'
+import { createRobotCards, type CardInfo } from './ui/robotcard.ts'
 
 const shell = createShell(document.querySelector<HTMLElement>('#app')!)
 const stage = shell.stage
 
+/** Tên đội của 4 ghế khi ghế đó là máy (ghế người chơi mang tên bạn đó). */
 const TEAMS = ['Dế Xanh', 'Chuồn Chuồn', 'Kiến Lửa', 'Ong Vàng']
-const SKILL_NAME: Record<Skill, string> = { easy: 'Dễ', medium: 'Vừa', hard: 'Khó' }
+const ALLIANCE_SEAT = ['Đỏ', 'Xanh', 'Đỏ', 'Xanh']
 /** Số bước vật lý tối đa mỗi khung ở tốc độ ×1 (nhân theo tốc độ xem). */
 const MAX_STEPS = 4
 /** Ngân sách thời gian chạy vật lý mỗi khung, ms. */
 const STEP_BUDGET_MS = 45
 const SPEEDS = [1, 4, 40]
 const CAMERAS: CameraView[] = ['field', 'follow', 'driver']
+const PLAYERS = [0, 1] as const
+type Player = 0 | 1
 
-// Bảng điểm Đỏ | chung | Xanh nằm giữa trên sân (ui/scoreboard.ts); nhật ký, kiểm tra theo luật và bảng đội cuối trận
-// ở thẻ "Sự kiện trận" của khung đáy (view/hud.ts). Khung ⚙ tạm (Task 13 thay bằng ui/settings.ts) giữ các lựa chọn của
-// thanh công cụ cũ.
 const CSS = `
 .sh-serial { margin: 0; white-space: pre-wrap; word-break: break-all; font: inherit; color: #d4d4d4; }
 .sh-serial:empty::before { content: 'Chưa có dòng Serial nào. Khối "Serial in" của chương trình in ra ở đây.'; color: #858585; font-family: var(--font); }
 .sh-code-warn { margin: 8px 10px 0; padding: 6px 8px; border-radius: 6px; background: rgba(240, 170, 30, 0.18); color: #f0c674; font-size: 12.5px; line-height: 1.45; }
 .sh-code-note { padding: 6px 10px 0; font-size: 12px; color: #969696; }
-.fr-bar.sh-pop { position: absolute; left: 8px; bottom: 8px; z-index: 25; display: grid; gap: 8px; width: min(640px, calc(100% - 16px)); max-height: calc(100% - 16px); overflow: auto; padding: 12px; background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px #0006; font-size: 13px; }
-.fr-bar h3 { margin: 0; font-size: 14px; }
-.fr-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.fr-row > b { font-size: 12px; color: var(--muted); min-width: 92px; }
-.fr-bar button, .fr-bar label { font: 600 13px var(--font); border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 5px 9px; cursor: pointer; }
-.fr-bar label { display: inline-flex; gap: 4px; align-items: center; cursor: default; }
-.fr-bar .fe-cfg label { border: 0; padding: 0; font-weight: 500; }
-.fr-bar select { font: 13px var(--font); border: 0; background: transparent; }
-.fr-bar button[aria-pressed="true"] { background: var(--teal); border-color: var(--teal); color: #fff; }
-.fr-bar button:disabled { opacity: 0.4; cursor: default; }
-.fr-bar .fr-note { font: 600 12px var(--font); color: var(--muted); }
-.fr-bar .fr-note[hidden] { display: none; }
-.fr-pads { position: absolute; left: 10px; bottom: 10px; display: grid; gap: 2px; font: 600 12px var(--font); background: rgba(255,255,255,0.92); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; z-index: 4; }
 `
-
-function button(text: string, onClick: () => void): HTMLButtonElement {
-  const b = document.createElement('button')
-  b.type = 'button'
-  b.textContent = text
-  b.onclick = onClick
-  return b
-}
-
-function group(items: { label: string; on: () => void }[], initial: number): HTMLButtonElement[] {
-  const bs = items.map((it, i) =>
-    button(it.label, () => {
-      bs.forEach((b, k) => b.setAttribute('aria-pressed', String(k === i)))
-      it.on()
-    }),
-  )
-  bs.forEach((b, k) => b.setAttribute('aria-pressed', String(k === initial)))
-  return bs
-}
-
-function picker(text: string, options: [string, string][], value: string, onChange: (v: string) => void): HTMLLabelElement {
-  const l = document.createElement('label')
-  l.textContent = text
-  const s = document.createElement('select')
-  for (const [v, t] of options) s.append(Object.assign(document.createElement('option'), { value: v, textContent: t }))
-  s.value = value
-  s.onchange = () => onChange(s.value)
-  l.append(s)
-  return l
-}
-
-function row(title: string, ...items: HTMLElement[]): HTMLDivElement {
-  const r = document.createElement('div')
-  r.className = 'fr-row'
-  r.append(Object.assign(document.createElement('b'), { textContent: title }), ...items)
-  return r
-}
-
-type SeatMode = 'program' | `agent-${Skill}` | 'copy-0' | 'copy-1'
 
 async function start(): Promise<void> {
   const style = document.createElement('style')
   style.textContent = CSS
   document.head.append(style)
 
-  const editors = createEditors(shell.side.blocks, [0, 1].map((i) => ({ label: `Robot ${i + 1} · ${TEAMS[i]}`, cfg: defaultConfig('maker') })))
+  const store = createStore(FANROC_2026.id)
+  const settings = store.settings()
+  const profile = store.profile()
+  const names = profile.names
+  const saveSettings = () => store.saveSettings(settings)
+
+  const editors = createEditors(
+    shell.side.blocks,
+    PLAYERS.map((p) => ({ label: `${names[p]} · robot của em`, cfg: p === 0 ? settings.robot : settings.robot2 })),
+  )
+  const cfgOf = (p: Player): RobotConfig => editors.cfg(p)
+  const players = (): 1 | 2 => (settings.layout2p ? 2 : 1)
   const seats = new PadSeats()
+
+  // ---------- Trạng thái màn ----------
+  let screen: Screen = 'home'
   let seed = 1
-  let practice = false
-  /** Ai lái từng robot (ruling R27): chọn tường minh, không phụ thuộc lịch sử bấm nút. */
-  const modes: SeatMode[] = ['program', 'agent-medium', 'agent-medium', 'agent-medium']
-  const followers: ({ link: RobotLink; dispose(): void } | null)[] = [null, null, null, null]
-  const cfgFor = (i: number): RobotConfig => {
-    const m = modes[i]
-    if (m.startsWith('copy-')) return editors.cfg(Number(m.slice(5)))
-    return i < 2 ? editors.cfg(i) : defaultConfig('maker')
+  /** Robot của em chạy bản đã lưu ở Xưởng (khi có) hay Mặc định (⚙ / Trước trận). */
+  let runMine = true
+  /** Trước trận: Trận lẻ hay Đấu tập. */
+  let pickPractice = false
+  let pickPlayer: Player = 0
+  /** Xưởng: chương trình của bạn nào. */
+  let wsPlayer: Player = 0
+  /** Ai lái từng ghế ở trận lẻ / đấu tập (R27); vào trận ⇒ về mặc định theo liên minh / mức máy / số bạn. */
+  let modes: SeatMode[] = defaultSeats(settings.alliance, settings.skill, players())
+  const followers: ({ link: ReturnType<typeof editors.follow>['link']; dispose(): void } | null)[] = [null, null, null, null]
+  /** Bo ảo không chương trình: ghế đứng yên (Xưởng: sân chỉ có robot của em chạy thử). */
+  const idle = [0, 1, 2, 3].map(() => new RobotLink(() => {}))
+  /** Tay PS2 ảo từ bàn phím của từng bạn (một bạn: cả bàn phím; hai bạn: nửa trái / nửa phải). */
+  let keypads: KeyPad[] = []
+  const makePads = () => {
+    keypads.forEach((k) => k.releaseAll())
+    keypads = PLAYERS.slice(0, players()).map((p) => new KeyPad(layoutFor(p, players() === 2)))
   }
-  const skillOf = (i: number): Skill => (modes[i].startsWith('agent-') ? (modes[i].slice(6) as Skill) : 'medium')
-  /** Người lái của ghế i theo ô chọn: bo ảo của thẻ, bo ảo đồng đội (follower) hoặc agent. */
-  const driverFor = (i: number): Driver => {
+  makePads()
+
+  const saved = (p: Player, cfg = cfgOf(p)) => store.program(p, cfg)
+  /** Nhãn chương trình robot bạn p đang chạy ở trận ("Của em vN" / "Mặc định"). */
+  const label = (p: Player) => programText(saved(p), runMine)
+  const programFor = (p: Player) => {
+    const rec = saved(p)
+    return rec && runMine ? rec.state : sample(cfgOf(p), 'teleop')
+  }
+  const isMatch = () => screen === 'match' || screen === 'practice'
+  /** Ghế của bạn p ở màn này (−1: bạn đó không lái robot nào). */
+  const seatOfPlayer = (p: Player): number => {
+    if (screen === 'workshop') return p === wsPlayer ? seatOf(p, settings.alliance) : -1
+    return isMatch() ? playerSeat(modes, p) : -1
+  }
+  /** Ghế camera "Theo robot" bám theo: robot của bạn đang mở thẻ khối, không có thì Robot 1. */
+  const mySeat = () => Math.max(0, seatOfPlayer(editors.active as Player))
+
+  const modeOwner = (m: SeatMode): Player | null => (m.startsWith('player-') || m.startsWith('copy-') ? (Number(m.slice(-1)) as Player) : null)
+  const seatCfg = (i: number): RobotConfig => {
+    const p = modeOwner(modes[i])
+    return p === null ? defaultConfig('maker') : cfgOf(p)
+  }
+  const seatDriver = (i: number): Driver => {
     const m = modes[i]
-    if (m === 'program') return { kind: 'program', link: editors.link(i) }
+    if (m.startsWith('player-')) return { kind: 'program', link: editors.link(Number(m.slice(-1))) }
     const f = followers[i]
     if (m.startsWith('copy-') && f) return { kind: 'program', link: f.link }
-    return { kind: 'agent', skill: skillOf(i) }
+    return { kind: 'agent', skill: m.startsWith('agent-') ? (m.slice(6) as Skill) : settings.skill }
   }
-  const newGame = (s: number) =>
-    GameSession.create({
-      mode: practice ? 'practice' : 'match',
-      seed: s,
-      seats: [0, 1, 2, 3].map((i) => ({ cfg: cfgFor(i), team: TEAMS[i], driver: driverFor(i) })),
-    })
+  const seatTeam = (i: number): string => {
+    const m = modes[i]
+    return m.startsWith('player-') ? names[Number(m.slice(-1))] : TEAMS[i]
+  }
+
+  /** Tên đội từng ghế của phiên đang chạy (bảng điểm: một lần tally mỗi nhịp). */
+  let teamNames = TEAMS.slice()
+  const newGame = (s: number): Promise<GameSession> => {
+    let mode: 'match' | 'practice' = 'practice'
+    let list: SeatSpec[]
+    let balls = true
+    if (isMatch()) {
+      mode = screen === 'practice' ? 'practice' : 'match'
+      list = [0, 1, 2, 3].map((i) => ({ cfg: seatCfg(i), team: seatTeam(i), driver: seatDriver(i) }))
+    } else if (screen === 'workshop') {
+      // Sân Đấu tập trống bóng, chỉ robot của em chạy (ghế khác đứng yên).
+      balls = false
+      const mine = seatOf(wsPlayer, settings.alliance)
+      list = [0, 1, 2, 3].map((i) =>
+        i === mine
+          ? { cfg: cfgOf(wsPlayer), team: names[wsPlayer], driver: { kind: 'program', link: editors.link(wsPlayer) } }
+          : { cfg: defaultConfig('maker'), team: TEAMS[i], driver: { kind: 'program', link: idle[i] } },
+      )
+    } else {
+      // Màn chính / màn chờ: nền là 4 robot máy chơi luyện tập trên sân.
+      list = [0, 1, 2, 3].map((i) => ({ cfg: defaultConfig('maker'), team: TEAMS[i], driver: { kind: 'agent', skill: 'medium' } }))
+    }
+    teamNames = list.map((x) => x.team)
+    return GameSession.create({ mode, seed: s, seats: list, balls })
+  }
 
   let game = await newGame(seed)
-  game.match.log('Human Player tự động')
   stage.querySelector('.sh-loading')?.remove()
   const scene = createScene(stage)
+  let q: Quality = settings.quality ?? defaultQuality()
+  scene.quality(q)
   const hud = createHud(shell.panel.events)
   const board = createScoreboard(stage)
+  const cards = createRobotCards(stage)
   const ticker = new ScoreTicker()
-  const store = createStore(FANROC_2026.id)
-  const sound = createSound(() => store.settings().sound)
-  /** Nhãn chương trình từng ghế trên bảng điểm: agent ⇒ "Máy Vừa"; chương trình ⇒ "Mặc định" (Xưởng gắn "Của em vN" ở Task 13). */
-  const programs = () => game.robots.map((_, i) => programLabel(game.driver(i)))
+  const sound = createSound(() => settings.sound)
+  const popover = createSettings()
+
+  /** Nhãn chương trình từng ghế trên bảng điểm. */
+  const programs = () =>
+    game.robots.map((_, i) => {
+      if (!isMatch()) return programLabel(game.driver(i))
+      const m = modes[i]
+      const p = modeOwner(m)
+      if (p !== null) return m.startsWith('copy-') ? `Chương trình của ${names[p]}` : label(p)
+      return programLabel(game.driver(i))
+    })
   editors.setGate(
     () => game.canRun,
     () =>
       game.paused ? 'Đang tạm dừng — bấm Chạy để chạy tiếp' : game.match.phase === 'end' ? 'Trận đã kết thúc — bấm Về chỗ cũ để chơi trận mới' : 'Đã nạp, chờ hết 10 giây xả bóng…',
   )
-  editors.onError((i, msg) => hud.log(`Robot ${i + 1}: ${msg}`))
+  editors.onError((i, msg) => hud.log(`${names[i]}: ${msg}`))
+  const showTabs = () =>
+    editors.tabs(
+      PLAYERS.map((p) => {
+        const used = p === 0 || players() === 2 || modes.some((m) => modeOwner(m) === p)
+        return used ? `${names[p]} · ${robotName(cfgOf(p))}` : null
+      }),
+    )
+  showTabs()
 
   // Khung bên "Khối": vẽ lại vùng khối mỗi khi khung đổi cỡ (mở, đóng, kéo mép).
   new ResizeObserver(() => editors.resize()).observe(shell.side.blocks)
 
-  // Khung bên "Mã Arduino": chỉ xem, sinh lại (chờ 250 ms) khi vùng khối đổi hoặc đổi thẻ. Khối của em có ô số ⇒ lời
-  // báo R37 (mã Arduino của khối đó chưa đúng trên ThingBot thật).
+  // Khung bên "Mã Arduino": chỉ xem, sinh lại (chờ 250 ms) khi vùng khối đổi hoặc đổi thẻ (R37 như cũ).
   const codeNote = Object.assign(document.createElement('div'), { className: 'sh-code-note' })
   const codeWarn = Object.assign(document.createElement('div'), { className: 'sh-code-warn' })
   codeWarn.setAttribute('role', 'status')
@@ -179,7 +211,7 @@ async function start(): Promise<void> {
   const showCode = () => {
     const i = editors.active
     const { code, warning } = editors.arduino(i)
-    codeNote.textContent = `Robot ${i + 1} · mã C++ sinh từ khối, chỉ xem`
+    codeNote.textContent = `${names[i]} · mã C++ sinh từ khối, chỉ xem`
     codeWarn.hidden = !warning
     codeWarn.textContent = warning ?? ''
     codeView.innerHTML = highlightCpp(code)
@@ -190,9 +222,7 @@ async function start(): Promise<void> {
   })
   showCode()
 
-  // Khung đáy "Serial": chữ bo ảo của thẻ đang mở in ra. Dòng mới đếm bằng bộ đếm của RobotLink (đúng cả khi chuỗi đã
-  // chạm trần SERIAL_MAX); khi khung không mở trên Serial ⇒ số đỏ trên biểu tượng. Chỉ vẽ khi thẻ Serial đang hiện và
-  // có chữ mới: nối phần thêm, vẽ lại cả chuỗi khi nạp lại / trần cắt đầu.
+  // Khung đáy "Serial": như Task 11 (đếm dòng bằng bộ đếm của RobotLink, chỉ vẽ phần thêm).
   const serialPre = Object.assign(document.createElement('pre'), { className: 'sh-serial' })
   shell.panel.serial.append(serialPre)
   const markOf = (l: RobotLink): SerialMark => ({ loads: l.loads, chars: l.serialChars, lines: l.serialLines, len: l.serial.length })
@@ -205,7 +235,6 @@ async function start(): Promise<void> {
     const link = editors.link(i)
     const m = markOf(link)
     if (i !== serialOf) {
-      // Đổi thẻ robot: số chưa xem tính lại từ thẻ mới, khung vẽ lại cả chuỗi.
       serialOf = i
       serialUnseen = 0
       drawn = null
@@ -218,41 +247,39 @@ async function start(): Promise<void> {
         const body = shell.panel.serial
         const atEnd = body.scrollTop + body.clientHeight >= body.scrollHeight - 4
         const text = serialPre.firstChild as Text | null
-        if (patch === 'full' || !text) serialPre.textContent = link.serial // chuỗi rỗng ⇒ không còn nút chữ: hiện lời nhắc
+        if (patch === 'full' || !text) serialPre.textContent = link.serial
         else text.appendData(link.serial.slice(-patch))
-        if (atEnd) body.scrollTop = 1e9 // trình duyệt tự kẹp về cuối, không đọc lại kích thước
+        if (atEnd) body.scrollTop = 1e9
         drawn = m
       }
     }
     shell.badge('serial', serialUnseen)
   }
 
-  /** Tốc độ người dùng xin; tốc độ thật = effectiveSpeed (R24: có chương trình khối thì ×1). */
+  // ---------- Tốc độ (R24) ----------
   let requested = 1
-  let cam: CameraView = 'field'
-  let speedBtns: HTMLButtonElement[] = []
-  const speedNote = document.createElement('span')
-  speedNote.className = 'fr-note'
-  speedNote.textContent = SPEED_NOTE
   const speedNow = () => effectiveSpeed(requested, editors.anyActive())
-  const showSpeed = () => {
-    const locked = editors.anyActive()
-    const eff = speedNow()
-    speedBtns.forEach((b, k) => {
-      b.setAttribute('aria-pressed', String(SPEEDS[k] === eff))
-      b.disabled = locked && SPEEDS[k] !== 1
-    })
-    speedNote.hidden = !locked
-  }
-  /** Đổi tốc độ xem (nút hoặc window.__fanroc); trả về tốc độ thật sự áp dụng. */
   const setSpeed = (s: number) => {
     requested = Math.max(0, s)
-    showSpeed()
+    popover.update()
     return speedNow()
   }
+
+  // ---------- Camera ----------
+  let cam: CameraView = 'orbit'
+  const setCamera = (v: CameraView) => {
+    cam = v
+    scene.camera(v, mySeat())
+  }
+
   const expose = () => {
     ;(window as unknown as { __fanroc: unknown }).__fanroc = {
-      world: game.world, robots: game.robots, match: game.match, humans: game.humans, setSpeed, editors, session: game, shell,
+      world: game.world, robots: game.robots, match: game.match, humans: game.humans, setSpeed, editors, session: game, shell, store,
+      go: (s: Screen, arg?: { player?: Player }) => go(s, arg),
+      get screen() {
+        return screen
+      },
+      mySeat, keypads: () => keypads,
       pause: () => setPaused(true), resume: () => setPaused(false), stepBlock: () => stepBlock(),
       pose: (i: number) => {
         const p = game.robots[i].pose
@@ -262,63 +289,91 @@ async function start(): Promise<void> {
   }
 
   /**
-   * Trận mới (đổi chế độ, đổi robot, Về chỗ cũ): mọi chương trình dừng, robot về ô xuất phát. Chỉ một lần dựng trận
-   * chạy một lúc (không giải phóng một thế giới Rapier hai lần); yêu cầu đến giữa chừng dồn thành một lần dựng lại
-   * ngay sau đó, theo lựa chọn mới nhất.
+   * Dựng lại phiên của màn hiện tại (vào màn, Về chỗ cũ, đổi robot / ghế / chế độ): mọi chương trình dừng, robot về ô
+   * xuất phát; trận lẻ / đấu tập nạp lại chương trình của các bạn đang lái (chạy khi cổng mở). Chỉ một lần dựng chạy
+   * một lúc; yêu cầu đến giữa chừng dồn thành một lần dựng lại ngay sau đó.
    */
-  let restarting = false
+  let restarting: Promise<void> | null = null
   let restartAgain = false
-  const restart = async () => {
-    if (restarting) return void (restartAgain = true)
-    restarting = true
-    try {
-      do {
-        restartAgain = false
-        editors.stopAll()
-        const old = game
-        game = await newGame(++seed)
-        old.dispose()
-        board.hideResult()
-        game.match.log(practice ? 'Luyện tập: không xả bóng, không hết giờ — chương trình chạy ngay khi bấm Chạy' : 'Trận mới: chương trình chạy khi hết 10 giây xả bóng')
-        expose()
-      } while (restartAgain)
-    } finally {
-      restarting = false
+  const restart = (): Promise<void> => {
+    if (restarting) {
+      restartAgain = true
+      return restarting
     }
+    restarting = (async () => {
+      try {
+        do {
+          restartAgain = false
+          editors.stopAll()
+          const old = game
+          game = await newGame(++seed)
+          old.dispose()
+          board.hideResult()
+          board.clearFx()
+          if (isMatch()) {
+            for (const p of PLAYERS) if (playerSeat(modes, p) >= 0) editors.run(p)
+            game.match.log(
+              screen === 'practice'
+                ? 'Đấu tập: không xả bóng, không hết giờ — robot của em chạy ngay'
+                : 'Trận mới: robot của em chạy chương trình khi hết 10 giây xả bóng',
+            )
+          }
+          expose()
+          scene.camera(cam, mySeat())
+        } while (restartAgain)
+      } finally {
+        restarting = null
+      }
+    })()
+    return restarting
   }
-  editors.onConfig(() => void restart())
 
-  // Tạm dừng / chạy tiếp / từng khối (spec §6.1b).
+  // ---------- Ghế (Nâng cao, R27) ----------
+  const syncFollowers = () => {
+    modes.forEach((m, i) => {
+      const want = m.startsWith('copy-') ? Number(m.slice(-1)) : -1
+      const f = followers[i] as ({ src?: number } & NonNullable<(typeof followers)[number]>) | null
+      if (f && f.src === want) return
+      f?.dispose()
+      followers[i] = want < 0 ? null : Object.assign(editors.follow(want, (msg) => hud.log(`Robot ${i + 1}: ${msg}`)), { src: want })
+    })
+  }
+  const clearFollowers = () => {
+    followers.forEach((f, i) => {
+      f?.dispose()
+      followers[i] = null
+    })
+  }
+  const setMode = (i: number, m: SeatMode) => {
+    const before = modes
+    modes = assignSeat(modes, i, m, settings.skill)
+    syncFollowers()
+    // Bạn không còn lái ghế nào ⇒ chương trình của bạn đó dừng (không khoá tốc độ, không chạy ngầm).
+    for (const p of PLAYERS) if (playerSeat(before, p) >= 0 && playerSeat(modes, p) < 0) editors.stop(p)
+    showTabs()
+    if (modes.some((_, k) => JSON.stringify(seatCfg(k)) !== JSON.stringify(game.cfgs[k]))) return void restart()
+    modes.forEach((x, k) => {
+      if (x !== before[k] || k === i) game.setDriver(k, seatDriver(k))
+    })
+  }
+
+  // ---------- Tạm dừng / từng khối (spec §6.1b) ----------
   const setPaused = (p: boolean) => {
     if (p) game.pause()
     else game.resume()
   }
   const stepBlock = () => game.stepBlock()
-  expose()
 
-  /** Đổi người lái của robot i. Chỉ bắt đầu trận mới khi robot phải đổi kiểu / đế (chạy chương trình của thẻ khác). */
-  const pickers: HTMLSelectElement[] = []
-  const setMode = (i: number, m: SeatMode) => {
-    modes[i] = m
-    if (pickers[i] && pickers[i].value !== m) pickers[i].value = m
-    followers[i]?.dispose()
-    followers[i] = m.startsWith('copy-') ? editors.follow(Number(m.slice(5)), (msg) => hud.log(`Robot ${i + 1}: ${msg}`)) : null
-    if (JSON.stringify(cfgFor(i)) !== JSON.stringify(game.cfgs[i])) return void restart()
-    game.setDriver(i, driverFor(i))
-  }
-  /** Chạy chương trình của thẻ i; robot đang do agent lái ⇒ chuyển sang "Chương trình" (thấy ngay trên ô chọn). */
-  const runProgram = (i: number) => {
-    editors.run(i)
-    if (modes[i] !== 'program') {
-      setMode(i, 'program')
-      game.match.log(`Robot ${i + 1}: chuyển sang lái bằng chương trình khối`)
-    }
-  }
   const handlers = {
     run() {
-      // Đang tạm dừng: Chạy chỉ là chạy tiếp, không nạp lại / không đổi người lái của thẻ đang mở.
       if (game.paused) return setPaused(false)
-      runProgram(editors.active)
+      const p = editors.active as Player
+      editors.run(p)
+      // Trận lẻ: bạn đó chưa lái robot nào ⇒ ngồi ô của mình (thấy ngay ở ⚙ › Nâng cao).
+      if (isMatch() && playerSeat(modes, p) < 0) {
+        setMode(seatOf(p, settings.alliance), `player-${p}`)
+        game.match.log(`${names[p]}: lái robot bằng chương trình khối`)
+      }
     },
     pause: () => setPaused(true),
     step: () => void stepBlock(),
@@ -326,117 +381,273 @@ async function start(): Promise<void> {
     reset: () => void restart(),
     download: () => editors.download(editors.active),
     camera() {
-      cam = CAMERAS[(CAMERAS.indexOf(cam) + 1) % CAMERAS.length]
-      scene.camera(cam, hud.selected)
-      camBtns.forEach((b, k) => b.setAttribute('aria-pressed', String(CAMERAS[k] === cam)))
+      const k = CAMERAS.indexOf(cam)
+      setCamera(CAMERAS[(k + 1) % CAMERAS.length])
     },
   }
 
-  // Khung ⚙ tạm: chế độ, người lái, robot của từng thẻ, chương trình mẫu, camera, tốc độ, đồ hoạ.
-  const pop = document.createElement('div')
-  pop.className = 'fr-bar sh-pop'
-  pop.setAttribute('role', 'dialog')
-  pop.setAttribute('aria-label', 'Cài đặt')
-  pop.hidden = true
-  const camBtns = group(
-    CAMERAS.map((c, k) => ({ label: ['Toàn sân', 'Theo robot', 'Góc người lái'][k], on: () => scene.camera((cam = c), hud.selected) })),
-    0,
-  )
-  const modeBtns = group(
-    [
-      { label: 'Trận', on: () => ((practice = false), void restart()) },
-      { label: 'Luyện tập', on: () => ((practice = true), void restart()) },
-    ],
-    0,
-  )
-  const agentOpts: [string, string][] = (['easy', 'medium', 'hard'] as Skill[]).map((k) => [`agent-${k}`, `Agent ${SKILL_NAME[k]}`])
-  const seatPickers = [0, 1, 2, 3].map((i) => {
-    const opts: [string, string][] =
-      i < 2 ? [['program', 'Chương trình'], ...agentOpts] : [...agentOpts, [`copy-${i - 2}`, `Chương trình của Robot ${i - 1}`]]
-    const l = picker(`Robot ${i + 1}`, opts, modes[i], (v) => setMode(i, v as SeatMode))
-    pickers[i] = l.querySelector('select')!
-    return l
+  // ---------- Màn chính, Trước trận, màn chờ ----------
+  const homeInfo = (): HomeInfo => ({
+    season: FANROC_2026.name,
+    robot: robotName(cfgOf(0)),
+    program: label(0),
+    player: names[0],
+    stars: profile.stars,
+    missions: { done: MISSIONS.filter((m) => store.mission(m.id).done).length, total: MISSIONS.length },
   })
-  const cfgRows = [0, 1].map((i) => {
-    const c = configControls(
-      () => editors.cfg(i),
-      (cfg) => editors.setConfig(i, cfg),
-    )
-    return { c, row: row(`Thẻ Robot ${i + 1}`, c.el, button('Mẫu TeleOp', () => editors.sample(i, 'teleop')), button('Mẫu Auto', () => editors.sample(i, 'auto'))) }
+  const overlay = document.body
+  const home = createHome(overlay, {
+    open: (t: TileId) => {
+      if (t === 'match') {
+        home.hide()
+        pickPlayer = 0
+        pick.show()
+      } else void go(t === 'workshop' ? 'workshop' : t === 'missions' ? 'missions' : 'tournament')
+    },
+    settings: () => popover.toggle(settingsCtx()),
   })
-  speedBtns = group(SPEEDS.map((sp) => ({ label: `×${sp}`, on: () => setSpeed(sp) })), 0)
-  let q: Quality = defaultQuality()
-  const qBtns = group(
-    [
-      { label: 'Đồ hoạ cao', on: () => scene.quality((q = 'high')) },
-      { label: 'Đồ hoạ thấp', on: () => scene.quality((q = 'low')) },
-    ],
-    q === 'high' ? 0 : 1,
+  const pick = createPick(
+    overlay,
+    () => ({
+      practice: pickPractice, players: players(), player: pickPlayer, names, cfg: cfgOf,
+      saved: (p, cfg) => saved(p, cfg)?.version ?? null,
+      alliance: settings.alliance, skill: settings.skill, runMine,
+    }),
+    {
+      setPlayer: (p) => ((pickPlayer = p), pick.render()),
+      setCfg: (p, cfg) => (editors.setConfig(p, cfg), pick.render()),
+      setPractice: (v) => ((pickPractice = v), pick.render()),
+      setAlliance: (a) => ((settings.alliance = a), saveSettings(), pick.render()),
+      setSkill: (s) => ((settings.skill = s), saveSettings(), pick.render()),
+      setRunMine: (v) => ((runMine = v), pick.render()),
+      start: () => void go(pickPractice ? 'practice' : 'match'),
+      home: () => (pick.hide(), home.show(homeInfo())),
+    },
   )
-  pop.append(
-    Object.assign(document.createElement('h3'), { textContent: 'Cài đặt' }),
-    row('Chế độ', ...modeBtns, button('Trận mới', () => void restart())),
-    row('Người lái', ...seatPickers),
-    ...cfgRows.map((r) => r.row),
-    row('Camera', ...camBtns),
-    row('Tốc độ', ...speedBtns, speedNote),
-    row('Đồ hoạ', ...qBtns),
-  )
-  const setPop = (open: boolean) => {
-    pop.hidden = !open
-    if (open) for (const r of cfgRows) r.c.refresh()
+  const placeholder = createPlaceholder(overlay, () => void go('home'))
+  shell.onHome(() => void go('home'))
+
+  // ---------- Xưởng lập trình ----------
+  const wsControls = PLAYERS.map((p) => configControls(() => cfgOf(p), (cfg) => editors.setConfig(p, cfg)))
+  const wsBar = createWorkshopBar((p) => wsControls[p], {
+    setPlayer: (p) => void go('workshop', { player: p }),
+    save() {
+      const r = saveVerified(store, wsPlayer, cfgOf(wsPlayer), editors.program(wsPlayer))
+      wsBar.message(r.text, r.ok)
+      showWorkshop()
+    },
+    reset() {
+      const r = resetVerified(store, wsPlayer, cfgOf(wsPlayer))
+      if (r.ok) editors.load(wsPlayer, sample(cfgOf(wsPlayer), 'teleop'))
+      wsBar.message(r.text, r.ok)
+      showWorkshop()
+    },
+    download: () => editors.download(wsPlayer),
+  })
+  shell.side.blocks.prepend(wsBar.el)
+  const showWorkshop = () =>
+    wsBar.show({ player: wsPlayer, players: players(), names, label: programText(saved(wsPlayer), true) })
+
+  // Đổi robot / đế / cơ cấu (Trước trận, ⚙, Xưởng): nhớ vào cài đặt; ở trận / Xưởng nạp chương trình của robot mới.
+  editors.onConfig((p, cfg) => {
+    if (p === 0) settings.robot = cfg
+    else settings.robot2 = cfg
+    saveSettings()
+    showTabs()
+    if (isMatch()) {
+      editors.load(p, programFor(p as Player))
+      void restart()
+    } else if (screen === 'workshop' && p === wsPlayer) {
+      const rec = saved(wsPlayer)
+      editors.load(p, rec ? rec.state : sample(cfg, 'teleop'))
+      wsBar.message(null)
+      showWorkshop()
+      void restart()
+    }
+  })
+
+  // ---------- ⚙ ----------
+  const stControls = PLAYERS.map((p) => configControls(() => cfgOf(p), (cfg) => editors.setConfig(p, cfg)))
+  const reopen = () => popover.open(settingsCtx())
+  const settingsCtx = (): SettingsCtx => ({
+    screen,
+    camera: cam === 'orbit' ? 'field' : cam,
+    setCamera,
+    quality: q,
+    setQuality: (v) => {
+      q = v
+      scene.quality(v)
+      settings.quality = v
+      saveSettings()
+    },
+    sound: settings.sound,
+    setSound: (v) => ((settings.sound = v), saveSettings()),
+    layout2p: settings.layout2p,
+    setLayout2p: (v) => {
+      settings.layout2p = v
+      saveSettings()
+      makePads()
+      // Trận / Xưởng dựng lại theo số bạn mới (đổi màn đóng ⚙ ⇒ mở lại sau khi dựng xong).
+      if (isMatch()) void go(screen).then(reopen)
+      else if (screen === 'workshop') void go('workshop', { player: v ? wsPlayer : 0 }).then(reopen)
+      else (showTabs(), reopen())
+    },
+    names,
+    cfg: cfgOf,
+    match: isMatch()
+      ? {
+          practice: screen === 'practice',
+          setPractice: (v) => void go(v ? 'practice' : 'match').then(reopen),
+          robots: PLAYERS.slice(0, players()).map((p) => ({ label: players() === 2 ? `Robot của ${names[p]}` : 'Robot của em', ...stControls[p] })),
+          alliance: settings.alliance,
+          setAlliance: (a) => ((settings.alliance = a), saveSettings(), void go(screen).then(reopen)),
+          skill: settings.skill,
+          setSkill: (s) => ((settings.skill = s), saveSettings(), void go(screen).then(reopen)),
+          runMine,
+          saved: saved(0) ? `Của em v${saved(0)!.version}` : null,
+          setRunMine: (v) => ((runMine = v), void go(screen).then(reopen)),
+          speeds: SPEEDS,
+          speed: speedNow,
+          locked: () => editors.anyActive(),
+          setSpeed: (s) => void setSpeed(s),
+          seats: {
+            modes,
+            labels: [0, 1, 2, 3].map((i) => `Robot ${i + 1} · ${ALLIANCE_SEAT[i]}`),
+            options: seatOptions(names, players()),
+            set: (i, m) => setMode(i, m),
+          },
+        }
+      : undefined,
+  })
+  shell.onSettings(() => popover.toggle(settingsCtx()))
+
+  // ---------- Đổi màn ----------
+  /** Phần giao diện của màn (không dựng lại phiên). */
+  const enter = (next: Screen, arg?: { player?: Player }) => {
+    popover.close()
+    home.hide()
+    pick.hide()
+    placeholder.hide()
+    screen = next
+    const c = chrome(next)
+    shell.activity(c.activity)
+    shell.runbarVisible(c.runbar)
+    board.visible(c.scoreboard)
+    board.hideResult()
+    board.clearFx()
+    cards.visible(isMatch() || next === 'workshop')
+    keypads.forEach((k) => k.releaseAll())
+    editors.stopAll()
+    if (isMatch()) {
+      modes = defaultSeats(settings.alliance, settings.skill, players())
+      clearFollowers()
+      for (const p of PLAYERS) if (playerSeat(modes, p) >= 0) editors.load(p, programFor(p))
+    } else clearFollowers()
+    if (next === 'workshop') {
+      wsPlayer = players() === 2 ? (arg?.player ?? 0) : 0
+      const rec = saved(wsPlayer)
+      editors.load(wsPlayer, rec ? rec.state : sample(cfgOf(wsPlayer), 'teleop'))
+      editors.show(wsPlayer)
+      wsBar.message(null)
+      showWorkshop()
+      shell.open('blocks')
+    } else {
+      wsBar.hide()
+      shell.open(null)
+    }
+    showTabs()
+    if (next === 'workshop' || isMatch()) editors.show(next === 'workshop' ? wsPlayer : 0)
+    cam = defaultCamera(next)
   }
-  shell.onSettings(() => setPop(pop.hidden))
+  /** Sau khi phiên mới đã dựng: hiện màn phủ (màn chính / màn chờ). */
+  const shown = (next: Screen) => {
+    scene.camera(cam, mySeat())
+    if (next === 'home') home.show(homeInfo())
+    else if (next === 'missions' || next === 'mission' || next === 'tournament') placeholder.show(next)
+  }
+  let going = Promise.resolve()
+  const go = (next: Screen, arg?: { player?: Player }): Promise<void> => {
+    going = going
+      .then(async () => {
+        enter(next, arg)
+        await restart()
+        shown(next)
+      })
+      .catch((e) => console.error('Không đổi màn được:', e))
+    return going
+  }
+
+  // ---------- Bàn phím ----------
+  const driving = () => isMatch() || screen === 'workshop'
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !pop.hidden) setPop(false)
+    if (popover.shown) return
+    if (home.shown) {
+      if (home.key(e)) e.preventDefault()
+      return
+    }
+    if (!driving() || typing(e.target)) return
+    let used = false
+    for (const k of keypads) used = k.down(e.code) || used
+    if (used) e.preventDefault()
   })
-  document.addEventListener('pointerdown', (e) => {
-    if (!pop.hidden && !pop.contains(e.target as Node)) setPop(false)
+  // Nhả phím luôn được nhận (kể cả khi đang gõ): không phím nào kẹt.
+  document.addEventListener('keyup', (e) => keypads.forEach((k) => k.up(e.code)))
+  const releaseAll = () => keypads.forEach((k) => k.releaseAll())
+  window.addEventListener('blur', releaseAll)
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) releaseAll()
   })
 
-  const padsEl = document.createElement('div')
-  padsEl.className = 'fr-pads'
-  padsEl.setAttribute('aria-live', 'polite')
-  stage.append(pop, padsEl)
   hud.onSelect = (i) => {
-    if (cam !== 'field') scene.camera(cam, i)
+    if (cam !== 'field' && cam !== 'orbit') scene.camera(cam, i)
   }
 
-  // Tay cầm: chỉ hiện tay nào đang là bộ thu của robot nào (không cấu hình).
-  const PAD_TEXT: Record<SeatStatus, string> = {
-    none: 'chưa cắm',
-    ok: 'đã cắm',
-    nonstandard: 'không đúng bố cục chuẩn, robot đứng yên',
-    lost: 'đã rút ra, robot đứng yên',
-  }
-  let padsText = ''
-  const showPads = (status: SeatStatus[]) => {
-    const text = status.map((st, i) => `Tay cầm ${i + 1} → Robot ${i + 1}: ${PAD_TEXT[st]}`).join('\n')
-    if (text === padsText) return
-    padsText = text
-    padsEl.replaceChildren(...text.split('\n').map((t) => Object.assign(document.createElement('span'), { textContent: t })))
-  }
+  // ---------- Mỗi khung ----------
+  /** Tay PS2 ảo của bạn p ở khung này: tay thật (khi có tín hiệu) thắng bàn phím. */
+  const padOf = (p: Player, real: (Record<string, number> | null)[]) => mergePad(real[p] ?? null, keypads[p]?.state(cfgOf(p).drive) ?? PS2_NEUTRAL)
+  const inputOf = (p: Player, status: SeatStatus[]): 'Bàn phím' | 'Tay PS2' => (status[p] === 'ok' && !keypads[p]?.active() ? 'Tay PS2' : 'Bàn phím')
 
   /** Thanh chạy + thanh trạng thái + tô khối, theo thẻ đang mở. */
   let fps = 60
   const showRun = (status: SeatStatus[]) => {
-    const i = editors.active
-    const state: LinkState = editors.state(i)
+    const p = editors.active as Player
+    const state: LinkState = editors.state(p)
     const canStep = game.robots.some((_, k) => game.driver(k).kind === 'program')
     shell.runbar(handlers, state, { busy: game.stepping, paused: game.paused, canStep })
-    for (const k of [0, 1]) {
+    for (const k of PLAYERS) {
       const s = editors.state(k)
       editors.highlight(k, s === 'running' || s === 'paused' ? editors.link(k).block : undefined)
     }
-    const s = editors.state(i)
-    const input: InputKind = modes[i].startsWith('agent-') ? 'Máy' : status[i] === 'ok' ? 'Tay PS2' : 'Chương trình'
+    const seat = seatOfPlayer(p)
+    const input: InputKind = seat < 0 ? 'Máy' : inputOf(p, status)
     shell.status({
-      robot: `Robot ${i + 1} · ${TEAMS[i]}`,
+      robot: `${names[p]} · ${robotName(cfgOf(p))}`,
       input,
-      ports: game.ports[i] ?? NEUTRAL,
-      block: s === 'running' || s === 'paused' ? editors.describe(i, editors.link(i).block) : null,
+      ports: seat >= 0 ? (game.ports[seat] ?? NEUTRAL) : NEUTRAL,
+      block: state === 'running' || state === 'paused' ? editors.describe(p, editors.link(p).block) : null,
       fps,
     })
+  }
+
+  const showCards = (status: SeatStatus[]) => {
+    if (!(isMatch() || screen === 'workshop')) return
+    const list: CardInfo[] = []
+    for (const p of PLAYERS) {
+      const seat = seatOfPlayer(p)
+      if (seat < 0) continue
+      const r = game.robots[seat]
+      list.push({
+        player: names[p],
+        robot: robotName(cfgOf(p)),
+        program: screen === 'workshop' ? 'đang sửa ở Xưởng' : label(p),
+        input: inputOf(p, status),
+        pad: { n: p + 1, status: status[p] },
+        held: r ? r.stored.length : 0,
+        storage: r ? r.def.storage : 0,
+        warnings: deadZoneLines(game.ports[seat]),
+      })
+    }
+    cards.update(list)
   }
 
   // Bảng điểm: dòng điểm ≤ SCORE_HZ lần/giây + báo nổi; đếm ngược 3 s cuối xả bóng; còi; màn kết quả khi hết giờ.
@@ -450,8 +661,9 @@ async function start(): Promise<void> {
       prevT = m.t
       resultShown = false
     }
-    board.visible(game.mode !== 'mission') // nhiệm vụ: bảng nhiệm vụ riêng (Task 14)
-    const out = ticker.tick(now, m, game.robots, programs())
+    // Màn không có bảng điểm (màn chính, Xưởng, nhiệm vụ): không tính điểm, không "ting".
+    if (!chrome(screen).scoreboard || game.mode === 'mission') return
+    const out = ticker.tick(now, m, game.robots, programs(), teamNames)
     if (out) {
       board.update(out.line, out.pops)
       if (out.pops.some((p) => p.startsWith('+'))) sound.ting()
@@ -466,9 +678,9 @@ async function start(): Promise<void> {
       if (m.phase === 'end' && !resultShown) {
         resultShown = true
         sound.whistle(true)
-        board.result(resultView(m, game.robots, programs()), {
+        board.result(resultView(m, game.robots, programs(), teamNames), {
           again: () => void restart(),
-          home: () => board.hideResult(), // Task 13: về màn chính
+          home: () => void go('home'),
         })
       }
     }
@@ -478,22 +690,27 @@ async function start(): Promise<void> {
   let last = performance.now()
   const frame = (now: number) => {
     const { pads, status } = seats.read()
-    showPads(status)
-    for (const i of [0, 1]) editors.input(i, pads[i])
+    for (const p of PLAYERS) editors.input(p, padOf(p, pads))
     editors.release()
-    showSpeed()
     const speed = speedNow()
     const dt = Math.min(100, now - last) / 1000
     if (now > last) fps += (1000 / (now - last) - fps) * 0.05
     last = now
-    game.advance(dt, speed, { steps: MAX_STEPS * Math.max(1, speed), ms: STEP_BUDGET_MS })
+    if (chrome(screen).live) game.advance(dt, speed, { steps: MAX_STEPS * Math.max(1, speed), ms: STEP_BUDGET_MS })
     scene.sync(game.world, game.robots, game.match, game.ports)
     hud.update(game.match, game.robots, game.cfgs, game.ports)
     showBoard(now)
     showRun(status)
     showSerial()
+    showCards(status)
+    popover.update()
     requestAnimationFrame(frame)
   }
+
+  // Mở trang ⇒ màn chính (phiên nền đã dựng ở trên).
+  enter('home')
+  expose()
+  shown('home')
   requestAnimationFrame(frame)
 }
 

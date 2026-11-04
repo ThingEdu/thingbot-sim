@@ -49,6 +49,8 @@ export interface Shell {
    * (`runState`). Gọi mỗi khung được (chỉ đổi DOM khi khác).
    */
   runbar(h: RunHandlers, state: LinkState | 'none', opts?: RunOpts): void
+  /** Ẩn / hiện thanh chạy nổi (màn chính, ghi danh giải: ẩn). */
+  runbarVisible(v: boolean): void
   status(s: StatusInfo): void
   /** Màn nào hiện biểu tượng nào (⚙ luôn có). */
   activity(items: Activity[]): void
@@ -237,6 +239,7 @@ const CSS = `
 .sh-status a { color: #fff; text-decoration: none; opacity: .9; }
 .sh-status a:hover { text-decoration: underline; opacity: 1; }
 .sh-run { position: absolute; top: var(--runbar-top, 12px); left: 50%; transform: translateX(-50%); display: flex; gap: 2px; align-items: center; padding: 3px; background: #333333ee; border: 1px solid #555; border-radius: 6px; box-shadow: 0 4px 14px #0008; z-index: 10; }
+.sh-run[hidden] { display: none; }
 .sh-run button { width: 34px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 4px; background: transparent; color: #ddd; cursor: pointer; padding: 0; }
 .sh-run button:hover:not(:disabled) { background: #ffffff1f; }
 .sh-run button.go { color: #4ec96b; }
@@ -464,6 +467,9 @@ export function createShell(root: HTMLElement): Shell {
       set(runBtn.pause, r.pause, r.pauseOn)
       set(runBtn.step, r.step, false)
       set(runBtn.stop, r.stop, false)
+    },
+    runbarVisible(v) {
+      runEl.hidden = !v
     },
     status(s) {
       const [robot, input, ports, block, fps] = statusText(s)

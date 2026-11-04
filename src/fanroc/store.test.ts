@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createStore, keys, type KV } from './store.ts'
+import { createStore, defaultSettings, keys, type KV } from './store.ts'
+import { defaultConfig } from './programs.ts'
 import { FANROC_2026 } from './season.ts'
 import type { TournamentState } from './tournament.ts'
 
@@ -34,7 +35,7 @@ test('KV ném lỗi: mọi hàm trả mặc định, không ném', () => {
 
 test('mặc định cài đặt: không có camera, robot maker 2 bánh', () => {
   const st = createStore('s', fake()).settings()
-  assert.deepEqual(st, { quality: undefined, sound: true, skill: 'medium', alliance: 'red', robot: maker, layout2p: false })
+  assert.deepEqual(st, { quality: undefined, sound: true, skill: 'medium', alliance: 'red', robot: maker, robot2: maker, layout2p: false })
   assert.ok(!('camera' in st))
 })
 
@@ -98,4 +99,31 @@ test('chỉ ghi khoá có tiền tố fanroc.v1.', () => {
   s.saveSettings(s.settings()); s.saveProfile(s.profile()); s.saveMission('a', s.mission('a'))
   s.saveProgram(0, maker, {}); s.saveTournament(T)
   for (const k of kv.m.keys()) assert.ok(k.startsWith('fanroc.v1.'), k)
+})
+
+test('defaultSettings().robot = programs.defaultConfig(\'maker\') (một nguồn cho robot mặc định)', () => {
+  assert.deepEqual(defaultSettings().robot, defaultConfig('maker'))
+  assert.deepEqual(defaultSettings().robot2, defaultConfig('maker'))
+})
+
+test('cài đặt robot sai loại / đế không có / cơ cấu lạ ⇒ mặc định từng robot; đúng ⇒ giữ', () => {
+  const kv = fake()
+  const bad = [
+    { type: 'tau-ngam', drive: 'diff2', actuator: 'tt' },
+    { type: 'ui', drive: 'mecanum', actuator: 'tt' }, // Xe Ủi chỉ có 2 bánh
+    { type: 'maker', drive: 'diff2', actuator: 'pin' },
+    { type: 'toString', drive: 'diff2', actuator: 'tt' },
+    'maker',
+  ]
+  for (const r of bad) {
+    kv.setItem(keys('s').settings, JSON.stringify({ robot: r, robot2: r }))
+    const st = createStore('s', kv).settings()
+    assert.deepEqual(st.robot, maker, JSON.stringify(r))
+    assert.deepEqual(st.robot2, maker, JSON.stringify(r))
+  }
+  const co = { type: 'co', drive: 'omni', actuator: 's360' }
+  kv.setItem(keys('s').settings, JSON.stringify({ robot: ui, robot2: co }))
+  const st = createStore('s', kv).settings()
+  assert.deepEqual(st.robot, ui)
+  assert.deepEqual(st.robot2, co)
 })

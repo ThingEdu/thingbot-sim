@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { KeyPad, mergePad } from './keys.ts'
+import { KeyPad, layoutFor, mergePad, typing } from './keys.ts'
 import { PS2_NEUTRAL } from './gamepad.ts'
 
 const press = (layout: 'solo' | 'left' | 'right', drive: 'diff2' | 'omni' | 'mecanum', ...codes: string[]) => {
@@ -73,4 +73,24 @@ test('mergePad: tay thật thắng khi có cần lệch / nút bấm', () => {
   assert.deepEqual(mergePad(real, press('solo', 'diff2', 'KeyS')), real)
   const btn = { ...PS2_NEUTRAL, ps2_PSB_CROSS: 1 }
   assert.deepEqual(mergePad(btn, virt), btn)
+})
+
+test('typing: ô nhập / vùng soạn thảo / ô chọn / ô sửa của Blockly ⇒ đang gõ; nút, thân trang ⇒ không', () => {
+  const cls = (...c: string[]) => ({ contains: (x: string) => c.includes(x) })
+  assert.equal(typing({ tagName: 'INPUT' }), true)
+  assert.equal(typing({ tagName: 'textarea' }), true)
+  assert.equal(typing({ tagName: 'SELECT' }), true)
+  assert.equal(typing({ tagName: 'DIV', isContentEditable: true }), true)
+  assert.equal(typing({ tagName: 'INPUT', classList: cls('blocklyHtmlInput') }), true)
+  assert.equal(typing({ tagName: 'DIV', classList: cls('blocklyHtmlInput') }), true)
+  assert.equal(typing({ tagName: 'BUTTON', classList: cls('hm-tile') }), false)
+  assert.equal(typing({ tagName: 'BODY', isContentEditable: false }), false)
+  assert.equal(typing(null), false)
+})
+
+test('layoutFor: một bạn solo; hai bạn: bạn 1 nửa trái, bạn 2 nửa phải', () => {
+  assert.equal(layoutFor(0, false), 'solo')
+  assert.equal(layoutFor(1, false), 'solo')
+  assert.equal(layoutFor(0, true), 'left')
+  assert.equal(layoutFor(1, true), 'right')
 })

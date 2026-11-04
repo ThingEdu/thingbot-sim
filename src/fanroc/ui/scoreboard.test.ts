@@ -163,3 +163,27 @@ test('ScoreTicker: tối đa SCORE_HZ lần/giây; báo nổi chỉ khi đang th
     w.rapier.free()
   }
 })
+
+test('scoreLine có tên đội ⇒ đúng một lần tally (dò tia 300 bóng) mỗi lần; ScoreTicker mỗi nhịp một lần', async () => {
+  const { w, robots, m } = await setup(4)
+  try {
+    let n = 0
+    const real = m.tally.bind(m)
+    m.tally = () => (n++, real())
+    m.t = 1
+    const line = scoreLine(m, robots, [], TEAMS)
+    assert.equal(n, 1, `scoreLine gọi tally ${n} lần`)
+    assert.deepEqual(line.red.teams.map((t) => t.name), ['Dế Xanh', 'Kiến Lửa'])
+    const ticker = new ScoreTicker()
+    n = 0
+    for (let k = 0; k < 3; k++) ticker.tick(k * 1000, m, robots, [], TEAMS)
+    assert.equal(n, 3, `3 nhịp gọi tally ${n} lần`)
+    // Không có tên: lấy tên từ result() (thêm một lần tally), cùng kết quả.
+    n = 0
+    const again = scoreLine(m, robots)
+    assert.equal(n, 2)
+    assert.deepEqual(again, line)
+  } finally {
+    w.rapier.free()
+  }
+})
