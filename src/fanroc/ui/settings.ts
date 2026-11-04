@@ -325,7 +325,9 @@ export function createSettings(): SettingsPopover {
   }
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !pop.hidden) {
-      e.stopPropagation()
+      // Esc chỉ đóng ⚙: chặn các bộ nghe keydown khác trên document (Luật chơi / Robot mẫu về màn chính, R128).
+      e.preventDefault()
+      e.stopImmediatePropagation()
       api.close()
     }
   })

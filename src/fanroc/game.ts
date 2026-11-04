@@ -162,9 +162,10 @@ export class GameSession {
     if (this.disposed) return Promise.resolve()
     if (this.stepPromise) return this.stepPromise
     const gateOpen = this.mode !== 'match' || this.match.phase === 'play'
-    const pausing = this.pauseAll()
-    const links = this.links().filter((l) => l.state === 'paused' || (l.state === 'loaded' && gateOpen))
+    // Chọn bo bước được TRƯỚC khi tạm dừng: không có bo nào ⇒ ⏭ không làm gì (không tự tạm dừng phiên, R127).
+    const links = this.links().filter((l) => l.state === 'running' || l.state === 'paused' || (l.state === 'loaded' && gateOpen))
     if (!links.length) return Promise.resolve()
+    const pausing = this.pauseAll()
     // Chạy tiếp (resume) giữa chừng ⇒ bỏ phần sân của bước này: vòng khung hình đã chạy sân theo thời gian thật.
     const aborted = () => this.disposed || !this.paused
     const run = async () => {

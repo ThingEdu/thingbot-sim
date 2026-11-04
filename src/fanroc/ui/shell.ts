@@ -12,7 +12,7 @@ import { icon, type IconName } from './icons.ts'
 
 export type SideView = 'blocks' | 'code' | 'missions'
 export type PanelTab = 'serial' | 'events'
-export type Activity = 'blocks' | 'code' | 'serial' | 'missions' | 'trophy'
+export type Activity = 'blocks' | 'code' | 'serial' | 'missions'
 export type InputKind = 'Bàn phím' | 'Tay PS2' | 'Chương trình' | 'Máy'
 export interface StatusInfo {
   robot: string
@@ -58,8 +58,6 @@ export interface Shell {
   onSettings(cb: () => void): void
   /** Biểu tượng Màn chính chỉ hiện khi có người nghe. */
   onHome(cb: () => void): void
-  /** Biểu tượng Giải đấu (màn giải đấu nối sau). */
-  onTrophy(cb: () => void): void
 }
 
 // ---------- Kích thước (brief Task 11) ----------
@@ -185,7 +183,6 @@ const ACT: Record<Activity, { icon: IconName; label: string }> = {
   code: { icon: 'code', label: 'Mã Arduino' },
   serial: { icon: 'serial', label: 'Serial' },
   missions: { icon: 'missions', label: 'Nhiệm vụ' },
-  trophy: { icon: 'trophy', label: 'Giải đấu' },
 }
 const SIDE_TITLE: Record<SideView, string> = { blocks: 'Khối', code: 'Mã Arduino', missions: 'Nhiệm vụ' }
 const PANEL_TITLE: Record<PanelTab, string> = { serial: 'Serial', events: 'Sự kiện trận' }
@@ -418,7 +415,6 @@ export function createShell(root: HTMLElement, opts: { thingblockUrl?: string } 
   const widthOf = (v: SideView) => widths[v] ?? defaultSide(v, innerWidth)
   let settingsCb: (() => void) | null = null
   let homeCb: (() => void) | null = null
-  let trophyCb: (() => void) | null = null
 
   const showSide = () => {
     sideEl.hidden = view === null
@@ -507,15 +503,11 @@ export function createShell(root: HTMLElement, opts: { thingblockUrl?: string } 
       homeCb = cb
       homeBtn.hidden = false
     },
-    onTrophy(cb) {
-      trophyCb = cb
-    },
   }
 
   // ---------- Bấm ----------
   for (const k of ['blocks', 'code', 'missions'] as const) actBtn[k].onclick = () => api.open(view === k ? null : k)
   actBtn.serial.onclick = () => api.setPanel(!(panelOpen && panelTab === 'serial'), 'serial')
-  actBtn.trophy.onclick = () => trophyCb?.()
   closeBtn.onclick = () => api.open(null)
   gearBtn.onclick = (e) => {
     e.stopPropagation() // khung ⚙ đóng khi bấm ra ngoài: chính cú bấm mở không được tính là "ngoài"

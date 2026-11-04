@@ -233,3 +233,22 @@ test('dispose: chỉ dừng link phiên còn giữ — link đã giao cho phiên
   }
   assert.equal(link.state, 'stopped')
 })
+
+test('stepBlock: không có bo nào bước được (chưa nạp / đã dừng) ⇒ không tự tạm dừng phiên, ▶ không phải bấm hai lần', async () => {
+  const { link } = fakeLink(1_000_000)
+  const g = await GameSession.create({
+    mode: 'mission', seats: [{ cfg: MAKER, team: 'Em', driver: { kind: 'program', link } }], seed: 1, balls: false,
+  })
+  try {
+    await g.stepBlock()
+    assert.equal(g.paused, false, 'chưa nạp chương trình: ⏭ không làm gì')
+    link.load('code')
+    g.advance(PHYSICS_DT, 1)
+    link.stop()
+    await g.stepBlock()
+    assert.equal(g.paused, false, 'chương trình đã dừng: ⏭ không làm gì')
+    assert.ok(g.advance(PHYSICS_DT * 2, 1) > 0, 'sân vẫn chạy')
+  } finally {
+    g.dispose()
+  }
+})

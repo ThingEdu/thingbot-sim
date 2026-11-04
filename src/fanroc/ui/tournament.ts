@@ -137,8 +137,8 @@ export interface PitView {
   next: number | null
   /** "Đang chơi các trận máy…" khi đang chạy ngầm. */
   busy: string | null
-  /** Dòng báo (đã lưu chương trình / lỗi lưu giải). */
-  notes: { text: string; ok: boolean }[]
+  /** Dòng báo (đã lưu chương trình / lỗi lưu giải / trận máy lỗi kèm nút "Thử lại"). */
+  notes: { text: string; ok: boolean; retry?: { label: string; run: () => void } }[]
   /** Bạn của giải (nút Vào Xưởng). */
   players: { player: 0 | 1; name: string }[]
 }
@@ -467,6 +467,11 @@ export function createTournamentScreen(root: HTMLElement, act: TourActions): Tou
         const d = el('div', 'tn-note', n.text)
         d.dataset.ok = String(n.ok)
         d.setAttribute('role', n.ok ? 'status' : 'alert')
+        if (n.retry) {
+          const r = btn(n.retry.label, n.retry.run)
+          r.dataset.role = 'retry'
+          d.append(' ', r)
+        }
         nodes.push(d)
       }
       const st = el('div', 'tn-box')

@@ -39,7 +39,7 @@ import { createStore } from './store.ts'
 import { FANROC_2026 } from './season.ts'
 import { createShell, highlightCpp, serialNews, serialPatch, type InputKind, type SerialMark } from './ui/shell.ts'
 import { chrome, defaultCamera, type Screen } from './ui/router.ts'
-import { createHome, createPick, createPlaceholder, programText, robotName, type HomeInfo, type HomeItem } from './ui/home.ts'
+import { createHome, createPick, programText, robotName, type HomeInfo, type HomeItem } from './ui/home.ts'
 import { createRules } from './ui/rules.ts'
 import { createRobotsGallery, viewerCount } from './ui/robots-gallery.ts'
 import { fanrocRules } from './rules-data.ts'
@@ -104,7 +104,12 @@ async function start(): Promise<void> {
     PLAYERS.map((p) => ({ label: `${names[p]} · robot của em`, cfg: p === 0 ? settings.robot : settings.robot2 })),
   )
   const cfgOf = (p: Player): RobotConfig => editors.cfg(p)
-  const players = (): 1 | 2 => (settings.layout2p ? 2 : 1)
+  /**
+   * Số bạn của giải đang mở, chỉ áp khi ở màn của giải (R132): không ghi vào ⚙ › Hai bạn chơi của em; rời màn giải thì
+   * về lại cài đặt của em. null = không ở màn giải.
+   */
+  let tourLayout: 1 | 2 | null = null
+  const players = (): 1 | 2 => tourLayout ?? (settings.layout2p ? 2 : 1)
   const seats = new PadSeats()
 
   // ---------- Trạng thái màn ----------
@@ -218,15 +223,20 @@ async function start(): Promise<void> {
 
   /** Tên đội từng ghế của phiên đang chạy (bảng điểm: một lần tally mỗi nhịp). */
   let teamNames = TEAMS.slice()
+  /** Tên đội chỉ đổi khi phiên mới đã dựng xong (R130): phiên cũ còn vẽ bảng điểm thì vẫn đúng tên của nó. */
+  const named = (p: Promise<GameSession>, teams: string[]) =>
+    p.then((g) => {
+      teamNames = teams
+      return g
+    })
   const newGame = (s: number): Promise<GameSession> => {
     let mode: 'match' | 'practice' = 'practice'
     let list: SeatSpec[]
     let balls = true
     if (screen === 'mission' && mission) {
       // Một robot (ghế 0, R61) ở chỗ xuất phát của nhiệm vụ, sân cố định (R96), có bóng hay không theo nhiệm vụ.
-      teamNames = [names[0]]
       const seats = [{ cfg: mission.robot, team: names[0], driver: { kind: 'program', link: editors.link(0) } as Driver }]
-      return GameSession.create({ mode: 'mission', seed: MISSION_SEED, seats, balls: mission.balls, start: mission.start })
+      return named(GameSession.create({ mode: 'mission', seed: MISSION_SEED, seats, balls: mission.balls, start: mission.start }), [names[0]])
     }
     if ((screen === 'tmatch' || screen === 'treplay') && tour && tourIndex >= 0) {
       // Trận của giải: đội theo lịch bốc thăm (ghế SEATS), bạn lái robot của mình bằng chương trình khối, đội máy là
@@ -238,8 +248,7 @@ async function start(): Promise<void> {
           e.kind === 'player' && screen === 'tmatch' ? { kind: 'program', link: editors.link(e.player ?? 0) } : { kind: 'agent', skill: e.skill ?? 'medium' }
         return { cfg: e.robot, team: e.name, driver }
       })
-      teamNames = list.map((x) => x.team)
-      return GameSession.create({ mode: 'match', seed: matchSeed(t, tourIndex), seats: list })
+      return named(GameSession.create({ mode: 'match', seed: matchSeed(t, tourIndex), seats: list }), list.map((x) => x.team))
     }
     if (isMatch()) {
       mode = screen === 'practice' ? 'practice' : 'match'
@@ -257,8 +266,7 @@ async function start(): Promise<void> {
       // Màn chính / màn chờ: nền là 4 robot máy chơi luyện tập trên sân.
       list = [0, 1, 2, 3].map((i) => ({ cfg: defaultConfig('maker'), team: TEAMS[i], driver: { kind: 'agent', skill: 'medium' } }))
     }
-    teamNames = list.map((x) => x.team)
-    return GameSession.create({ mode, seed: s, seats: list, balls })
+    return named(GameSession.create({ mode, seed: s, seats: list, balls }), list.map((x) => x.team))
   }
 
   let game = await newGame(seed)
@@ -428,6 +436,8 @@ async function start(): Promise<void> {
    * một lúc; yêu cầu đến giữa chừng dồn thành một lần dựng lại ngay sau đó.
    */
   let restarting: Promise<void> | null = null
+  /** Phiên đang bị thay trong restart (đã tạm dừng): bảng điểm / ghi kết quả giải không xét nó. */
+  let replacing: GameSession | null = null
   let restartAgain = false
   const restart = (): Promise<void> => {
     if (restarting) {
@@ -440,7 +450,15 @@ async function start(): Promise<void> {
           restartAgain = false
           editors.stopAll()
           const old = game
-          game = await newGame(++seed)
+          // Phiên cũ đứng hẳn ngay (R126): trong lúc chờ dựng phiên mới, vòng khung hình không được chạy nó tới hết giờ
+          // (trận giải bỏ dở mà ghi kết quả, màn kết quả loé lên). Bảng điểm bỏ qua phiên đang bị thay.
+          old.pause()
+          replacing = old
+          try {
+            game = await newGame(++seed)
+          } finally {
+            replacing = null
+          }
           old.dispose()
           board.hideResult()
           board.clearFx()
@@ -587,7 +605,6 @@ async function start(): Promise<void> {
       home: () => (pick.hide(), home.show(homeInfo())),
     },
   )
-  const placeholder = createPlaceholder(overlay, () => void go('home'))
   // Làm quen đề thi (spec §6.7): thẻ Luật chơi do mùa giải cấp (§6.8: FANROC 2026–2027 ⇒ rules-data.ts).
   const rules = createRules(overlay, { season: FANROC_2026.name, cards: fanrocRules, home: () => void go('home') })
   // Robot mẫu ⇒ "Mở trong Xưởng": robot của bạn 1 đổi sang robot đó rồi vào Xưởng. Bản đang sửa dở ở Xưởng đã được giữ
@@ -785,7 +802,7 @@ async function start(): Promise<void> {
     if (mrun && !mrun.done && missionView) {
       mrun.press(missionView)
       finishMission()
-    } else if (!mrun) missionHud.goals(pendingGoals(mission), mission.kind === 'drive' ? 'Lái robot trước rồi bấm Chấm.' : 'Bấm ▶ để chạy trước đã.')
+    } else if (!mrun) missionHud.goals(pendingGoals(mission), mission.kind === 'drive' ? 'Bấm ▶, lái robot, rồi bấm Chấm.' : 'Bấm ▶ để chạy trước đã.')
   }
   const nextOf = (m: Mission) => MISSIONS[MISSIONS.indexOf(m) + 1] ?? null
   /** Lưu kết quả (sao tốt nhất không giảm), hiện màn sao. */
@@ -874,7 +891,7 @@ async function start(): Promise<void> {
     },
     sound: settings.sound,
     setSound: (v) => ((settings.sound = v), saveSettings()),
-    layout2p: settings.layout2p,
+    layout2p: players() === 2,
     layoutLocked: tourLocksLayout() ? TOUR_LAYOUT_LOCKED : undefined,
     setLayout2p: (v) => {
       // Giải đấu: số bạn (bố cục bàn phím) chốt lúc ghi danh — đổi giữa giải thì trận ghi với tay lái sai.
@@ -933,7 +950,6 @@ async function start(): Promise<void> {
     popover.close()
     home.hide()
     pick.hide()
-    placeholder.hide()
     rules.hide()
     gallery.hide()
     tScreen.hide()
@@ -943,6 +959,13 @@ async function start(): Promise<void> {
     scene.trail(null) // vệt chỉ có ở màn ②, vẽ lại từ khung sau
     const prevScreen = screen
     screen = next
+    // Rời màn giải (R132): bàn phím về đúng số bạn em chọn ở ⚙ (giải chỉ áp số bạn của nó khi đang ở màn giải).
+    const tourScreen = next === 'tournament' || next === 'tmatch' || next === 'treplay' || (next === 'workshop' && arg?.returnTo === 'tournament')
+    if (!tourScreen && tourLayout !== null) {
+      const before = players()
+      tourLayout = null
+      if (players() !== before) makePads()
+    }
     const c = chrome(next)
     shell.activity(c.activity)
     shell.runbarVisible(c.runbar)
@@ -1024,11 +1047,14 @@ async function start(): Promise<void> {
 
   // ---------- Giải đấu: các màn phủ sân, trận máy chạy ngầm, ghi kết quả ----------
   const tourPlayers = (t: TournamentState): 1 | 2 => (t.entrants.filter((e) => e.kind === 'player').length === 2 ? 2 : 1)
-  /** Số bạn của giải ⇒ bàn phím một bạn (solo) / chia đôi (left / right), như ⚙ › Hai bạn chơi. */
+  /**
+   * Số bạn của giải ⇒ bàn phím một bạn (solo) / chia đôi (left / right), như ⚙ › Hai bạn chơi — chỉ trong lúc ở màn
+   * của giải, không lưu vào cài đặt của em (R132; enter() trả lại khi rời màn giải).
+   */
   const setPlayersCount = (n: 1 | 2) => {
-    if (players() === n) return
-    settings.layout2p = n === 2
-    saveSettings()
+    const before = players()
+    tourLayout = n
+    if (players() === before) return
     makePads()
     showTabs()
   }
@@ -1039,7 +1065,11 @@ async function start(): Promise<void> {
     rows: standingRows(t, (e) => tourLabel(e.player ?? 0)),
     next: nextMatch(t),
     busy: machineBusy,
-    notes: [...(tourSaveFailed ? [{ text: SAVE_TOUR_FAILED, ok: false }] : []), ...(tourNote ? [tourNote] : [])],
+    notes: [
+      ...(tourSaveFailed ? [{ text: SAVE_TOUR_FAILED, ok: false }] : []),
+      ...(machineError ? [{ text: `Không chơi được trận máy: ${machineError}`, ok: false, retry: { label: 'Thử lại', run: retryMachines } }] : []),
+      ...(tourNote ? [tourNote] : []),
+    ],
     players: t.entrants.flatMap((e) => (e.kind === 'player' ? [{ player: e.player ?? 0, name: e.name }] : [])),
   })
   /** Vẽ màn giải đấu `v` (mặc định: màn đang hiện). Chỉ khi đang ở màn 'tournament'. */
@@ -1065,7 +1095,7 @@ async function start(): Promise<void> {
   /** Bốc thăm: giải mới từ phần ghi danh (robot của từng bạn lúc này), lưu ngay (đọc lại để chắc). */
   const drawTour = () => {
     tourToken++
-    machineFailed = false
+    machineError = null
     const seed = tourSeed ?? Math.floor(Math.random() * 2147483646) + 1
     tour = newTournament({ names, cfgs: [cfgOf(0), cfgOf(1)], players: reg.players, perTeam: reg.perTeam, seed })
     tourCorrupt = false
@@ -1101,16 +1131,21 @@ async function start(): Promise<void> {
   }
   /** Hết giờ trận giải có người chơi: ghi điểm đội + phạt theo ghế (như trận máy ngầm). Trận dở không bao giờ ghi. */
   const finishTourMatch = (m: GameSession['match']) => {
-    if (!tour || m !== game.match || m.phase !== 'end' || nextMatch(tour) !== tourIndex) return
+    if (!tour || game === replacing || m !== game.match || m.phase !== 'end' || nextMatch(tour) !== tourIndex) return
     const r = m.result()
     const teams = r.teams.map((t, k) => ({ score: t.score, penalty: penaltyPoints(m.pens[k], r.score.total) }))
     commitTour(tourIndex, played(seatIds(tour.schedule[tourIndex]), teams, r.score.total))
   }
-  /** Trận máy lỗi (không dựng được sân…): báo ở Pit, không chạy lại vòng vòng. */
-  let machineFailed = false
+  /** Trận máy lỗi (không dựng được sân…): báo ở Pit kèm "Thử lại" (R133), không tự chạy lại vòng vòng. */
+  let machineError: string | null = null
+  const retryMachines = () => {
+    machineError = null
+    runMachines()
+    showTour()
+  }
   /** Chạy ngầm các trận toàn máy từ trận kế tiếp (từng lát, sân / nút vẫn mượt) và ghi ngay khi xong. */
   const runMachines = () => {
-    if (machineRun || machineFailed || !tour || !pendingMachines(tour).length) return
+    if (machineRun || machineError !== null || !tour || !pendingMachines(tour).length) return
     const token = tourToken
     machineRun = true
     void (async () => {
@@ -1128,8 +1163,7 @@ async function start(): Promise<void> {
           commitTour(i, played(seatIds(t.schedule[i]), r.teams, r.match))
         }
       } catch (e) {
-        machineFailed = true
-        tourNote = { text: `Không chơi được trận máy: ${e instanceof Error ? e.message : String(e)}`, ok: false }
+        machineError = e instanceof Error ? e.message : String(e)
       } finally {
         machineRun = false
         machineBusy = null
@@ -1141,6 +1175,7 @@ async function start(): Promise<void> {
   // ---------- Bàn phím ----------
   const driving = () => isMatch() || screen === 'tmatch' || screen === 'workshop' || screen === 'mission' || (screen === 'tournament' && tScreen.view === 'keytest')
   document.addEventListener('keydown', (e) => {
+    // Esc khi ⚙ đang mở: settings.ts (đăng ký trước) đóng ⚙ và chặn sự kiện bằng stopImmediatePropagation (R128).
     if (popover.shown) return
     if (home.shown) {
       if (home.key(e)) e.preventDefault()
@@ -1229,8 +1264,9 @@ async function start(): Promise<void> {
       prevT = m.t
       resultShown = false
     }
-    // Màn không có bảng điểm (màn chính, Xưởng, nhiệm vụ): không tính điểm, không "ting".
-    if (!chrome(screen).scoreboard || game.mode === 'mission') return
+    // Màn không có bảng điểm (màn chính, Xưởng, nhiệm vụ): không tính điểm, không "ting". Phiên đang bị thay (Về chỗ
+    // cũ / đổi màn đang dựng phiên mới): không xét — kết quả của nó đã bỏ (R126).
+    if (!chrome(screen).scoreboard || game.mode === 'mission' || game === replacing) return
     const out = ticker.tick(now, m, game.robots, programs(), teamNames)
     if (out) {
       board.update(out.line, out.pops)
