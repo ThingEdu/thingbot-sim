@@ -52,6 +52,10 @@ export interface Editors {
   highlight(i: number, id: string | undefined): void
   /** Chữ trên khối (thanh trạng thái "Đang chạy khối: …"). */
   describe(i: number, id: string | undefined): string | null
+  /** Loại (opcode) của khối `id` trên vùng khối của thẻ i; null khi không có. */
+  blockType(i: number, id: string | undefined): string | null
+  /** Đổi hộp công cụ của thẻ i (nhiệm vụ: tập con khối; rời nhiệm vụ: TOOLBOX đầy đủ). */
+  setToolbox(i: number, toolbox: object): void
   /** Vùng khối của thẻ nào đó đổi, hoặc người dùng đổi thẻ (mã Arduino cần sinh lại). */
   onChange(cb: () => void): void
   /** Dừng mọi chương trình (trận mới). */
@@ -212,6 +216,8 @@ export function createEditors(container: HTMLElement, robots: { label: string; c
     warn: HTMLElement
     /** Bề rộng vùng khối lần vẽ trước (0 = đang ẩn: lần hiện ra đầu tiên cuộn về góc trên trái). */
     shownW: number
+    /** Hộp công cụ đang dùng. */
+    toolbox: object
   }
   const tabs: Tab[] = robots.map((r, i) => {
     const tab = el('button', undefined, r.label)
@@ -236,7 +242,7 @@ export function createEditors(container: HTMLElement, robots: { label: string; c
     container.append(panel)
 
     const { link } = board()
-    const t: Tab = { cfg: { ...r.cfg }, blocks: null as unknown as BlocksApi, link, tab, panel, status, error, warn, shownW: 0 }
+    const t: Tab = { cfg: { ...r.cfg }, blocks: null as unknown as BlocksApi, link, tab, panel, status, error, warn, shownW: 0, toolbox: TOOLBOX }
     link.onState = (s) => {
       status.textContent = STATUS[s]
       tab.dataset.err = String(s === 'error')
@@ -362,6 +368,21 @@ export function createEditors(container: HTMLElement, robots: { label: string; c
       tabs[i]?.blocks.highlight(id)
     },
     describe: (i, id) => tabs[i]?.blocks.describe(id) ?? null,
+    blockType: (i, id) => (id ? (tabs[i]?.blocks.workspace.getBlockById(id)?.type ?? null) : null),
+    setToolbox(i, toolbox) {
+      const t = tabs[i]
+      if (!t || t.toolbox === toolbox) return
+      t.toolbox = toolbox
+      // Khay khối liên tục của scratch-blocks dùng lại khối cũ theo loại (cả số đã đặt): đổi hộp công cụ mà không tắt
+      // thì «đợi» của hộp mới vẫn hiện 0.02 của hộp cũ, hai «đặt động cơ» lấy nhầm số của nhau.
+      const flyout = (t.blocks.workspace.getToolbox() as unknown as { getFlyout?(): { setRecyclingEnabled?(v: boolean): void } } | null)?.getFlyout?.()
+      flyout?.setRecyclingEnabled?.(false)
+      try {
+        t.blocks.setToolbox(toolbox)
+      } finally {
+        flyout?.setRecyclingEnabled?.(true)
+      }
+    },
     onChange(cb) {
       changeCbs.push(cb)
     },

@@ -12,6 +12,13 @@ import { defaultConfig, sample, TOOLBOX } from '../programs.ts'
 import { argumentReporter, MY_BLOCKS_CATEGORY, procedureCall, procedureState } from '../procedures.ts'
 import type { Goal, Mission } from './types.ts'
 
+/**
+ * Hạt giống sân của mọi nhiệm vụ (R96): cố định để mỗi lần làm lại, bóng xả xuống đúng như lần trước (nhiệm vụ 9–11
+ * có bóng) — ngưỡng ⭐ của nhiệm vụ 9 đo trên chính sân này: 38 bóng xanh trong Khu Chữa Cháy khi chạy trong Node, 40–41
+ * trên trình duyệt (bóng còn lăn vài khung trước khi em bấm ▶).
+ */
+export const MISSION_SEED = 2
+
 const MAKER = defaultConfig('maker') // Mẫu Maker 2 bánh: M1 bánh trái, M2 bánh phải
 const deg = (d: number) => (d * Math.PI) / 180
 
@@ -274,18 +281,22 @@ export const MISSIONS: Mission[] = [
   // ---------- Chặng 3 · Việc trên sân ----------
   {
     id: 'don-khu-chua-chay', stage: 3, n: 9, title: 'Dọn Khu Chữa Cháy',
-    goal: 'Lái robot đẩy hết bóng xanh ra khỏi Khu Chữa Cháy — ở đó chỉ nên có bóng cam.',
+    goal: 'Lái robot đẩy bóng xanh ra khỏi Khu Chữa Cháy, tới khi hai khu còn không quá 28 quả xanh (lúc đầu có khoảng 40 quả).',
     robot: MAKER, start: ROBOT1, balls: true, toolbox: TOOLBOX, starter: TELEOP, kind: 'drive', maxTime: 90,
     guide: [
       'Khu Chữa Cháy là hai ô vuông ở hai góc xa, phía Hộp Phân Phối. Bóng xanh nằm trong đó bị trừ điểm.',
       'Lái robot tới Khu Chữa Cháy, dùng thân xe đẩy bóng xanh ra ngoài vạch.',
+      'Đi sát rào, đẩy cả hàng bóng ra phía giữa sân: bóng nằm giữa robot và góc rào thì không ra được.',
       'Cẩn thận đừng đẩy bóng cam ra theo — bóng cam trong khu được cộng điểm.',
       'Em dừng lại suy nghĩ bao lâu cũng được. Làm xong việc thì robot đứng yên 1 giây là được chấm, hoặc em bấm Chấm.',
     ],
-    goals: [{ type: 'fireClear', max: 0 }, { type: 'measure', what: 'distance', min: 1 }],
+    // R96: sân đầy 300 bóng, quét dọc rào hai khu (đặt robot thẳng vào từng làn, không tính lúc quay xe) mất 21 s lái
+    // mà mới bớt từ 38 còn 24 quả (trình duyệt: 40 → 17…27); ba lượt (64 s) còn 13 — "không còn quả nào" trong 90 s là
+    // không làm được. ⭐ = còn ≤ 28: khoảng một lượt quét dọc rào.
+    goals: [{ type: 'fireClear', max: 28 }, { type: 'measure', what: 'distance', min: 1 }],
     stars: { two: [{ type: 'time', max: 60 }], three: [{ type: 'time', max: 40 }, { type: 'noMountain' }] },
     hints: [
-      { when: 'fireClear', text: 'Khu Chữa Cháy còn bóng xanh — đẩy nốt ra ngoài vạch nhé.' },
+      { when: 'fireClear', text: 'Khu Chữa Cháy còn nhiều bóng xanh quá — đi sát rào, đẩy cả hàng ra ngoài vạch nhé.' },
       { when: 'measure', text: 'Robot chưa tới Khu Chữa Cháy — khu ở góc xa, phía Hộp Phân Phối.' },
       { when: 'time', text: 'Xong rồi! Thử lại nhanh hơn: đi đường ngắn nhất, đẩy nhiều bóng một lần.' },
       { when: 'noMountain', text: 'Xong rồi! Thử lại mà không chạm núi.' },

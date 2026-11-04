@@ -5,7 +5,7 @@
 // tiên chưa đạt trong mức sao thấp nhất còn thiếu có câu gợi ý hợp tình huống; `{d}` thay bằng số (cm, độ hoặc điểm).
 import { procedureArgCount } from '../procedures.ts'
 import { scoreTally } from '../scoring.ts'
-import type { Pose } from '../layout.ts'
+import { mountainAt, type Pose } from '../layout.ts'
 import type { Goal, GradeResult, HintWhen, Mission, RunRecord } from './types.ts'
 
 /** Robot đứng yên bao lâu (s) thì coi là đã dừng hẳn (R57 a). */
@@ -36,7 +36,33 @@ export function programBlocks(program: object | null): Blk[] {
   return out
 }
 
+/** «lặp mãi» (event_whenarduinoloop) không có khối nào nối bên dưới (hoặc không có khối đó). */
+export function loopEmpty(program: object | null): boolean {
+  const all = (program as { blocks?: { blocks?: Blk[] } } | null)?.blocks?.blocks ?? []
+  return !all.some((b) => b.type === 'event_whenarduinoloop' && b.next?.block)
+}
+
+/**
+ * R95: robot đang đứng yên có chủ đích — khối sắp chạy của bo ảo (`RobotLink.block`) là «đợi» trong lúc chương trình
+ * còn chạy. Riêng khi khởi động đã xong (`phase` 'loop') mà «lặp mãi» rỗng thì bo ảo giữ mãi khối cuối đã chạy (có
+ * thể là một «đợi» đã hết), nên không tính. `blockType` = loại của khối đó (null: không có / không tìm thấy).
+ */
+export function restWaits(blockType: string | null | undefined, phase: string | undefined, emptyLoop: boolean): boolean {
+  if (blockType !== 'control_wait') return false
+  if (phase === 'setup') return true
+  return phase === 'loop' && !emptyLoop
+}
+
 // ---------- Hình học ----------
+/**
+ * Thân robot chạm hình bao chân núi: một trong bốn góc hay bốn điểm giữa cạnh của `footprint` (RobotBody.footprint())
+ * nằm trong chân một núi. Dùng chung cho bộ chấm trên sân (grade.test.ts) và màn nhiệm vụ.
+ */
+export function touchesMountain(c: readonly { x: number; z: number }[]): boolean {
+  const pts = [...c, ...c.map((p, i) => ({ x: (p.x + c[(i + 1) % c.length].x) / 2, z: (p.z + c[(i + 1) % c.length].z) / 2 }))]
+  return pts.some((p) => mountainAt(p.x, p.z) >= 0)
+}
+
 const toRad = (d: number) => (d * Math.PI) / 180
 /** Hiệu góc ngắn nhất a − b, độ, trong (−180, 180]. */
 const angleDiff = (a: number, b: number): number => {
@@ -161,17 +187,19 @@ export type RunState = {
   lastMoveTime: number
   /** Học sinh vừa bấm Dừng / Chấm. */
   pressed: boolean
+  /** R95: chương trình đang ở khối «đợi» (`restWaits`) — nhiệm vụ lập trình không chấm vì đứng yên. */
+  waiting?: boolean
 }
 export type GradeReason = 'pressed' | 'maxTime' | 'rest'
 
 /**
- * Đã tới lúc chấm chưa (R57 + R59; hợp đồng đầy đủ ở RunRecord, types.ts): trả lý do, hoặc null nếu chạy tiếp.
+ * Đã tới lúc chấm chưa (R57 + R59 + R95; hợp đồng đầy đủ ở RunRecord, types.ts): trả lý do, hoặc null nếu chạy tiếp.
  * `record` chỉ được gọi khi cần (nhiệm vụ lái đứng yên: xét các điều kiện ⭐ trên trạng thái hiện tại).
  */
 export function shouldGrade(m: Mission, s: RunState, record: () => RunRecord): GradeReason | null {
   if (s.pressed) return 'pressed'
   if (s.elapsed >= m.maxTime - 1e-9) return 'maxTime'
   if (m.kind === 'match' || !s.hasMoved || s.elapsed - s.lastMoveTime < REST_S) return null
-  if (m.kind === 'program') return 'rest'
+  if (m.kind === 'program') return s.waiting ? null : 'rest'
   return grade(m, record()).done ? 'rest' : null
 }

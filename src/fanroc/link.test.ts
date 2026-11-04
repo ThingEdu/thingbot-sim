@@ -243,3 +243,17 @@ test('step() quá hạn không có trả lời ⇒ xong và rời hàng chờ; t
   await p
   link.stop()
 })
+
+test('phase: pha của bo ảo (setup / loop) theo ảnh chụp mới nhất; nạp lại ⇒ chưa biết (R95)', () => {
+  const { link, sent } = setup()
+  link.load('a')
+  assert.equal(link.phase, undefined)
+  link.start()
+  const shot = (phase: string) => ({ type: 'snapshot', run: runOf(sent), snapshot: { pwm: pwm({}), running: true, phase }, bus: {} }) as unknown as Message
+  link.receive(shot('setup'))
+  assert.equal(link.phase, 'setup')
+  link.receive(shot('loop'))
+  assert.equal(link.phase, 'loop')
+  link.load('b')
+  assert.equal(link.phase, undefined)
+})

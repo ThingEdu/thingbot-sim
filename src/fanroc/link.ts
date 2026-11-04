@@ -47,6 +47,9 @@ export class RobotLink {
   serialLines = 0
   /** Thời gian ảo của bo (µs, `snapshot.t`). */
   virtualT = 0
+  /** Pha của chương trình theo ảnh chụp mới nhất: 'setup' (khởi động), 'loop' (lặp mãi), 'halted'; undefined khi chưa
+   *  có ảnh chụp nào của lần nạp này. Màn nhiệm vụ dùng để biết robot có đang ở khối «đợi» không (R95). */
+  phase: string | undefined = undefined
   onError?: (message: string) => void
   onState?: (state: LinkState) => void
 
@@ -83,6 +86,7 @@ export class RobotLink {
     this.serialChars = 0
     this.serialLines = 0
     this.virtualT = 0
+    this.phase = undefined
     this.error = null
     this.settle()
     this.pending.push({ kind: 'load' })
@@ -159,6 +163,7 @@ export class RobotLink {
       }
       if (s.block !== undefined) this.block = s.block
       if (typeof s.t === 'number') this.virtualT = s.t
+      if (s.phase !== undefined) this.phase = s.phase
       if (s.error) this.fail(s.error)
       else this.pwm = s.pwm
       // Snapshot `running: false` = trả lời lệnh load / pause / step cũ nhất (nhịp chạy gửi `running: true`; riêng

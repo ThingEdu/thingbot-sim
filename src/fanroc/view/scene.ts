@@ -9,6 +9,7 @@ import type { RobotBody } from '../robot.ts'
 import type { Match } from '../match.ts'
 import { servo360, type PortValues } from '../ports.ts'
 import { FLAG_LEN, buildRobotModel, makeFlag, type RobotModel } from './robotModels.ts'
+import { TRAIL_COLORS, type Trail } from '../trail.ts'
 import mesh from '../assets/mountain-mesh.json' with { type: 'json' }
 
 /** Ba góc chọn được ở ⚙ (`field | follow | driver`) và `orbit`: quay chậm quanh sân, nền của màn chính. */
@@ -24,6 +25,11 @@ export interface FanrocScene {
    */
   sync(world: FanrocWorld, robots: RobotBody[], match: Match, ports?: readonly PortValues[]): void
   camera(view: CameraView, robot?: number): void
+  /**
+   * Vệt robot (chỉ màn nhiệm vụ con rùa gọi): mỗi đoạn một dải phẳng sát mặt thảm (y = 0,002), màu TRAIL_COLORS;
+   * `path` = đường gợi ý trắng nét đứt. `null` xoá cả vệt lẫn đường gợi ý. Gọi mỗi khung được: chỉ dựng lại đoạn có thêm điểm.
+   */
+  trail(segments: Trail['segments'] | null, path?: { x: number; z: number }[]): void
   quality(q: Quality): void
   dispose(): void
 }
@@ -334,6 +340,96 @@ export function createScene(el: HTMLElement): FanrocScene {
   })
   const dropped: THREE.Group[] = []
 
+  // Vệt con rùa + đường gợi ý (nhiệm vụ), sát mặt thảm. Nét WebGL (THREE.Line) chỉ dày 1 px — nhìn toàn sân gần như
+  // không thấy — nên vẽ thành dải phẳng (R98): vệt rộng 1,4 cm, đường gợi ý trắng nét đứt 0,8 cm (gạch 4 cm, hở 3 cm).
+  const TRAIL_Y = 0.002
+  const TRAIL_W = 0.014
+  const PATH_W = 0.008
+  const DASH = { on: 0.04, off: 0.03 }
+  const trailGroup = new THREE.Group()
+  scene.add(trailGroup)
+  const flat = (color: number, opacity = 1) =>
+    new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, transparent: true, opacity, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 })
+  const trailMats = TRAIL_COLORS.map((c) => flat(c))
+  const pathMat = flat(0xffffff, 0.9)
+  /** Đỉnh của dải phẳng rộng `w` theo đường gấp khúc (mỗi đoạn một hình chữ nhật, đầu nối chồng lên nhau). */
+  const ribbon = (pts: { x: number; z: number }[], w: number, pos: number[] = []): number[] => {
+    for (let k = 0; k + 1 < pts.length; k++) {
+      const a = pts[k]
+      const b = pts[k + 1]
+      const len = Math.hypot(b.x - a.x, b.z - a.z)
+      if (len < 1e-6) continue
+      // Pháp tuyến ngang, kéo dài mỗi đầu nửa bề rộng để chỗ gấp không hở.
+      const nx = (-(b.z - a.z) / len) * (w / 2)
+      const nz = ((b.x - a.x) / len) * (w / 2)
+      const ex = ((b.x - a.x) / len) * (w / 2)
+      const ez = ((b.z - a.z) / len) * (w / 2)
+      const p0 = [a.x - ex + nx, a.z - ez + nz]
+      const p1 = [a.x - ex - nx, a.z - ez - nz]
+      const p2 = [b.x + ex - nx, b.z + ez - nz]
+      const p3 = [b.x + ex + nx, b.z + ez + nz]
+      for (const [x, z] of [p0, p1, p2, p0, p2, p3]) pos.push(x, TRAIL_Y, z)
+    }
+    return pos
+  }
+  /** Các gạch của đường gợi ý nét đứt. */
+  const dashes = (pts: { x: number; z: number }[]): { x: number; z: number }[][] => {
+    const out: { x: number; z: number }[][] = []
+    for (let k = 0; k + 1 < pts.length; k++) {
+      const a = pts[k]
+      const b = pts[k + 1]
+      const len = Math.hypot(b.x - a.x, b.z - a.z)
+      for (let d = 0; d < len; d += DASH.on + DASH.off) {
+        const e = Math.min(len, d + DASH.on)
+        const at = (u: number) => ({ x: a.x + ((b.x - a.x) * u) / len, z: a.z + ((b.z - a.z) * u) / len })
+        out.push([at(d), at(e)])
+      }
+    }
+    return out
+  }
+  const meshOf = (pos: number[], m: THREE.Material) => {
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+    const o = new THREE.Mesh(g, m)
+    o.renderOrder = 1
+    o.frustumCulled = false
+    trailGroup.add(o)
+    return o
+  }
+  const drop = (o: THREE.Mesh) => {
+    trailGroup.remove(o)
+    o.geometry.dispose()
+  }
+  const trailMeshes: { mesh: THREE.Mesh; n: number }[] = []
+  let pathMeshes: THREE.Mesh[] = []
+  let pathOf: { x: number; z: number }[] | undefined
+  function setTrail(segments: Trail['segments'] | null, path?: { x: number; z: number }[]): void {
+    if (!segments) {
+      for (const t of trailMeshes) drop(t.mesh)
+      trailMeshes.length = 0
+      for (const o of pathMeshes) drop(o)
+      pathMeshes = []
+      pathOf = undefined
+      return
+    }
+    if (path !== pathOf) {
+      for (const o of pathMeshes) drop(o)
+      pathOf = path
+      // Một hình cho mọi gạch: dải của từng gạch nối vào một bộ đỉnh.
+      const pos: number[] = []
+      if (path && path.length >= 2) for (const d of dashes(path)) ribbon(d, PATH_W, pos)
+      pathMeshes = pos.length ? [meshOf(pos, pathMat)] : []
+    }
+    // Vệt đã xoá (lần chạy mới) ⇒ bỏ các đoạn thừa; đoạn nào có thêm điểm thì dựng lại hình của đoạn đó.
+    while (trailMeshes.length > segments.length) drop(trailMeshes.pop()!.mesh)
+    segments.forEach((seg, i) => {
+      const t = trailMeshes[i]
+      if (t && t.n === seg.points.length) return
+      if (t) drop(t.mesh)
+      trailMeshes[i] = { mesh: meshOf(ribbon(seg.points, TRAIL_W), trailMats[seg.color % trailMats.length]), n: seg.points.length }
+    })
+  }
+
   const robotViews: RobotView[] = []
   let built: RobotBody[] | null = null
   let view: CameraView = 'field'
@@ -556,10 +652,13 @@ export function createScene(el: HTMLElement): FanrocScene {
       } else goal = null
     },
     quality: setQuality,
+    trail: setTrail,
     dispose() {
       ro.disconnect()
       controls.dispose()
       // Lưới / vật liệu dùng chung (núi, robot, bóng) chỉ giải phóng một lần.
+      setTrail(null)
+      for (const m of [...trailMats, pathMat]) m.dispose()
       disposeTree(scene)
       renderer.dispose()
       renderer.domElement.remove()

@@ -1,8 +1,9 @@
 /**
  * Trang ThingBot FanRoc Game: vỏ giao diện kiểu VS Code (ui/shell.ts) quanh sân 3D và các màn của game (ui/router.ts):
  * màn chính kiểu game (ui/home.ts, mở trang là vào đây), Trước trận (chọn robot như chọn đội), Trận lẻ / Đấu tập, Xưởng
- * lập trình (ui/workshop.ts); Nhiệm vụ và Giải đấu tạm là màn chờ (Task 14 / 15). `go(screen, arg?)` đổi màn và dựng
- * lại phiên chơi (GameSession, game.ts) của màn đó; trang chỉ khởi tạo, nối nút và vẽ.
+ * lập trình (ui/workshop.ts), Nhiệm vụ con rùa (ui/missions.ts: danh sách ①, làm nhiệm vụ ② có vệt, số đo, chấm ⭐);
+ * Giải đấu tạm là màn chờ (Task 15). `go(screen, arg?)` đổi màn và dựng lại phiên chơi (GameSession, game.ts) của màn
+ * đó; trang chỉ khởi tạo, nối nút và vẽ. Vệt robot chỉ có ở màn ② (`scene.trail`; màn khác xoá vệt).
  *
  * Người chơi và ghế: bạn 1 (và bạn 2 khi "Hai bạn chơi") mỗi bạn một thẻ khối (editors tab 0 / 1), một bo ThingBot ảo,
  * một tay PS2 ảo = tay cầm thật thứ p (R26) gộp với bàn phím (`mergePad`; một bạn dùng cả bàn phím, hai bạn chia đôi).
@@ -22,9 +23,13 @@ import { PadSeats, PS2_NEUTRAL, type SeatStatus } from './gamepad.ts'
 import { KeyPad, layoutFor, mergePad, typing } from './keys.ts'
 import { effectiveSpeed } from './pace.ts'
 import { configControls, createEditors, workerCount } from './editor.ts'
-import { defaultConfig, sample } from './programs.ts'
+import { defaultConfig, sample, TOOLBOX } from './programs.ts'
 import { NEUTRAL } from './ports.ts'
-import { MISSIONS } from './missions/data.ts'
+import { MISSION_SEED, MISSIONS } from './missions/data.ts'
+import { grade, loopEmpty, restWaits } from './missions/grade.ts'
+import { MissionRun, type RunView } from './missions/run.ts'
+import type { Mission } from './missions/types.ts'
+import { PHYSICS_DT } from './world.ts'
 import { createScene, defaultQuality, type CameraView, type Quality } from './view/scene.ts'
 import { createHud, deadZoneLines } from './view/hud.ts'
 import { countdownCue, createScoreboard, programLabel, resultView, ScoreTicker } from './ui/scoreboard.ts'
@@ -37,6 +42,7 @@ import { createHome, createPick, createPlaceholder, programText, robotName, type
 import { assignSeat, createSettings, defaultSeats, playerSeat, seatOf, seatOptions, type SeatMode, type SettingsCtx } from './ui/settings.ts'
 import { createWorkshopBar, Drafts, resetVerified, saveVerified, sameProgram } from './ui/workshop.ts'
 import { createRobotCards, type CardInfo } from './ui/robotcard.ts'
+import { createMissionHud, createMissionList, mergeProgress, missionCards, pendingGoals, renderSideList, saveMissionVerified, totalStars } from './ui/missions.ts'
 
 const shell = createShell(document.querySelector<HTMLElement>('#app')!)
 const stage = shell.stage
@@ -52,6 +58,10 @@ const SPEEDS = [1, 4, 40]
 const CAMERAS: CameraView[] = ['field', 'follow', 'driver']
 const PLAYERS = [0, 1] as const
 type Player = 0 | 1
+/** Thẻ thử thách tự tích ✓ trong lúc chạy: chấm thử tối đa chừng này lần mỗi giây (đếm bóng tốn). */
+const PREVIEW_HZ = 4
+/** Lưu chương trình đang làm của nhiệm vụ sau khi vùng khối thôi đổi chừng này ms. */
+const MISSION_SAVE_MS = 1000
 
 const CSS = `
 .sh-serial { margin: 0; white-space: pre-wrap; word-break: break-all; font: inherit; color: #d4d4d4; }
@@ -89,6 +99,13 @@ async function start(): Promise<void> {
   let pickPlayer: Player = 0
   /** Xưởng: chương trình của bạn nào. */
   let wsPlayer: Player = 0
+  /** Màn ②: nhiệm vụ đang làm; lần chạy từ ▶ (null: chưa chạy / vừa Về chỗ cũ). */
+  let mission: Mission | null = null
+  let mrun: MissionRun | null = null
+  /** «lặp mãi» của chương trình lúc ▶ rỗng (R95). */
+  let mEmptyLoop = true
+  /** Nhiệm vụ trận (nhiệm vụ 12): đang chơi ở màn Trận lẻ với robot máy mức Dễ, chấm khi hết giờ. */
+  let matchMission: Mission | null = null
   /** Ai lái từng ghế ở trận lẻ / đấu tập (R27); vào trận ⇒ về mặc định theo liên minh / mức máy / số bạn. */
   let modes: SeatMode[] = defaultSeats(settings.alliance, settings.skill, players())
   const followers: ({ link: ReturnType<typeof editors.follow>['link']; dispose(): void } | null)[] = [null, null, null, null]
@@ -113,6 +130,7 @@ async function start(): Promise<void> {
   /** Ghế của bạn p ở màn này (−1: bạn đó không lái robot nào). */
   const seatOfPlayer = (p: Player): number => {
     if (screen === 'workshop') return p === wsPlayer ? seatOf(p, settings.alliance) : -1
+    if (screen === 'mission') return p === 0 ? 0 : -1
     return isMatch() ? playerSeat(modes, p) : -1
   }
   /** Ghế camera "Theo robot" bám theo: robot của bạn đang mở thẻ khối, không có thì Robot 1. */
@@ -141,6 +159,12 @@ async function start(): Promise<void> {
     let mode: 'match' | 'practice' = 'practice'
     let list: SeatSpec[]
     let balls = true
+    if (screen === 'mission' && mission) {
+      // Một robot (ghế 0, R61) ở chỗ xuất phát của nhiệm vụ, sân cố định (R96), có bóng hay không theo nhiệm vụ.
+      teamNames = [names[0]]
+      const seats = [{ cfg: mission.robot, team: names[0], driver: { kind: 'program', link: editors.link(0) } as Driver }]
+      return GameSession.create({ mode: 'mission', seed: MISSION_SEED, seats, balls: mission.balls, start: mission.start })
+    }
     if (isMatch()) {
       mode = screen === 'practice' ? 'practice' : 'match'
       list = [0, 1, 2, 3].map((i) => ({ cfg: seatCfg(i), team: seatTeam(i), driver: seatDriver(i) }))
@@ -192,6 +216,7 @@ async function start(): Promise<void> {
     editors.tabs(
       PLAYERS.map((p) => {
         // Xưởng: chỉ thẻ của bạn đang sửa (Chạy / Lưu cùng tác động lên một chương trình).
+        if (screen === 'mission') return p === 0 && mission ? `${names[0]} · Nhiệm vụ ${mission.n}` : null
         const used = screen === 'workshop' ? p === wsPlayer : p === 0 || players() === 2 || modes.some((m) => modeOwner(m) === p)
         return used ? `${names[p]} · ${robotName(cfgOf(p))}` : null
       }),
@@ -276,9 +301,17 @@ async function start(): Promise<void> {
   const expose = () => {
     ;(window as unknown as { __fanroc: unknown }).__fanroc = {
       world: game.world, robots: game.robots, match: game.match, humans: game.humans, setSpeed, editors, session: game, shell, store,
-      go: (s: Screen, arg?: { player?: Player }) => go(s, arg),
+      go: (s: Screen, arg?: { player?: Player; id?: string }) => go(s, arg),
       get screen() {
         return screen
+      },
+      /** Vệt của lần chạy nhiệm vụ (chỉ màn ②; màn khác null — không có vệt ngoài nhiệm vụ). */
+      get trail() {
+        return screen === 'mission' ? (mrun?.trail ?? null) : null
+      },
+      /** Nhiệm vụ đang làm và kết quả chấm của lần chạy (null: chưa chấm). */
+      get mission() {
+        return screen === 'mission' && mission ? { id: mission.id, result: mrun?.result ?? null, reason: mrun?.reason ?? null } : null
       },
       mySeat, keypads: () => keypads, workers: workerCount,
       pause: () => setPaused(true), resume: () => setPaused(false), stepBlock: () => stepBlock(),
@@ -318,7 +351,9 @@ async function start(): Promise<void> {
                 ? 'Đấu tập: không xả bóng, không hết giờ — robot của em chạy ngay'
                 : 'Trận mới: robot của em chạy chương trình khi hết 10 giây xả bóng',
             )
+            if (matchMission && screen === 'match') game.match.log(`Nhiệm vụ ${matchMission.n} · ${matchMission.title}: chơi hết trận cùng ba robot máy mức Dễ`)
           }
+          if (screen === 'mission') missionReady()
           expose()
           scene.camera(cam, mySeat())
         } while (restartAgain)
@@ -368,6 +403,7 @@ async function start(): Promise<void> {
   const handlers = {
     run() {
       if (game.paused) return setPaused(false)
+      if (screen === 'mission') return void startMission()
       const p = editors.active as Player
       editors.run(p)
       // Trận lẻ: bạn đó chưa lái robot nào ⇒ ngồi ô của mình (thấy ngay ở ⚙ › Nâng cao).
@@ -378,7 +414,10 @@ async function start(): Promise<void> {
     },
     pause: () => setPaused(true),
     step: () => void stepBlock(),
-    stop: () => editors.stop(editors.active),
+    stop: () => {
+      if (screen === 'mission') pressMission() // Dừng giữa lần chạy nhiệm vụ = bấm Chấm (R57 b)
+      editors.stop(editors.active)
+    },
     reset: () => void restart(),
     download: () => editors.download(editors.active),
     camera() {
@@ -393,7 +432,7 @@ async function start(): Promise<void> {
     robot: robotName(cfgOf(0)),
     program: label(0),
     player: names[0],
-    stars: profile.stars,
+    stars: totalStars(store),
     missions: { done: MISSIONS.filter((m) => store.mission(m.id).done).length, total: MISSIONS.length },
   })
   const overlay = document.body
@@ -442,6 +481,7 @@ async function start(): Promise<void> {
     },
   )
   const placeholder = createPlaceholder(overlay, () => void go('home'))
+  const missionList = createMissionList(overlay, { open: (id) => void go('mission', { id }), home: () => void go('home') })
   shell.onHome(() => void go('home'))
 
   // ---------- Xưởng lập trình ----------
@@ -532,6 +572,112 @@ async function start(): Promise<void> {
     }
   })
 
+  // ---------- Nhiệm vụ con rùa (màn ②) ----------
+  const missionHud = createMissionHud(stage, { grade: () => pressMission(), list: () => void go('missions') })
+  /** Robot ghế 0 và trận của phiên `g` nhìn từ lần chạy nhiệm vụ. */
+  const viewOf = (g: GameSession): RunView => ({
+    get pose() {
+      return g.robots[0].pose
+    },
+    get ports() {
+      return g.ports[0] ?? NEUTRAL
+    },
+    get events() {
+      return g.match.events
+    },
+    footprint: () => g.robots[0].footprint(),
+    tally: () => g.match.tally(),
+  })
+  let missionView: RunView | null = null
+  const showSide = () => {
+    if (mission) renderSideList(shell.side.missions, missionCards(store), mission.id, (id) => void go('mission', { id }))
+  }
+  /** Phiên nhiệm vụ mới vừa dựng (vào màn, ▶, Về chỗ cũ): chưa có lần chạy, vệt xoá, mục tiêu chưa tích. */
+  const missionReady = () => {
+    if (!mission) return
+    mrun = null
+    scene.trail(null)
+    missionView = viewOf(game)
+    game.onStep = missionStep
+    missionHud.hideResult()
+    missionHud.goals(pendingGoals(mission), null)
+  }
+  /** ▶ ở màn ②: robot về chỗ xuất phát, vệt xoá, rồi chạy chương trình đang có trên vùng khối. */
+  const startMission = async () => {
+    if (!mission) return
+    await restart()
+    if (screen !== 'mission' || !mission || !missionView) return
+    const program = editors.program(0)
+    mEmptyLoop = loopEmpty(program)
+    mrun = new MissionRun(mission, program, missionView)
+    editors.run(0)
+  }
+  /** Mỗi bước vật lý của phiên nhiệm vụ: ghi vệt, xét lúc chấm (R57/R59/R95). */
+  const missionStep = (g: GameSession) => {
+    if (g !== game || !mission || !mrun || mrun.done || !missionView) return
+    const link = editors.link(0)
+    const waiting = mission.kind === 'program' && restWaits(editors.blockType(0, link.block), link.phase, mEmptyLoop)
+    if (mrun.step(missionView, PHYSICS_DT, waiting)) finishMission()
+  }
+  /** Bấm Chấm / Dừng giữa lần chạy: chấm ngay. */
+  const pressMission = () => {
+    if (screen === 'mission' && mrun && !mrun.done && missionView) {
+      mrun.press(missionView)
+      finishMission()
+    }
+  }
+  const nextOf = (m: Mission) => MISSIONS[MISSIONS.indexOf(m) + 1] ?? null
+  /** Lưu kết quả (sao tốt nhất không giảm), hiện màn sao. */
+  const showGraded = (m: Mission, r: ReturnType<typeof grade>, program: object | null) => {
+    const prev = store.mission(m.id)
+    const next = mergeProgress(prev, r, program)
+    const saved = saveMissionVerified(store, m.id, next)
+    if (saved.ok) {
+      profile.stars = totalStars(store)
+      store.saveProfile(profile)
+    }
+    if (r.done) sound.ting()
+    const after = nextOf(m)
+    missionHud.result(r, saved.ok ? next.stars : prev.stars, saved.ok ? { ok: true, text: 'Đã lưu tiến độ' } : saved, {
+      retry: () => (m.kind === 'match' ? void go('mission', { id: m.id }) : void startMission()),
+      list: () => void go('missions'),
+      next: after ? () => void go('mission', { id: after.id }) : undefined,
+    })
+  }
+  const finishMission = () => {
+    if (!mission || !mrun?.result) return
+    editors.stop(0)
+    missionHud.goals(mrun.result.goals, mrun.result.hint)
+    showGraded(mission, mrun.result, editors.program(0))
+    showSide()
+  }
+  /** Nhiệm vụ trận: chấm khi hết giờ trên điểm và nhật ký của trận. */
+  const finishMatchMission = (m: Mission) => {
+    const seat = Math.max(0, playerSeat(modes, 0))
+    const r = grade(m, {
+      start: m.start, end: game.robots[seat].pose, trail: { distance: 0, turned: 0, time: 0 }, touchedMountain: false,
+      events: [...game.match.events], tally: game.match.tally(), program: null,
+    })
+    showGraded(m, r, store.mission(m.id).program)
+  }
+  // Chương trình đang làm của nhiệm vụ: lưu sau khi vùng khối thôi đổi 1 s (đọc lại để chắc đã lưu).
+  let mSaveTimer = 0
+  const saveMissionProgram = () => {
+    clearTimeout(mSaveTimer)
+    mSaveTimer = 0
+    if (screen !== 'mission' || !mission) return
+    const prev = store.mission(mission.id)
+    const program = editors.program(0)
+    if (sameProgram(prev.program, program)) return
+    const r = saveMissionVerified(store, mission.id, { ...prev, program })
+    missionHud.note(r.ok ? null : 'Không lưu được chương trình — trình duyệt đang chặn bộ nhớ. Tải .tb về máy để giữ.')
+  }
+  editors.onChange(() => {
+    if (screen !== 'mission' || !mission) return
+    clearTimeout(mSaveTimer)
+    mSaveTimer = window.setTimeout(saveMissionProgram, MISSION_SAVE_MS)
+  })
+
   // ---------- ⚙ ----------
   const stControls = PLAYERS.map((p) => configControls(() => cfgOf(p), (cfg) => editors.setConfig(p, cfg)))
   const reopen = () => popover.open(settingsCtx())
@@ -607,10 +753,15 @@ async function start(): Promise<void> {
   /** Phần giao diện của màn (không dựng lại phiên). */
   const enter = (next: Screen, arg?: { player?: Player }) => {
     captureDraft() // rời Xưởng (kể cả đổi bạn): giữ bản đang sửa
+    if (screen === 'mission' && mSaveTimer) saveMissionProgram() // rời nhiệm vụ: lưu ngay bản đang làm
     popover.close()
     home.hide()
     pick.hide()
     placeholder.hide()
+    missionList.hide()
+    if (next !== 'mission') missionHud.hide()
+    mrun = null
+    scene.trail(null) // vệt chỉ có ở màn ②, vẽ lại từ khung sau
     screen = next
     const c = chrome(next)
     shell.activity(c.activity)
@@ -622,11 +773,20 @@ async function start(): Promise<void> {
     keypads.forEach((k) => k.releaseAll())
     editors.stopAll()
     if (isMatch()) {
-      modes = defaultSeats(settings.alliance, settings.skill, players())
+      modes = defaultSeats(settings.alliance, matchMission ? 'easy' : settings.skill, players())
       clearFollowers()
       for (const p of PLAYERS) if (playerSeat(modes, p) >= 0) editors.load(p, programFor(p))
     } else clearFollowers()
-    if (next === 'workshop') {
+    // Nhiệm vụ: hộp công cụ của nhiệm vụ; màn khác: hộp công cụ đầy đủ.
+    editors.setToolbox(0, next === 'mission' && mission ? mission.toolbox : TOOLBOX)
+    if (next === 'mission' && mission) {
+      const prog = store.mission(mission.id)
+      editors.load(0, prog.program ?? mission.starter ?? sample(mission.robot, 'teleop'))
+      editors.show(0)
+      wsBar.hide()
+      shell.open('blocks')
+      missionHud.show(mission, prog.stars)
+    } else if (next === 'workshop') {
       wsPlayer = players() === 2 ? (arg?.player ?? 0) : 0
       loadWorkshop()
       editors.show(wsPlayer)
@@ -645,22 +805,34 @@ async function start(): Promise<void> {
   const shown = (next: Screen) => {
     scene.camera(cam, mySeat())
     if (next === 'home') home.show(homeInfo())
-    else if (next === 'missions' || next === 'mission' || next === 'tournament') placeholder.show(next)
+    else if (next === 'missions') missionList.show(missionCards(store))
+    else if (next === 'mission') showSide()
+    else if (next === 'tournament') placeholder.show(next)
   }
   let going = Promise.resolve()
-  const go = (next: Screen, arg?: { player?: Player }): Promise<void> => {
+  /** Đổi màn; 'mission' cần `arg.id` (thiếu ⇒ nhiệm vụ vừa làm). Nhiệm vụ trận (12) mở màn Trận lẻ, robot máy mức Dễ. */
+  const go = (next: Screen, arg?: { player?: Player; id?: string }): Promise<void> => {
     going = going
       .then(async () => {
-        enter(next, arg)
+        let to = next
+        // Dựng lại Trận lẻ đang chơi nhiệm vụ trận (⚙ đổi liên minh…) thì vẫn là nhiệm vụ đó; vào Trận lẻ khác thì không.
+        let mm = next === 'match' && screen === 'match' ? matchMission : null
+        if (next === 'mission') {
+          const m = MISSIONS.find((x) => x.id === arg?.id) ?? mission ?? MISSIONS[0]
+          if (m.kind === 'match') ((to = 'match'), (mm = m))
+          else mission = m
+        }
+        matchMission = mm
+        enter(to, arg)
         await restart()
-        shown(next)
+        shown(to)
       })
       .catch((e) => console.error('Không đổi màn được:', e))
     return going
   }
 
   // ---------- Bàn phím ----------
-  const driving = () => isMatch() || screen === 'workshop'
+  const driving = () => isMatch() || screen === 'workshop' || screen === 'mission'
   document.addEventListener('keydown', (e) => {
     if (popover.shown) return
     if (home.shown) {
@@ -687,7 +859,8 @@ async function start(): Promise<void> {
 
   // ---------- Mỗi khung ----------
   /** Tay PS2 ảo của bạn p ở khung này: tay thật (khi có tín hiệu) thắng bàn phím. */
-  const padOf = (p: Player, real: (Record<string, number> | null)[]) => mergePad(real[p] ?? null, keypads[p]?.state(cfgOf(p).drive) ?? PS2_NEUTRAL)
+  const padOf = (p: Player, real: (Record<string, number> | null)[]) =>
+    mergePad(real[p] ?? null, keypads[p]?.state((screen === 'mission' && mission ? mission.robot : cfgOf(p)).drive) ?? PS2_NEUTRAL)
   const inputOf = (p: Player, status: SeatStatus[]): 'Bàn phím' | 'Tay PS2' => (status[p] === 'ok' && !keypads[p]?.active() ? 'Tay PS2' : 'Bàn phím')
 
   /** Thanh chạy + thanh trạng thái + tô khối, theo thẻ đang mở. */
@@ -765,12 +938,14 @@ async function start(): Promise<void> {
           again: () => void restart(),
           home: () => void go('home'),
         })
+        if (matchMission && screen === 'match') finishMatchMission(matchMission)
       }
     }
     prevT = m.t
   }
 
   let last = performance.now()
+  let lastPreview = 0
   const frame = (now: number) => {
     const { pads, status } = seats.read()
     for (const p of PLAYERS) editors.input(p, padOf(p, pads))
@@ -780,6 +955,16 @@ async function start(): Promise<void> {
     if (now > last) fps += (1000 / (now - last) - fps) * 0.05
     last = now
     if (chrome(screen).live) game.advance(dt, speed, { steps: MAX_STEPS * Math.max(1, speed), ms: STEP_BUDGET_MS })
+    if (screen === 'mission' && mission) {
+      // Vệt + đường gợi ý, ô số đo, thẻ thử thách tự tích ✓ (chấm thử ≤ PREVIEW_HZ lần/giây).
+      const tr = mrun?.trail
+      scene.trail(tr ? tr.segments : [], mission.path)
+      missionHud.measure(tr ? { distance: tr.distance, turned: tr.turned, time: tr.time } : { distance: 0, turned: 0, time: 0 })
+      if (mrun && !mrun.done && missionView && now - lastPreview >= 1000 / PREVIEW_HZ) {
+        lastPreview = now
+        missionHud.goals(mrun.preview(missionView).goals, null)
+      }
+    }
     scene.sync(game.world, game.robots, game.match, game.ports)
     hud.update(game.match, game.robots, game.cfgs, game.ports)
     showBoard(now)

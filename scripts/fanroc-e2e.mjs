@@ -2,7 +2,7 @@
  * Phép thử đầu-cuối của sân FANROC trên trình duyệt thật (Playwright, lấy từ checkout ThingBlock như ftc-e2e.mjs
  * của nhánh spike/ursim).
  *
- *   npm run e2e:fanroc                 # tự bật Vite dev trên một cổng trống, chạy N3–N6, N6b–N6d, N2c (màn chính / ⚙ / Xưởng Task 13), N1, N1b, N1c (vỏ Task 11), N2, N2b (bảng điểm Task 12) và E1–E11 (E5 bỏ qua), tắt Vite
+ *   npm run e2e:fanroc                 # tự bật Vite dev trên một cổng trống, chạy N3–N6, N6b–N6d, N2c (màn chính / ⚙ / Xưởng Task 13), N7, N8 (nhiệm vụ Task 14), N1, N1b, N1c (vỏ Task 11), N2, N2b (bảng điểm Task 12) và E1–E11 (E5 bỏ qua), tắt Vite
  *   FANROC_URL=http://localhost:5191/mo-phong/fanroc.html npm run e2e:fanroc   # dùng trang đang chạy sẵn
  *   npm run e2e:fanroc -- E3 E5        # chỉ chạy các phép thử có tên bắt đầu như vậy
  *
@@ -16,6 +16,7 @@ import { createServer } from 'node:net'
 import { mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { ZONES } from '../src/fanroc/layout.ts'
+import { straight, turtle } from '../src/fanroc/missions/solutions.ts'
 
 const ROOT = resolve(import.meta.dirname, '..')
 const THINGBLOCK = resolve(process.env.THINGBLOCK_EDITOR ?? resolve(ROOT, '../thingblock-editor-sim'))
@@ -226,6 +227,7 @@ async function main() {
   console.log(`Trang: ${URL_}`)
   browser = await chromium.launch({ args: ['--use-angle=metal', '--ignore-gpu-blocklist'] })
   await gameTests()
+  await missionTests()
   await shellTests()
 
   await test('E1 trang tải, không lỗi console, tiêu đề và chữ bảng điểm tiếng Việt', async (page) => {
@@ -534,6 +536,88 @@ async function main() {
     const t3 = await page.evaluate(() => window.__fanroc.match.t)
     expect((await linkState(page, 0)) === 'running' && t3 - t2 > 0.2, `chạy tiếp: ${t2.toFixed(2)} → ${t3.toFixed(2)} s`)
     return `đứng ${t0.toFixed(2)} s · từng khối ${jumps.map((d) => d.toFixed(2)).join(' ')} s · chạy tiếp +${(t3 - t2).toFixed(2)} s`
+  })
+}
+
+// ---------- Phép thử nhiệm vụ con rùa (Task 14) ----------
+/** Mở danh sách nhiệm vụ từ ô Nhiệm vụ của màn chính. */
+async function missionList(page) {
+  await page.locator('.hm-tile[data-tile="missions"]').click()
+  await page.locator('.hm[data-screen="missions"] .ml-card').first().waitFor()
+}
+async function missionTests() {
+  await test('N7 nhiệm vụ 2: danh sách → thẻ 2, lời giải mẫu ▶ ⇒ trong 5 s mục tiêu đầu ✓, có vệt; Trận lẻ ⇒ không vệt', async (page) => {
+    await open(page)
+    await missionList(page)
+    const cards = await page.locator('.hm[data-screen="missions"] .ml-card').count()
+    const stages = await page.locator('.hm[data-screen="missions"] .ml-stage h2').allInnerTexts()
+    expect(cards === 12 && stages.length === 4, `${cards} thẻ, ${stages.length} chặng`)
+    const c2 = page.locator('.hm[data-screen="missions"] .ml-card[data-n="2"]')
+    const t2 = await c2.locator('h3').innerText()
+    expect(t2 === '2 – Đi thẳng' && (await c2.locator('.ml-diff i').count()) === 5, `thẻ 2: "${t2}"`)
+    expect(!(await page.locator('.hm[data-screen="missions"] button').allInnerTexts()).some((t) => /\p{Extended_Pictographic}/u.test(t)), 'nút có emoji')
+    await shot(page, 't14-list.png')
+    await c2.click()
+    await page.waitForFunction(() => window.__fanroc.screen === 'mission' && window.__fanroc.mission?.id === 'di-thang')
+    expect((await page.evaluate(() => window.__fanroc.robots.length)) === 1, 'nhiệm vụ: không phải 1 robot (R61)')
+    expect(await page.locator('[data-side="blocks"]').isVisible(), 'khung Khối không mở sẵn')
+    expect((await page.evaluate(() => window.__fanroc.trail)) === null, 'chưa ▶ đã có vệt')
+    await page.evaluate((state) => window.__fanroc.editors.load(0, state), straight(0.9))
+    const t0 = Date.now()
+    await runBtn(page, 'Chạy').click()
+    await page.waitForFunction(() => document.querySelector('.mi-card li')?.dataset.ok === 'true', null, { timeout: 5000 })
+    const firstOk = (Date.now() - t0) / 1000
+    const segs = await page.evaluate(() => window.__fanroc.trail?.segments.length ?? 0)
+    expect(segs >= 1, `vệt có ${segs} đoạn`)
+    await page.waitForFunction(() => window.__fanroc.mission?.result, null, { timeout: 10000 })
+    const r = await page.evaluate(() => ({ ...window.__fanroc.mission }))
+    expect(r.reason === 'rest' && r.result.stars >= 2, `chấm: ${r.reason}, ${r.result.stars} sao`)
+    // Ra Trận lẻ: không có vệt nào.
+    await go(page, 'match')
+    await page.waitForTimeout(400)
+    const trail = await page.evaluate(() => window.__fanroc.trail)
+    expect(trail === null, 'Trận lẻ vẫn có vệt')
+    expect(await page.locator('.mi').isHidden(), 'phần phủ nhiệm vụ còn hiện ở Trận lẻ')
+    return `mục tiêu đầu ✓ sau ${firstOk.toFixed(1)} s · ${segs} đoạn vệt · chấm "${r.reason}" ${r.result.stars} sao · Trận lẻ: trail null`
+  })
+
+  await test('N8 nhiệm vụ 7: lời giải mẫu đạt ≥ 2 sao, màn sao; tải lại trang ⇒ thẻ 7 vẫn ✓ và số sao', async (page) => {
+    await open(page)
+    await page.evaluate(() => window.__fanroc.go('mission', { id: 'hinh-vuong' }))
+    await page.waitForFunction(() => window.__fanroc.mission?.id === 'hinh-vuong')
+    expect(await page.locator('.mi-meas').isVisible(), 'nhiệm vụ 7 không có ô số đo')
+    await page.locator('.mi button[data-role="guide"]').click()
+    const g1 = await page.locator('.mi-guide p').innerText()
+    await page.locator('.mi-guide button', { hasText: 'Tiếp' }).click()
+    const g2 = await page.locator('.mi-guide p').innerText()
+    expect(g1 && g2 && g1 !== g2, 'HƯỚNG DẪN không trượt sang bước 2')
+    await page.locator('.mi-guide button', { hasText: 'Đóng' }).click()
+    await page.evaluate((state) => window.__fanroc.editors.load(0, state), turtle(0.72, 131))
+    await runBtn(page, 'Chạy').click()
+    await page.waitForFunction(() => window.__fanroc.mission?.result, null, { timeout: 45000 })
+    const r = await page.evaluate(() => ({ ...window.__fanroc.mission }))
+    expect(r.result.stars >= 2, `${r.result.stars} sao (${r.reason})`)
+    const card = page.locator('.mi-res-card')
+    await card.waitFor()
+    expect(Number(await card.getAttribute('data-stars')) === r.result.stars, 'màn sao sai số sao')
+    expect(/Đã lưu tiến độ/.test(await card.innerText()), 'màn sao không báo đã lưu')
+    await page.waitForTimeout(900) // sao hiện xong
+    await shot(page, 't14-stars.png')
+    await card.locator('button', { hasText: 'Xem lại vệt' }).click()
+    const meas = await page.locator('.mi-meas').innerText()
+    expect(/m/.test(meas) && /°/.test(meas), `ô số đo: ${meas}`)
+    await shot(page, 't14-mission.png')
+    // Tải lại: tiến độ còn trong localStorage.
+    await page.reload()
+    await open(page)
+    await missionList(page)
+    const c7 = page.locator('.hm[data-screen="missions"] .ml-card[data-n="7"]')
+    const done = await c7.getAttribute('data-done')
+    const stars = Number(await c7.getAttribute('data-stars'))
+    expect(done === 'true' && (await c7.locator('.ok').count()) === 1 && stars >= 2, `thẻ 7 sau tải lại: done=${done}, ${stars} sao`)
+    const lit = await c7.locator('.ml-stars svg[data-on="true"]').count()
+    expect(lit === stars, `thẻ 7 sáng ${lit} sao`)
+    return `${r.result.stars} sao (${r.reason}) · ô số đo "${meas.replace(/\n/g, ' ')}" · sau tải lại thẻ 7: ✓ ${stars} sao`
   })
 }
 

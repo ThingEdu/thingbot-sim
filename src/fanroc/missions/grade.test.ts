@@ -9,8 +9,9 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
-import { MISSIONS } from './data.ts'
-import { grade, shouldGrade, type RunState } from './grade.ts'
+import { MISSION_SEED, MISSIONS } from './data.ts'
+import { straight, turtle } from './solutions.ts'
+import { grade, loopEmpty, restWaits, shouldGrade, touchesMountain, type RunState } from './grade.ts'
 import type { Goal, Mission, RunRecord } from './types.ts'
 import { TOOLBOX_OPCODES } from '../programs.ts'
 import { argumentReporter, procedureCall, procedureState } from '../procedures.ts'
@@ -22,6 +23,8 @@ import { Match } from '../match.ts'
 import { MATCH_S } from '../layout.ts'
 import { RobotBody } from '../robot.ts'
 import { Trail } from '../trail.ts'
+import { GameSession } from '../game.ts'
+import { NEUTRAL } from '../ports.ts'
 import type { Command, Message } from '../../sim-worker.ts'
 
 const ROOT = resolve(import.meta.dirname, '../../..')
@@ -81,19 +84,6 @@ const defs = (...states: object[]) => states.map((s) => (s as { blocks: { blocks
 const prog = (begin: B[], extra: B[] = []) => ({
   blocks: { languageVersion: 0, blocks: [{ type: 'event_whenarduinobegin', x: 30, y: 30, next: { block: chain([{ type: 'thingBotC3_init' }, ...begin]) } }, { type: 'event_whenarduinoloop', x: 30, y: 500 }, ...extra] },
 })
-
-/**
- * Lời giải mẫu nhiệm vụ 7 (và bản sửa của nhiệm vụ 8): «tiến (mét)» và «rẽ trái (độ)» chia cho đúng số đo của nhiệm
- * vụ 4 ở tốc độ 60 (0,275 m/s; 131 °/s), «lặp lại 4».
- */
-const turtle = (side: number, degPerS: number) =>
-  prog(
-    [repeat(4, [procedureCall('tiến', [side]) as B, procedureCall('rẽ trái', [90]) as B])],
-    defs(
-      procedureState('tiến', ['mét'], [motor(1, 'forward', 60), motor(2, 'forward', 60), wait(div(argumentReporter('mét') as B, 0.275)), motor(1, 'forward', 0), motor(2, 'forward', 0), wait(0.3)]),
-      procedureState('rẽ trái', ['độ'], [motor(1, 'backward', 60), motor(2, 'forward', 60), wait(div(argumentReporter('độ') as B, degPerS)), motor(1, 'forward', 0), motor(2, 'forward', 0), wait(0.3)]),
-    ),
-  )
 
 // ---------- Bản ghi giả ----------
 const at = (p: Pose, dx: number, dz = 0, dyaw = 0): Pose => ({ x: p.x + dx, z: p.z + dz, yaw: p.yaw + dyaw })
@@ -163,10 +153,7 @@ async function runOnField(m: Mission, state: object): Promise<RunRecord & { grad
       robot.apply(ports, PHYSICS_DT)
       world.step(PHYSICS_DT)
       trail.add(k * PHYSICS_DT, robot.pose, ports)
-      // Bốn góc và điểm giữa bốn cạnh của thân xe.
-      const c = robot.footprint()
-      const pts = [...c, ...c.map((p, i) => ({ x: (p.x + c[(i + 1) % 4].x) / 2, z: (p.z + c[(i + 1) % 4].z) / 2 }))]
-      if (pts.some((p) => mountainAt(p.x, p.z) >= 0)) touched = true
+      if (touchesMountain(robot.footprint())) touched = true
       const reason = shouldGrade(m, { elapsed: trail.time, hasMoved: trail.hasMoved, lastMoveTime: trail.lastMoveTime, pressed: false }, () => {
         throw new Error('nhiệm vụ lập trình không cần bản ghi để quyết lúc chấm')
       })
@@ -340,9 +327,9 @@ test('đỗ xe (nhiệm vụ 11): một phần ⇒ 1 sao, toàn phần ⇒ 2 sao
 
 test('dọn Khu Chữa Cháy (nhiệm vụ 9) và trận đầu (nhiệm vụ 12) đọc tally', () => {
   const m9 = byN(9)
-  const dirty = { ...emptyTally(), fire: { o: 3, g: 1 } }
+  const dirty = { ...emptyTally(), fire: { o: 3, g: 29 } }
   assert.equal(grade(m9, record(m9, { tally: dirty })).done, false)
-  assert.equal(grade(m9, record(m9, { tally: { ...dirty, fire: { o: 3, g: 0 } }, trail: { distance: 3, turned: 0, time: 40 } })).stars, 3)
+  assert.equal(grade(m9, record(m9, { tally: { ...dirty, fire: { o: 3, g: 28 } }, trail: { distance: 3, turned: 0, time: 40 } })).stars, 3)
   const m12 = byN(12)
   const end = [{ t: 180, robot: null, text: 'Hết giờ — điểm trận 400' }]
   const tally = { ...emptyTally(), fire: { o: 80, g: 0 } }
@@ -451,4 +438,97 @@ test('shouldGrade (R59): nhiệm vụ lái bàn phím đứng yên chỉ chấm 
   assert.equal(shouldGrade(m1, st({ pressed: true }), half), 'pressed')
   assert.equal(shouldGrade(m1, st({ elapsed: m1.maxTime }), half), 'maxTime')
   for (const n of [1, 9, 10]) assert.equal(byN(n).kind, 'drive')
+})
+
+// ---------- Chạm núi (dùng chung với màn nhiệm vụ) ----------
+test('touchesMountain: góc hay điểm giữa cạnh thân xe trong hình bao chân núi ⇒ chạm', () => {
+  const box = (cx: number, cz: number, h = 0.12) => [
+    { x: cx - h, z: cz - h }, { x: cx + h, z: cz - h }, { x: cx + h, z: cz + h }, { x: cx - h, z: cz + h },
+  ]
+  assert.equal(touchesMountain(box(-0.9, 0.95)), false, 'góc sân, xa núi')
+  const a = holeCentres()[0]
+  assert.equal(touchesMountain(box(a.x, a.z)), true, 'đứng trên Núi A')
+  // Chỉ điểm giữa cạnh trên lọt vào chân núi (hai góc ở hai bên ngoài): thân xe 1 m rộng trùm qua mép dưới Núi A.
+  const foot = 0.3727 + 0.2045 // mép gần Khu Điều Khiển của Núi A (xấp xỉ, núi xoay −10,8°)
+  const wide = [{ x: -0.376 - 0.5, z: foot - 0.03 }, { x: -0.376 + 0.5, z: foot - 0.03 }, { x: -0.376 + 0.5, z: foot + 0.3 }, { x: -0.376 - 0.5, z: foot + 0.3 }]
+  assert.ok(wide.every((p) => mountainAt(p.x, p.z) < 0), 'bốn góc đều ngoài núi')
+  assert.equal(touchesMountain(wide), true, 'điểm giữa cạnh trong chân núi')
+})
+
+// ---------- R95: robot đang đợi có chủ đích ----------
+const loopProg = (loop: B[]) => ({
+  blocks: { languageVersion: 0, blocks: [{ type: 'event_whenarduinobegin', x: 0, y: 0 }, { type: 'event_whenarduinoloop', x: 0, y: 300, ...(loop.length ? { next: { block: chain(loop) } } : {}) }] },
+})
+
+test('loopEmpty: «lặp mãi» không có khối nào nối bên dưới', () => {
+  assert.equal(loopEmpty(loopProg([])), true)
+  assert.equal(loopEmpty(loopProg([wait(1)])), false)
+  assert.equal(loopEmpty(SOLVED), true)
+  assert.equal(loopEmpty(null), true)
+  assert.equal(loopEmpty({ blocks: { blocks: [{ type: 'event_whenarduinobegin' }] } }), true, 'không có khối lặp')
+})
+
+test('restWaits (R95): khối sắp chạy là «đợi» khi chương trình còn chạy ⇒ đang đợi có chủ đích', () => {
+  assert.equal(restWaits('control_wait', 'setup', true), true)
+  assert.equal(restWaits('control_wait', 'loop', false), true, 'đợi trong vòng lặp')
+  // Khởi động đã xong, vòng lặp rỗng: bo ảo giữ mãi khối cuối đã chạy (có thể là «đợi») — không phải đang đợi.
+  assert.equal(restWaits('control_wait', 'loop', true), false)
+  assert.equal(restWaits('thingBotC3_setMotor', 'setup', true), false)
+  assert.equal(restWaits(null, 'setup', true), false)
+  assert.equal(restWaits('control_wait', 'halted', false), false, 'bo ảo dừng vì lỗi')
+  assert.equal(restWaits('control_wait', undefined, true), false, 'chưa có ảnh chụp nào')
+})
+
+test('shouldGrade (R95): nhiệm vụ lập trình đang ở khối «đợi» thì không chấm vì đứng yên; bấm Chấm / hết giờ vẫn chấm', () => {
+  const st = (o: Partial<RunState>): RunState => ({ elapsed: 5, hasMoved: true, lastMoveTime: 3, pressed: false, ...o })
+  const never = () => {
+    throw new Error('không được dựng bản ghi')
+  }
+  const p = byN(4)
+  assert.equal(shouldGrade(p, st({ waiting: true }), never), null)
+  assert.equal(shouldGrade(p, st({ waiting: false }), never), 'rest')
+  assert.equal(shouldGrade(p, st({ waiting: true, pressed: true }), never), 'pressed')
+  assert.equal(shouldGrade(p, st({ waiting: true, elapsed: p.maxTime }), never), 'maxTime')
+  // Nhiệm vụ lái: `waiting` không đổi luật R59.
+  const m1 = byN(1)
+  assert.equal(shouldGrade(m1, { elapsed: 20, hasMoved: true, lastMoveTime: 10, pressed: false, waiting: true }, () => record(m1)), 'rest')
+})
+
+
+test('nhiệm vụ 2 có lời giải: M1 = M2 = 60, đợi 0,9 s, dừng ⇒ ≥ 2 sao, chấm khi robot đứng yên trước 5 s', async (t) => {
+  const m = byN(2)
+  const r = await runOnField(m, straight(0.9))
+  const g = grade(m, r)
+  t.diagnostic(`cuối z = ${r.end.z.toFixed(3)}, ${g.stars} sao, chấm lúc ${r.gradedAt.toFixed(2)} s (${r.why})`)
+  assert.equal(r.why, 'rest')
+  assert.ok(r.gradedAt < 5, `chấm lúc ${r.gradedAt}`)
+  assert.ok(g.stars >= 2, `${g.stars} sao: ${JSON.stringify(g.goals)}`)
+})
+
+test('nhiệm vụ 9 (R96): sân MISSION_SEED có 38 bóng xanh trong Khu Chữa Cháy; một lượt quét dọc rào đạt ⭐ (≤ 28)', async (t) => {
+  const m = byN(9)
+  const g = await GameSession.create({ mode: 'mission', seed: MISSION_SEED, seats: [{ cfg: m.robot, team: 'Em', driver: { kind: 'program', link: new RobotLink(() => {}) } }], balls: true, start: m.start })
+  try {
+    const before = g.match.tally().fire.g
+    const max = (m.goals.find((x) => x.type === 'fireClear') as { max: number }).max
+    assert.ok(before >= max + 8, `lúc đầu chỉ ${before} bóng xanh — ⭐ quá dễ`)
+    // Mỗi làn: đặt robot sát rào trong khu, chạy thẳng hết tốc 0,75 m ra phía giữa sân (ba làn dọc, ba làn ngang mỗi khu).
+    const D = Math.PI / 180
+    const zone0 = [
+      ...[-1.07, -0.9, -0.74].map((z) => ({ x: -1.08, z, yaw: -90 * D })),
+      ...[-1.07, -0.9, -0.74].map((x) => ({ x, z: -1.08, yaw: 180 * D })),
+    ]
+    const r = g.robots[0]
+    let s = 0
+    for (const lane of [...zone0, ...zone0.map((l) => ({ x: -l.x, z: l.z, yaw: -l.yaw }))]) {
+      r.setPose(lane)
+      while (Math.hypot(r.pose.x - lane.x, r.pose.z - lane.z) < 0.75 && s < 60) (g.match.step(PHYSICS_DT, [{ ...NEUTRAL, M1: 100, M2: 100 }]), (s += PHYSICS_DT))
+      for (let k = 0; k < 0.3 / PHYSICS_DT; k++) (g.match.step(PHYSICS_DT, [NEUTRAL]), (s += PHYSICS_DT))
+    }
+    const after = g.match.tally().fire.g
+    t.diagnostic(`${before} → ${after} bóng xanh sau ${s.toFixed(1)} s lái`)
+    assert.ok(after <= max, `một lượt còn ${after} bóng xanh (⭐ cần ≤ ${max})`)
+  } finally {
+    g.dispose()
+  }
 })
