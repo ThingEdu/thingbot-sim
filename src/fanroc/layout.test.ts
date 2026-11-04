@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import mesh from './assets/mountain-mesh.json' with { type: 'json' }
 import {
   BALL_R, DISPENSER, FIELD, HOLE, MOUNTAIN_FOOT, MOUNTAINS, PEAK_Y, START_POSES, TIERS, TIER_GROOVE, WALL_H, ZONES,
-  fromMountain, mountainAt, toMountain, type Rect,
+  fromMountain, holeCentres, mountainAt, toMountain, type Rect,
 } from './layout.ts'
 
 const w = (r: Rect) => r.x1 - r.x0
@@ -106,4 +106,15 @@ test('hai robot mỗi liên minh xuất phát trong Khu Xuất Phát, quay mặt
     assert.equal(START_POSES[a].length, 2)
     for (const p of START_POSES[a]) { assert.ok(inside(p.x, p.z, ZONES.start[a])); assert.equal(p.yaw, 0) }
   }
+})
+
+test('holeCentres(): một lỗ cờ mỗi núi (A..D), lệch đúng HOLE (lx, lz) khỏi tâm chân trong hệ núi', () => {
+  const hs = holeCentres()
+  assert.equal(hs.length, MOUNTAINS.length)
+  hs.forEach((h, i) => {
+    assert.equal(mountainAt(h.x, h.z), i)
+    const p = toMountain(MOUNTAINS[i], h.x, h.z)
+    near(p.lx, HOLE.lx, 1e-12)
+    near(p.lz, HOLE.lz, 1e-12)
+  })
 })

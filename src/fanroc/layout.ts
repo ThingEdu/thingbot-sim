@@ -81,6 +81,11 @@ export function toMountain(m: { x: number; z: number; yaw: number }, x: number, 
   return { lx: dx * c - dz * s, lz: dx * s + dz * c }
 }
 
+/** Tâm miệng lỗ cờ của từng núi (chỉ số = núi A..D) trên mặt sân; nguồn duy nhất cho vật lý, cảnh 3D và nhiệm vụ. */
+export function holeCentres(): { x: number; z: number }[] {
+  return MOUNTAINS.map((m) => fromMountain(m, HOLE.lx, HOLE.lz))
+}
+
 /** Chỉ số núi có hình bao chân chứa điểm (x, z), hoặc -1. */
 export function mountainAt(x: number, z: number): number {
   return MOUNTAINS.findIndex((m) => {

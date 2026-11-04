@@ -1,7 +1,7 @@
 // Thế giới vật lý FANROC (Rapier 3D): sàn, rào, 4 Ngọn Núi (lưới tam giác CAD), 300 bóng xả từ Hộp Phân Phối.
 // Chạy được cả trong Node (phép thử, không đồ hoạ) lẫn trình duyệt. Mọi nhiễu lấy từ PRNG theo `seed`.
 import RAPIER from '@dimforge/rapier3d-compat'
-import { BALL_R, DISPENSER, FIELD, HOLE, MOUNTAINS, PEAK_Y, TIERS, TIER_GROOVE, WALL_H, WALL_T, ZONES, fromMountain, mountainAt, type Rect } from './layout.ts'
+import { BALL_R, DISPENSER, FIELD, MOUNTAINS, PEAK_Y, TIERS, TIER_GROOVE, WALL_H, WALL_T, ZONES, holeCentres, mountainAt, type Rect } from './layout.ts'
 import type { FieldTally } from './scoring.ts'
 import mesh from './assets/mountain-mesh.json' with { type: 'json' }
 
@@ -208,7 +208,7 @@ export class FanrocWorld {
 
   /** Tâm miệng lỗ cờ của từng núi (A..D) theo CAD, ở cao độ PEAK_Y. */
   holeCentres(): Vec3[] {
-    return MOUNTAINS.map((m) => ({ ...fromMountain(m, HOLE.lx, HOLE.lz), y: PEAK_Y }))
+    return holeCentres().map((h) => ({ ...h, y: PEAK_Y }))
   }
 
   /** Chỉ số núi có hình bao chân (CAD 0.414 × 0.409, theo hệ núi) chứa điểm (x, z), hoặc -1. */

@@ -3,7 +3,7 @@
 // Toạ độ cảnh = toạ độ sân (m): gốc tâm sân, +x sang phải nhìn từ Khu Điều Khiển, +z về Khu Điều Khiển, y lên.
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { BALL_R, FIELD, HOLE, MOUNTAINS, PEAK_Y, TIERS, WALL_H, WALL_T, ZONES, fromMountain, type Rect } from '../layout.ts'
+import { BALL_R, FIELD, HOLE, MOUNTAINS, PEAK_Y, TIERS, WALL_H, WALL_T, ZONES, holeCentres, type Rect } from '../layout.ts'
 import type { FanrocWorld } from '../world.ts'
 import type { RobotBody } from '../robot.ts'
 import type { Match } from '../match.ts'
@@ -320,9 +320,8 @@ export function createScene(el: HTMLElement): FanrocScene {
   const lastX = new Float32Array(300)
 
   // Cờ đã cắm trên núi (A..D) và cờ rơi trên sàn của từng robot.
-  const planted = MOUNTAINS.map((m) => {
+  const planted = holeCentres().map((c) => {
     const f = makeFlag()
-    const c = fromMountain(m, HOLE.lx, HOLE.lz)
     f.position.set(c.x, PEAK_Y - HOLE.depth, c.z)
     f.visible = false
     scene.add(f)

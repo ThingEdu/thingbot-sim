@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import RAPIER from '@dimforge/rapier3d-compat'
 import { FanrocWorld, PHYSICS_DT, type Vec3 } from './world.ts'
-import { BALL_R, DISPENSER, FIELD, MOUNTAINS, PEAK_Y, TIERS, TIER_GROOVE, WALL_T, ZONES, fromMountain } from './layout.ts'
+import { BALL_R, DISPENSER, FIELD, MOUNTAINS, PEAK_Y, TIERS, TIER_GROOVE, WALL_T, ZONES, fromMountain, holeCentres } from './layout.ts'
 
 const run = (w: FanrocWorld, seconds: number) => {
   for (let k = 0; k < Math.round(seconds / PHYSICS_DT); k++) w.step(PHYSICS_DT)
@@ -224,4 +224,13 @@ test('trayBall: bóng trên sân vào khay (xoá body); bóng ở trạng thái 
   w.removeBall(2)
   w.trayBall(2) // đang giữ trong robot
   assert.equal(w.balls[2].st, 'held')
+})
+
+test('world.holeCentres() là holeCentres() của layout ở cao độ đỉnh núi (một nguồn cho vật lý, cảnh, nhiệm vụ)', async () => {
+  const w = await FanrocWorld.create(1)
+  try {
+    assert.deepEqual(w.holeCentres(), holeCentres().map((h) => ({ ...h, y: PEAK_Y })))
+  } finally {
+    w.rapier.free()
+  }
 })
