@@ -4,18 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="only light" />
-    <title>FANROC Thanh Hỏa · ThingBot Sim</title>
+    <title>ThingBot FanRoc Game</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <main class="layout">
-      <!-- Vùng khối lệnh -->
-      <section id="blocks" aria-label="Khối lệnh"></section>
-      <!-- Sân 3D -->
-      <section id="arena" aria-label="Sân FANROC"></section>
-      <!-- Điểm, giờ, trạng thái -->
-      <aside id="hud" aria-label="Bảng điểm"></aside>
-    </main>
+    <!-- Vỏ giao diện kiểu VS Code (src/fanroc/ui/shell.ts) dựng ở đây. Mã nguồn AGPL-3.0: liên kết ở thanh trạng thái. -->
+    <div id="app">Sân đang tải…</div>
     <script type="module" src="/src/fanroc/main.ts"></script>
   </body>
 </html>

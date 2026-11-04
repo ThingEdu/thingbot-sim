@@ -100,7 +100,8 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
   return e
 }
 
-export function createHud(root: HTMLElement): Hud {
+/** `log`: chỗ đặt thẻ nhật ký trận nếu khác `root` (vỏ giao diện: thẻ "Sự kiện trận" của khung đáy). */
+export function createHud(root: HTMLElement, opts: { log?: HTMLElement } = {}): Hud {
   injectCss()
   root.classList.add('fr-hud')
   root.replaceChildren()
@@ -130,7 +131,9 @@ export function createHud(root: HTMLElement): Hud {
   logBox.setAttribute('aria-live', 'polite')
   logCard.append(el('h2', undefined, 'Nhật ký trận'), logBox)
 
-  root.append(board, robotCard, teamCard, logCard)
+  root.append(board, robotCard, teamCard)
+  if (opts.log) opts.log.append(logCard)
+  else root.append(logCard)
 
   let selected = 0
   let shownEvents = 0

@@ -1,18 +1,22 @@
 /**
- * Trang FANROC Thanh Hỏa (giao diện cũ tối thiểu, Task 11 dựng vỏ game mới): sân 3D, vùng khối ThingBlock thật cho
- * Robot 1 và Robot 2 (mỗi robot một bo ThingBot ảo), tay cầm làm bộ thu PS2, Human Player tự động, agent đồng đội cho
- * robot không có người lái. Vòng lặp trận nằm trong GameSession (game.ts); trang chỉ khởi tạo, nối nút và vẽ.
+ * Trang ThingBot FanRoc Game: vỏ giao diện kiểu VS Code (ui/shell.ts) quanh sân 3D, vùng khối ThingBlock thật cho
+ * Robot 1 và Robot 2 (mỗi robot một bo ThingBot ảo) trong khung bên "Khối", mã Arduino chỉ xem trong khung "Mã
+ * Arduino", Serial và nhật ký trận ở khung đáy, thanh chạy nổi trên sân. Tay cầm làm bộ thu PS2, Human Player tự
+ * động, agent đồng đội cho robot không có người lái. Vòng lặp trận nằm trong GameSession (game.ts); trang chỉ khởi
+ * tạo, nối nút và vẽ. Màn chính / Xưởng / nhiệm vụ / giải đấu nối vào vỏ ở các task sau.
  *
  * Thứ tự robot (cũng là số trên bảng điểm): Robot 1 = đỏ ô trái (người lái 1, tay cầm 1), Robot 2 = xanh ô trái
  * (người lái 2, tay cầm 2), Robot 3 = đỏ ô phải (đồng đội Robot 1), Robot 4 = xanh ô phải (đồng đội Robot 2).
  *
- * Ai lái robot nào (ruling R27): mỗi robot một ô chọn tường minh — "Chương trình" (Robot 1 / 2, thẻ khối của mình),
- * "Agent Dễ/Vừa/Khó", hoặc "Chương trình của Robot N" (Robot 3 / 4, bo ảo riêng, tay cầm trung tính). Mặc định
- * Robot 1 = Chương trình, Robot 2–4 = Agent Vừa. Ghế "Chương trình" không bao giờ do agent lái: chưa chạy, ■ Dừng hay
- * lỗi đều là đứng yên (Review Focus 2). Đổi người lái chỉ bắt đầu trận mới khi robot phải đổi kiểu / đế.
+ * Ai lái robot nào (ruling R27): mỗi robot một ô chọn tường minh (trong ⚙) — "Chương trình" (Robot 1 / 2, thẻ khối
+ * của mình), "Agent Dễ/Vừa/Khó", hoặc "Chương trình của Robot N" (Robot 3 / 4, bo ảo riêng, tay cầm trung tính). Mặc
+ * định Robot 1 = Chương trình, Robot 2–4 = Agent Vừa. Ghế "Chương trình" không bao giờ do agent lái: chưa chạy, Dừng
+ * hay lỗi đều là đứng yên (Review Focus 2). Đổi người lái chỉ bắt đầu trận mới khi robot phải đổi kiểu / đế.
  * Trận: chương trình chạy khi hết 10 s xả bóng; Luyện tập: xả bóng tua sẵn lúc tạo trận (R31), chương trình chạy ngay. Tay cầm gắn ghế theo lần cắm đầu (R26).
  * Có chương trình khối đã nạp / đang chạy / tạm dừng thì tốc độ xem khoá ở ×1 (R24).
- * Tạm dừng / Từng khối (spec §6.1b): GameSession.pause / stepBlock — vật lý, đồng hồ, agent, Human Player cùng đứng.
+ * Thanh chạy (spec §6.1b) tác động lên thẻ khối đang mở: Chạy (đang tạm dừng ⇒ chạy tiếp), Tạm dừng / Chạy từng khối
+ * (GameSession.pause / stepBlock — vật lý, đồng hồ, agent, Human Player cùng đứng), Dừng, Về chỗ cũ (trận mới), Tải
+ * .tb, Đổi góc camera. Khối SẼ chạy tiếp (`link.block`) sáng viền trên vùng khối và hiện ở thanh trạng thái.
  *
  * Mỗi khung: GameSession.advance(thời gian thật × tốc độ xem) chạy vật lý theo PHYSICS_DT (tối đa 4 bước cho mỗi
  * khung ở tốc độ ×1, nhân theo tốc độ xem, và không quá ngân sách thời gian mỗi khung — phần dư bỏ đi để không
@@ -20,18 +24,19 @@
  */
 import { GameSession, type Driver } from './game.ts'
 import type { Skill } from './agent.ts'
-import type { RobotLink } from './link.ts'
+import type { LinkState, RobotLink } from './link.ts'
 import type { RobotConfig } from './robots.ts'
 import { PadSeats, type SeatStatus } from './gamepad.ts'
 import { effectiveSpeed, SPEED_NOTE } from './pace.ts'
-import { createEditors } from './editor.ts'
+import { configControls, createEditors } from './editor.ts'
 import { defaultConfig } from './programs.ts'
+import { NEUTRAL } from './ports.ts'
 import { createScene, defaultQuality, type CameraView, type Quality } from './view/scene.ts'
 import { createHud } from './view/hud.ts'
+import { createShell, highlightCpp, serialNews, type InputKind } from './ui/shell.ts'
 
-const arena = document.querySelector<HTMLElement>('#arena')!
-const hudEl = document.querySelector<HTMLElement>('#hud')!
-const blocksEl = document.querySelector<HTMLElement>('#blocks')!
+const shell = createShell(document.querySelector<HTMLElement>('#app')!)
+const stage = shell.stage
 
 const TEAMS = ['Dế Xanh', 'Chuồn Chuồn', 'Kiến Lửa', 'Ong Vàng']
 const SKILL_NAME: Record<Skill, string> = { easy: 'Dễ', medium: 'Vừa', hard: 'Khó' }
@@ -40,24 +45,34 @@ const MAX_STEPS = 4
 /** Ngân sách thời gian chạy vật lý mỗi khung, ms. */
 const STEP_BUDGET_MS = 45
 const SPEEDS = [1, 4, 40]
+const CAMERAS: CameraView[] = ['field', 'follow', 'driver']
 
+// Bảng điểm cũ (hud.ts) nổi góc phải trên sân tới khi Task 12 thay bằng bảng điểm Đỏ | chung | Xanh; khung ⚙ tạm
+// (Task 13 thay bằng ui/settings.ts) giữ các lựa chọn của thanh công cụ cũ.
 const CSS = `
-@media (min-width: 901px) { .layout:has(#arena) { height: 100vh; grid-template-columns: minmax(340px, 30%) minmax(0, 1fr) minmax(260px, 22%); } }
-#arena { position: relative; min-height: 0; overflow: hidden; }
-.fr-bar { position: absolute; left: 10px; top: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; }
-.fr-bar > * { pointer-events: auto; }
-.fr-bar button, .fr-bar label { font: 600 13px var(--font); border: 1px solid var(--line); background: rgba(255,255,255,0.92); border-radius: 6px; padding: 5px 9px; cursor: pointer; }
+#stage > #hud.fr-hud { position: absolute; top: 52px; right: 10px; width: 270px; height: auto; max-height: calc(100% - 62px); border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,0.94); color: var(--ink); z-index: 5; }
+#stage > #hud .fr-clock { font-size: 22px; }
+@media (max-width: 900px) { #stage > #hud.fr-hud { width: 200px; max-height: 45%; padding: 8px; gap: 8px; } }
+.sh-pbody .fr-card h2 { display: none; }
+.sh-pbody .fr-log { max-height: none; color: #d4d4d4; }
+.sh-pbody .fr-log span { color: #858585; }
+.sh-serial { margin: 0; white-space: pre-wrap; word-break: break-all; font: inherit; color: #d4d4d4; }
+.sh-serial:empty::before { content: 'Chưa có dòng Serial nào. Khối "Serial in" của chương trình in ra ở đây.'; color: #858585; font-family: var(--font); }
+.sh-code-warn { margin: 8px 10px 0; padding: 6px 8px; border-radius: 6px; background: rgba(240, 170, 30, 0.18); color: #f0c674; font-size: 12.5px; line-height: 1.45; }
+.sh-code-note { padding: 6px 10px 0; font-size: 12px; color: #969696; }
+.fr-bar.sh-pop { position: absolute; left: 8px; bottom: 8px; z-index: 25; display: grid; gap: 8px; width: min(640px, calc(100% - 16px)); max-height: calc(100% - 16px); overflow: auto; padding: 12px; background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px #0006; font-size: 13px; }
+.fr-bar h3 { margin: 0; font-size: 14px; }
+.fr-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.fr-row > b { font-size: 12px; color: var(--muted); min-width: 92px; }
+.fr-bar button, .fr-bar label { font: 600 13px var(--font); border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 5px 9px; cursor: pointer; }
 .fr-bar label { display: inline-flex; gap: 4px; align-items: center; cursor: default; }
+.fr-bar .fe-cfg label { border: 0; padding: 0; font-weight: 500; }
 .fr-bar select { font: 13px var(--font); border: 0; background: transparent; }
 .fr-bar button[aria-pressed="true"] { background: var(--teal); border-color: var(--teal); color: #fff; }
-.fr-bar .gap { flex: 1; }
 .fr-bar button:disabled { opacity: 0.4; cursor: default; }
-.fr-bar .fr-note { font: 600 12px var(--font); background: rgba(255,255,255,0.92); border-radius: 6px; padding: 5px 9px; color: var(--muted); }
+.fr-bar .fr-note { font: 600 12px var(--font); color: var(--muted); }
 .fr-bar .fr-note[hidden] { display: none; }
-.fr-pads { position: absolute; left: 10px; bottom: 10px; display: grid; gap: 2px; font: 600 12px var(--font); background: rgba(255,255,255,0.92); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; }
-@media (max-width: 900px) { #arena { height: max(420px, 62vh); } #blocks { height: 75vh; } }
-body.fr-nocode #blocks { display: none; }
-@media (min-width: 901px) { body.fr-nocode .layout:has(#arena) { grid-template-columns: minmax(0, 1fr) minmax(260px, 22%); } }
+.fr-pads { position: absolute; left: 10px; bottom: 10px; display: grid; gap: 2px; font: 600 12px var(--font); background: rgba(255,255,255,0.92); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; z-index: 4; }
 `
 
 function button(text: string, onClick: () => void): HTMLButtonElement {
@@ -90,15 +105,21 @@ function picker(text: string, options: [string, string][], value: string, onChan
   return l
 }
 
+function row(title: string, ...items: HTMLElement[]): HTMLDivElement {
+  const r = document.createElement('div')
+  r.className = 'fr-row'
+  r.append(Object.assign(document.createElement('b'), { textContent: title }), ...items)
+  return r
+}
+
 type SeatMode = 'program' | `agent-${Skill}` | 'copy-0' | 'copy-1'
 
 async function start(): Promise<void> {
-  arena.textContent = 'Sân đang tải…'
   const style = document.createElement('style')
   style.textContent = CSS
   document.head.append(style)
 
-  const editors = createEditors(blocksEl, [0, 1].map((i) => ({ label: `Robot ${i + 1} · ${TEAMS[i]}`, cfg: defaultConfig('maker') })))
+  const editors = createEditors(shell.side.blocks, [0, 1].map((i) => ({ label: `Robot ${i + 1} · ${TEAMS[i]}`, cfg: defaultConfig('maker') })))
   const seats = new PadSeats()
   let seed = 1
   let practice = false
@@ -128,15 +149,71 @@ async function start(): Promise<void> {
 
   let game = await newGame(seed)
   game.match.log('Human Player tự động')
-  arena.textContent = ''
-  const scene = createScene(arena)
-  const hud = createHud(hudEl)
+  stage.querySelector('.sh-loading')?.remove()
+  const scene = createScene(stage)
+  const hudEl = document.createElement('aside')
+  hudEl.id = 'hud'
+  hudEl.setAttribute('aria-label', 'Bảng điểm')
+  stage.append(hudEl)
+  const hud = createHud(hudEl, { log: shell.panel.events })
   editors.setGate(
     () => game.canRun,
     () =>
-      game.paused ? 'Đang tạm dừng — bấm Chạy tiếp' : game.match.phase === 'end' ? 'Trận đã kết thúc — bấm Trận mới' : 'Đã nạp, chờ hết 10 giây xả bóng…',
+      game.paused ? 'Đang tạm dừng — bấm Chạy để chạy tiếp' : game.match.phase === 'end' ? 'Trận đã kết thúc — bấm Về chỗ cũ để chơi trận mới' : 'Đã nạp, chờ hết 10 giây xả bóng…',
   )
   editors.onError((i, msg) => hud.log(`Robot ${i + 1}: ${msg}`))
+
+  // Khung bên "Khối": vẽ lại vùng khối mỗi khi khung đổi cỡ (mở, đóng, kéo mép).
+  new ResizeObserver(() => editors.resize()).observe(shell.side.blocks)
+
+  // Khung bên "Mã Arduino": chỉ xem, sinh lại (chờ 250 ms) khi vùng khối đổi hoặc đổi thẻ. Khối của em có ô số ⇒ lời
+  // báo R37 (mã Arduino của khối đó chưa đúng trên ThingBot thật).
+  const codeNote = Object.assign(document.createElement('div'), { className: 'sh-code-note' })
+  const codeWarn = Object.assign(document.createElement('div'), { className: 'sh-code-warn' })
+  codeWarn.setAttribute('role', 'status')
+  const codeView = Object.assign(document.createElement('pre'), { className: 'sh-code-view' })
+  codeView.setAttribute('aria-label', 'Mã Arduino sinh từ khối')
+  shell.side.code.append(codeNote, codeWarn, codeView)
+  let codeTimer = 0
+  const showCode = () => {
+    const i = editors.active
+    const { code, warning } = editors.arduino(i)
+    codeNote.textContent = `Robot ${i + 1} · mã C++ sinh từ khối, chỉ xem`
+    codeWarn.hidden = !warning
+    codeWarn.textContent = warning ?? ''
+    codeView.innerHTML = highlightCpp(code)
+  }
+  editors.onChange(() => {
+    clearTimeout(codeTimer)
+    codeTimer = window.setTimeout(showCode, 250)
+  })
+  showCode()
+
+  // Khung đáy "Serial": chữ bo ảo của thẻ đang mở in ra; dòng mới khi khung đóng ⇒ số đỏ trên biểu tượng Serial.
+  const serialPre = Object.assign(document.createElement('pre'), { className: 'sh-serial' })
+  shell.panel.serial.append(serialPre)
+  let serialOf = -1
+  let serialPrev = ''
+  let serialUnseen = 0
+  const showSerial = () => {
+    const i = editors.active
+    const s = editors.link(i).serial
+    if (i !== serialOf) {
+      serialOf = i
+      serialPrev = s
+      serialPre.textContent = s
+    } else if (s !== serialPrev) {
+      const n = serialNews(serialPrev, s)
+      serialPrev = s
+      const body = shell.panel.serial
+      const atEnd = body.scrollTop + body.clientHeight >= body.scrollHeight - 4
+      serialPre.textContent = s
+      if (atEnd) body.scrollTop = body.scrollHeight
+      if (shell.panelTab !== 'serial') serialUnseen += n
+    }
+    if (shell.panelTab === 'serial') serialUnseen = 0
+    shell.badge('serial', serialUnseen)
+  }
 
   /** Tốc độ người dùng xin; tốc độ thật = effectiveSpeed (R24: có chương trình khối thì ×1). */
   let requested = 1
@@ -163,7 +240,7 @@ async function start(): Promise<void> {
   }
   const expose = () => {
     ;(window as unknown as { __fanroc: unknown }).__fanroc = {
-      world: game.world, robots: game.robots, match: game.match, humans: game.humans, setSpeed, editors, session: game,
+      world: game.world, robots: game.robots, match: game.match, humans: game.humans, setSpeed, editors, session: game, shell,
       pause: () => setPaused(true), resume: () => setPaused(false), stepBlock: () => stepBlock(),
       pose: (i: number) => {
         const p = game.robots[i].pose
@@ -173,9 +250,9 @@ async function start(): Promise<void> {
   }
 
   /**
-   * Trận mới (đổi chế độ, đổi robot, bấm "Trận mới"): mọi chương trình dừng, robot về ô xuất phát. Chỉ một lần dựng
-   * trận chạy một lúc (không giải phóng một thế giới Rapier hai lần); yêu cầu đến giữa chừng dồn thành một lần dựng
-   * lại ngay sau đó, theo lựa chọn mới nhất.
+   * Trận mới (đổi chế độ, đổi robot, Về chỗ cũ): mọi chương trình dừng, robot về ô xuất phát. Chỉ một lần dựng trận
+   * chạy một lúc (không giải phóng một thế giới Rapier hai lần); yêu cầu đến giữa chừng dồn thành một lần dựng lại
+   * ngay sau đó, theo lựa chọn mới nhất.
    */
   let restarting = false
   let restartAgain = false
@@ -189,8 +266,7 @@ async function start(): Promise<void> {
         const old = game
         game = await newGame(++seed)
         old.dispose()
-        game.match.log(practice ? 'Luyện tập: không xả bóng, không hết giờ — chương trình chạy ngay khi bấm ▶ Chạy' : 'Trận mới: chương trình chạy khi hết 10 giây xả bóng')
-        showPaused()
+        game.match.log(practice ? 'Luyện tập: không xả bóng, không hết giờ — chương trình chạy ngay khi bấm Chạy' : 'Trận mới: chương trình chạy khi hết 10 giây xả bóng')
         expose()
       } while (restartAgain)
     } finally {
@@ -199,30 +275,12 @@ async function start(): Promise<void> {
   }
   editors.onConfig(() => void restart())
 
-  // Tạm dừng / chạy tiếp / từng khối (spec §6.1b). Nút chữ tạm thời — Task 11 thay bằng thanh chạy biểu tượng SVG.
-  const pauseBtn = button('Tạm dừng', () => setPaused(!game.paused))
-  const stepBtn = button('Từng khối', () => void stepBlock())
-  stepBtn.title = 'Chạy một khối của chương trình rồi tạm dừng (khối đợi 1 giây thì sân chạy 1 giây)'
-  const showPaused = () => {
-    pauseBtn.textContent = game.paused ? 'Chạy tiếp' : 'Tạm dừng'
-    pauseBtn.setAttribute('aria-pressed', String(game.paused))
-  }
+  // Tạm dừng / chạy tiếp / từng khối (spec §6.1b).
   const setPaused = (p: boolean) => {
     if (p) game.pause()
     else game.resume()
-    showPaused()
   }
-  /** Đang chạy từng khối thì khoá Tạm dừng / Chạy tiếp / Từng khối tới khi khối chạy xong. */
-  const stepBlock = async () => {
-    const g = game
-    pauseBtn.disabled = stepBtn.disabled = true
-    try {
-      await g.stepBlock()
-    } finally {
-      pauseBtn.disabled = stepBtn.disabled = false
-      showPaused()
-    }
-  }
+  const stepBlock = () => game.stepBlock()
   expose()
 
   /** Đổi người lái của robot i. Chỉ bắt đầu trận mới khi robot phải đổi kiểu / đế (chạy chương trình của thẻ khác). */
@@ -235,23 +293,41 @@ async function start(): Promise<void> {
     if (JSON.stringify(cfgFor(i)) !== JSON.stringify(game.cfgs[i])) return void restart()
     game.setDriver(i, driverFor(i))
   }
-  // Bấm ▶ Chạy ở thẻ của robot đang do agent lái ⇒ chuyển robot đó sang "Chương trình" (thấy ngay trên ô chọn).
-  editors.onRun((i) => {
+  /** Chạy chương trình của thẻ i; robot đang do agent lái ⇒ chuyển sang "Chương trình" (thấy ngay trên ô chọn). */
+  const runProgram = (i: number) => {
+    editors.run(i)
     if (modes[i] !== 'program') {
       setMode(i, 'program')
       game.match.log(`Robot ${i + 1}: chuyển sang lái bằng chương trình khối`)
     }
-  })
+  }
+  const handlers = {
+    run() {
+      const i = editors.active
+      if (game.paused && editors.state(i) === 'paused') return setPaused(false)
+      if (game.paused) setPaused(false)
+      runProgram(i)
+    },
+    pause: () => setPaused(true),
+    step: () => void stepBlock(),
+    stop: () => editors.stop(editors.active),
+    reset: () => void restart(),
+    download: () => editors.download(editors.active),
+    camera() {
+      cam = CAMERAS[(CAMERAS.indexOf(cam) + 1) % CAMERAS.length]
+      scene.camera(cam, hud.selected)
+      camBtns.forEach((b, k) => b.setAttribute('aria-pressed', String(CAMERAS[k] === cam)))
+    },
+  }
 
-  // Thanh công cụ trên sân.
-  const bar = document.createElement('div')
-  bar.className = 'fr-bar'
+  // Khung ⚙ tạm: chế độ, người lái, robot của từng thẻ, chương trình mẫu, camera, tốc độ, đồ hoạ.
+  const pop = document.createElement('div')
+  pop.className = 'fr-bar sh-pop'
+  pop.setAttribute('role', 'dialog')
+  pop.setAttribute('aria-label', 'Cài đặt')
+  pop.hidden = true
   const camBtns = group(
-    [
-      { label: 'Toàn sân', on: () => scene.camera((cam = 'field')) },
-      { label: 'Theo robot', on: () => scene.camera((cam = 'follow'), hud.selected) },
-      { label: 'Góc người lái', on: () => scene.camera((cam = 'driver'), hud.selected) },
-    ],
+    CAMERAS.map((c, k) => ({ label: ['Toàn sân', 'Theo robot', 'Góc người lái'][k], on: () => scene.camera((cam = c), hud.selected) })),
     0,
   )
   const modeBtns = group(
@@ -269,6 +345,13 @@ async function start(): Promise<void> {
     pickers[i] = l.querySelector('select')!
     return l
   })
+  const cfgRows = [0, 1].map((i) => {
+    const c = configControls(
+      () => editors.cfg(i),
+      (cfg) => editors.setConfig(i, cfg),
+    )
+    return { c, row: row(`Thẻ Robot ${i + 1}`, c.el, button('Mẫu TeleOp', () => editors.sample(i, 'teleop')), button('Mẫu Auto', () => editors.sample(i, 'auto'))) }
+  })
   speedBtns = group(SPEEDS.map((sp) => ({ label: `×${sp}`, on: () => setSpeed(sp) })), 0)
   let q: Quality = defaultQuality()
   const qBtns = group(
@@ -278,27 +361,31 @@ async function start(): Promise<void> {
     ],
     q === 'high' ? 0 : 1,
   )
-  const again = button('Trận mới', () => void restart())
-  // Nút ☰: ẩn/hiện vùng khối (mẫu ftc.html). Điện thoại mặc định ẩn để sân đủ lớn.
-  const codeBtn = button('☰', () => setCodeHidden(!document.body.classList.contains('fr-nocode')))
-  codeBtn.setAttribute('aria-label', 'Vùng khối lệnh')
-  codeBtn.setAttribute('aria-controls', 'blocks')
-  // aria-expanded = vùng khối đang hiện; nút tô đậm (aria-pressed) cũng khi vùng khối đang hiện.
-  const setCodeHidden = (hidden: boolean) => {
-    document.body.classList.toggle('fr-nocode', hidden)
-    codeBtn.setAttribute('aria-expanded', String(!hidden))
-    codeBtn.setAttribute('aria-pressed', String(!hidden))
-    codeBtn.title = hidden ? 'Hiện vùng khối lệnh' : 'Ẩn vùng khối lệnh'
-    if (!hidden) editors.resize()
+  pop.append(
+    Object.assign(document.createElement('h3'), { textContent: 'Cài đặt' }),
+    row('Chế độ', ...modeBtns, button('Trận mới', () => void restart())),
+    row('Người lái', ...seatPickers),
+    ...cfgRows.map((r) => r.row),
+    row('Camera', ...camBtns),
+    row('Tốc độ', ...speedBtns, speedNote),
+    row('Đồ hoạ', ...qBtns),
+  )
+  const setPop = (open: boolean) => {
+    pop.hidden = !open
+    if (open) for (const r of cfgRows) r.c.refresh()
   }
-  setCodeHidden(matchMedia('(max-width: 760px)').matches)
-  const gap = document.createElement('span')
-  gap.className = 'gap'
-  bar.append(codeBtn, ...modeBtns, ...seatPickers, again, pauseBtn, stepBtn, gap, ...camBtns, ...speedBtns, speedNote, ...qBtns)
+  shell.onSettings(() => setPop(pop.hidden))
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !pop.hidden) setPop(false)
+  })
+  document.addEventListener('pointerdown', (e) => {
+    if (!pop.hidden && !pop.contains(e.target as Node)) setPop(false)
+  })
+
   const padsEl = document.createElement('div')
   padsEl.className = 'fr-pads'
   padsEl.setAttribute('aria-live', 'polite')
-  arena.append(bar, padsEl)
+  stage.append(pop, padsEl)
   hud.onSelect = (i) => {
     if (cam !== 'field') scene.camera(cam, i)
   }
@@ -317,6 +404,28 @@ async function start(): Promise<void> {
     padsText = text
     padsEl.replaceChildren(...text.split('\n').map((t) => Object.assign(document.createElement('span'), { textContent: t })))
   }
+
+  /** Thanh chạy + thanh trạng thái + tô khối, theo thẻ đang mở. */
+  let fps = 60
+  const showRun = (status: SeatStatus[]) => {
+    const i = editors.active
+    const state: LinkState = game.paused ? 'paused' : editors.state(i)
+    shell.runbar(handlers, state, game.stepping)
+    for (const k of [0, 1]) {
+      const s = editors.state(k)
+      editors.highlight(k, s === 'running' || s === 'paused' ? editors.link(k).block : undefined)
+    }
+    const s = editors.state(i)
+    const input: InputKind = modes[i].startsWith('agent-') ? 'Máy' : status[i] === 'ok' ? 'Tay PS2' : 'Chương trình'
+    shell.status({
+      robot: `Robot ${i + 1} · ${TEAMS[i]}`,
+      input,
+      ports: game.ports[i] ?? NEUTRAL,
+      block: s === 'running' || s === 'paused' ? editors.describe(i, editors.link(i).block) : null,
+      fps,
+    })
+  }
+
   let last = performance.now()
   const frame = (now: number) => {
     const { pads, status } = seats.read()
@@ -326,15 +435,23 @@ async function start(): Promise<void> {
     showSpeed()
     const speed = speedNow()
     const dt = Math.min(100, now - last) / 1000
+    if (now > last) fps += (1000 / (now - last) - fps) * 0.05
     last = now
     game.advance(dt, speed, { steps: MAX_STEPS * Math.max(1, speed), ms: STEP_BUDGET_MS })
     scene.sync(game.world, game.robots, game.match, game.ports)
     hud.update(game.match, game.robots, game.cfgs, game.ports)
+    showRun(status)
+    showSerial()
     requestAnimationFrame(frame)
   }
   requestAnimationFrame(frame)
 }
 
+const loading = document.createElement('div')
+loading.className = 'sh-loading'
+loading.textContent = 'Sân đang tải…'
+loading.style.cssText = 'position:absolute;inset:0;display:grid;place-items:center;color:#ccc;font-size:15px'
+stage.append(loading)
 start().catch((e) => {
-  arena.textContent = `Không khởi tạo được sân: ${e instanceof Error ? e.message : String(e)}`
+  loading.textContent = `Không khởi tạo được sân: ${e instanceof Error ? e.message : String(e)}`
 })

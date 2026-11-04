@@ -2,7 +2,7 @@
  * Phép thử đầu-cuối của sân FANROC trên trình duyệt thật (Playwright, lấy từ checkout ThingBlock như ftc-e2e.mjs
  * của nhánh spike/ursim).
  *
- *   npm run e2e:fanroc                 # tự bật Vite dev trên một cổng trống, chạy E1–E11 (E5 bỏ qua), tắt Vite
+ *   npm run e2e:fanroc                 # tự bật Vite dev trên một cổng trống, chạy N1, N1b (vỏ Task 11) và E1–E11 (E5 bỏ qua), tắt Vite
  *   FANROC_URL=http://localhost:5191/mo-phong/fanroc.html npm run e2e:fanroc   # dùng trang đang chạy sẵn
  *   npm run e2e:fanroc -- E3 E5        # chỉ chạy các phép thử có tên bắt đầu như vậy
  *
@@ -114,15 +114,34 @@ const expect = (cond, msg) => {
 // ---------- Thao tác trên trang ----------
 async function open(page) {
   await page.goto(URL_)
-  await page.waitForFunction(() => window.__fanroc?.editors && document.querySelector('#arena canvas'), null, { timeout: 60000 })
+  await page.waitForFunction(() => window.__fanroc?.editors && document.querySelector('#stage canvas'), null, { timeout: 60000 })
 }
 const setPad = (page, i, axes) => page.evaluate(([i, axes]) => (window.__pads[i] = axes && { axes }), [i, axes])
 const pose = (page, i = 0) => page.evaluate((i) => window.__fanroc.pose(i), i)
 const dist = (a, b) => Math.hypot(b.x - a.x, b.z - a.z)
 const deg = (rad) => (rad * 180) / Math.PI
-/** Ô chọn người lái của robot i (thứ tự trên thanh: Robot 1…4). */
-const seat = (page, i, value) => page.locator('.fr-bar select').nth(i).selectOption(value)
-const bar = (page, text) => page.locator('.fr-bar button', { hasText: text }).first()
+// Task 11: thanh công cụ cũ nằm trong khung ⚙ (tạm, Task 13 thay), vùng khối trong khung bên "Khối", ▶ / ■ / Tải .tb /
+// Tạm dừng / Từng khối trên thanh chạy nổi. Các thao tác dưới mở đúng khung trước khi bấm.
+/** Mở khung ⚙ nếu đang đóng. */
+async function settings(page) {
+  if (await page.locator('.fr-bar').isHidden()) await page.locator('.sh-act button[data-view="settings"]').click()
+}
+/** Mở khung bên "Khối" nếu đang đóng. */
+async function blocksSide(page) {
+  if (await page.locator('[data-side="blocks"]').isHidden()) await page.locator('.sh-act button[data-view="blocks"]').click()
+}
+/** Ô chọn người lái của robot i (thứ tự trong ⚙: Robot 1…4). */
+const seat = async (page, i, value) => {
+  await settings(page)
+  await page.locator('.fr-bar select').nth(i).selectOption(value)
+}
+/** Nút chữ trong khung ⚙ (mở khung trước). */
+const bar = async (page, text) => {
+  await settings(page)
+  return page.locator('.fr-bar button', { hasText: text }).first()
+}
+/** Nút của thanh chạy nổi theo aria-label. */
+const runBtn = (page, label) => page.locator(`.sh-run button[aria-label="${label}"]`)
 const panel = (page) => page.locator('.fe-panel:not([hidden])')
 /**
  * Đặt robot i vào làn trống sát rào bên (x = ±0.95 m, nhìn về phía núi) bằng RobotBody.setPose có sẵn: từ ô xuất
@@ -130,7 +149,10 @@ const panel = (page) => page.locator('.fe-panel:not([hidden])')
  */
 const LANE = [{ x: -0.95, z: 1.0, yaw: 0 }, { x: 0.95, z: 1.0, yaw: 0 }]
 const place = (page, i) => page.evaluate(([i, p]) => window.__fanroc.robots[i].setPose(p), [i, LANE[i]])
-const tab = (page, i) => page.locator('.fe-tabs button').nth(i)
+const tab = async (page, i) => {
+  await blocksSide(page)
+  return page.locator('.fe-tabs button').nth(i)
+}
 const linkState = (page, i) => page.evaluate((i) => window.__fanroc.editors.state(i), i)
 
 /** Robot 2–4 đứng yên: Robot 2 = Chương trình (không nạp gì), Robot 3 / 4 chạy theo chương trình của Robot 1 / 2. */
@@ -147,8 +169,8 @@ async function skipRelease(page) {
 }
 /** Bấm ▶ Chạy ở thẻ i và chờ bo ảo chạy. */
 async function run(page, i) {
-  await tab(page, i).click()
-  await panel(page).locator('.fe-run').click()
+  await (await tab(page, i)).click()
+  await runBtn(page, 'Chạy').click()
   await page.waitForFunction((i) => window.__fanroc.editors.state(i) === 'running', i, { timeout: 15000 })
   await page.waitForTimeout(300) // bo ảo khởi động, gửi ảnh chụp PWM đầu
 }
@@ -164,7 +186,7 @@ async function practice(page, pads = 1) {
   }
   await quietOthers(page)
   await page.evaluate(() => (window.__oldMatch = window.__fanroc.match))
-  await bar(page, 'Luyện tập').click() // trận mới: Human Player chốt theo số tay cầm lúc này
+  await (await bar(page, 'Luyện tập')).click() // trận mới: Human Player chốt theo số tay cầm lúc này
   await page.waitForFunction(() => {
     const m = window.__fanroc.match
     return m !== window.__oldMatch && m.practice && m.phase === 'play' && m.t < 1
@@ -176,13 +198,14 @@ async function main() {
   URL_ = await startServer()
   console.log(`Trang: ${URL_}`)
   browser = await chromium.launch({ args: ['--use-angle=metal', '--ignore-gpu-blocklist'] })
+  await shellTests()
 
   await test('E1 trang tải, không lỗi console, tiêu đề và chữ HUD tiếng Việt', async (page) => {
     await open(page)
     await page.waitForTimeout(1500)
     const title = await page.title()
     const hud = await page.locator('#hud').innerText()
-    expect(title.includes('FANROC Thanh Hỏa'), `tiêu đề "${title}"`)
+    expect(title === 'ThingBot FanRoc Game', `tiêu đề "${title}"`) // Task 11: tên sản phẩm mới
     expect(/Xả bóng/.test(hud) && /điểm/.test(hud) && /Chữa Cháy/.test(hud), `HUD: ${hud.slice(0, 80)}`)
     expect((await page.locator('.fe-tabs button').first().innerText()).startsWith('Robot 1'), 'thiếu thẻ khối Robot 1')
     // Bấm "Trận mới" ba lần liền (cùng một khung): các lần dựng trận không chồng nhau, không giải phóng một thế giới
@@ -263,7 +286,7 @@ async function main() {
   await test('E4 chương trình lỗi ⇒ robot dừng, lỗi tiếng Việt cạnh vùng khối, đồng hồ trận vẫn chạy', async (page) => {
     await open(page)
     await quietOthers(page)
-    await bar(page, 'Trận mới').click()
+    await (await bar(page, 'Trận mới')).click()
     await page.waitForFunction(() => window.__fanroc.match.t < -9)
     await skipRelease(page)
     // Chạy tới 1 s rồi chia số nguyên cho 0 (bo ảo dừng vì IntegerDivideByZero).
@@ -306,7 +329,7 @@ async function main() {
   await test('E6 trận ×40 với 4 agent ⇒ Hết giờ, bảng đội 4 dòng, điểm trận = tổng các mục', async (page) => {
     await open(page)
     await seat(page, 0, 'agent-medium')
-    await bar(page, 'Trận mới').click()
+    await (await bar(page, 'Trận mới')).click()
     await page.waitForFunction(() => window.__fanroc.match.t < -9)
     const sp = await page.evaluate(() => window.__fanroc.setSpeed(40))
     expect(sp === 40, `tốc độ thật ×${sp}`)
@@ -328,7 +351,7 @@ async function main() {
 
   await test('E7 "Tải về để nạp" tải tệp .tb giải nén ra project.json', async (page) => {
     await open(page)
-    const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 10000 }), panel(page).locator('button', { hasText: 'Tải về để nạp' }).click()])
+    const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 10000 }), runBtn(page, 'Tải .tb để nạp ThingBot').click()])
     const name = dl.suggestedFilename()
     const dir = await mkdtemp(resolve(tmpdir(), 'fanroc-tb-'))
     const file = resolve(dir, name)
@@ -342,30 +365,34 @@ async function main() {
     return `${name} · project.json ${project.targets.length} target`
   })
 
-  await test('E8 điện thoại 390×844: không cuộn ngang, ☰ ẩn/hiện vùng khối, sân vẫn vẽ', async (page) => {
+  await test('E8 điện thoại 390×844: không cuộn ngang, biểu tượng Khối mở/đóng khung bên phủ sân, sân vẫn vẽ', async (page) => {
+    // Task 11: nút ☰ cũ thay bằng biểu tượng Khối của cột biểu tượng; < 900 px khung bên phủ lên sân.
     await open(page)
     await page.waitForTimeout(1000)
     const noScrollX = () => page.evaluate(() => document.scrollingElement.scrollWidth <= innerWidth)
-    const blocksH = () => page.locator('#blocks').evaluate((e) => e.getBoundingClientRect().height)
-    const menu = bar(page, '☰')
+    const blocksH = () => page.locator('[data-side="blocks"]').evaluate((e) => e.getBoundingClientRect().height)
+    const menu = page.locator('.sh-act button[data-view="blocks"]')
     expect(await noScrollX(), 'trang cuộn ngang')
     const expanded = () => menu.getAttribute('aria-expanded')
-    expect((await menu.getAttribute('aria-label')) === 'Vùng khối lệnh', `☰ aria-label "${await menu.getAttribute('aria-label')}"`)
+    expect((await menu.getAttribute('aria-label')) === 'Khối', `aria-label "${await menu.getAttribute('aria-label')}"`)
+    const stageW0 = await page.locator('#stage').evaluate((e) => e.getBoundingClientRect().width)
     const h0 = await blocksH()
     const x0 = await expanded()
     await menu.tap()
     await page.waitForTimeout(300)
     const h1 = await blocksH()
     const x1 = await expanded()
+    const stageW1 = await page.locator('#stage').evaluate((e) => e.getBoundingClientRect().width)
     expect(await noScrollX(), 'trang cuộn ngang khi hiện vùng khối')
+    expect(stageW1 === stageW0, `khung bên không phủ mà đẩy sân: ${stageW0} → ${stageW1} px`)
     await menu.tap()
     await page.waitForTimeout(300)
     const h2 = await blocksH()
     const x2 = await expanded()
-    expect(h0 === 0 && h1 > 200 && h2 === 0, `vùng khối cao ${h0} → ☰ ${h1} → ☰ ${h2}`)
+    expect(h0 === 0 && h1 > 200 && h2 === 0, `vùng khối cao ${h0} → ${h1} → ${h2}`)
     expect(x0 === 'false' && x1 === 'true' && x2 === 'false', `aria-expanded ${x0} → ${x1} → ${x2}`)
     // Sân vẫn vẽ: ảnh chụp canvas có nhiều màu (không trắng / đen trơn).
-    const png = (await page.locator('#arena canvas').screenshot()).toString('base64')
+    const png = (await page.locator('#stage canvas').screenshot()).toString('base64')
     const colors = await page.evaluate(async (b64) => {
       const img = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob())
       const c = new OffscreenCanvas(img.width, img.height)
@@ -383,11 +410,11 @@ async function main() {
   await test('E9 đồ hoạ Thấp: khung hình trung bình 5 s trận ≥ 30 fps', async (page) => {
     await open(page)
     await seat(page, 0, 'agent-medium')
-    await bar(page, 'Đồ hoạ thấp').click()
-    const low = await bar(page, 'Đồ hoạ thấp').getAttribute('aria-pressed')
-    const high = await bar(page, 'Đồ hoạ cao').getAttribute('aria-pressed')
+    await (await bar(page, 'Đồ hoạ thấp')).click()
+    const low = await (await bar(page, 'Đồ hoạ thấp')).getAttribute('aria-pressed')
+    const high = await (await bar(page, 'Đồ hoạ cao')).getAttribute('aria-pressed')
     expect(low === 'true' && high === 'false', `đồ hoạ thấp chưa bật (thấp ${low}, cao ${high})`)
-    await bar(page, 'Trận mới').click()
+    await (await bar(page, 'Trận mới')).click()
     await page.waitForFunction(() => window.__fanroc.match.t < -9)
     await skipRelease(page)
     await page.waitForTimeout(500)
@@ -415,11 +442,10 @@ async function main() {
     await open(page)
     await quietOthers(page)
     await page.evaluate(() => (window.__oldMatch = window.__fanroc.match))
-    await bar(page, 'Luyện tập').click()
+    await (await bar(page, 'Luyện tập')).click()
     await page.waitForFunction(() => window.__fanroc.match !== window.__oldMatch && window.__fanroc.match.practice, null, { timeout: 30000 })
     const a = await pose(page)
-    await tab(page, 0).click()
-    await panel(page).locator('button', { hasText: 'Mẫu Auto' }).click()
+    await (await bar(page, 'Mẫu Auto')).click() // Mẫu Auto của thẻ Robot 1 (khung ⚙)
     await run(page, 0) // gồm 0.3 s chờ bo ảo khởi động
     await page.waitForTimeout(1700)
     const b = await pose(page)
@@ -432,9 +458,9 @@ async function main() {
 
   await test('E11 Tạm dừng ⇒ đồng hồ + robot đứng, tốc độ khoá ×1; Từng khối ⇒ sân chạy đúng một khối (≤ 5 s); Chạy tiếp', async (page) => {
     await practice(page)
-    await panel(page).locator('button', { hasText: 'Mẫu Auto' }).click()
+    await (await bar(page, 'Mẫu Auto')).click()
     await run(page, 0)
-    await bar(page, 'Tạm dừng').click()
+    await runBtn(page, 'Tạm dừng').click()
     const t0 = await page.evaluate(() => window.__fanroc.match.t)
     const a = await pose(page)
     await page.waitForTimeout(600)
@@ -446,18 +472,81 @@ async function main() {
     const jumps = []
     for (let k = 0; k < 12 && !jumps.some((d) => d > 0.05); k++) {
       const before = await page.evaluate(() => window.__fanroc.match.t)
-      await bar(page, 'Từng khối').click()
+      await runBtn(page, 'Chạy từng khối').click()
       await page.waitForTimeout(150)
       jumps.push((await page.evaluate(() => window.__fanroc.match.t)) - before)
     }
     expect(jumps.some((d) => d > 0.05) && jumps.every((d) => d >= 0 && d <= 5 + 1e-6), `bước: ${jumps.map((d) => d.toFixed(2)).join(' ')}`)
     expect((await linkState(page, 0)) === 'paused', 'sau Từng khối bo ảo vẫn tạm dừng')
     const t2 = await page.evaluate(() => window.__fanroc.match.t)
-    await bar(page, 'Chạy tiếp').click()
+    await runBtn(page, 'Chạy').click() // đang tạm dừng: Chạy = chạy tiếp
     await page.waitForTimeout(500)
     const t3 = await page.evaluate(() => window.__fanroc.match.t)
     expect((await linkState(page, 0)) === 'running' && t3 - t2 > 0.2, `chạy tiếp: ${t2.toFixed(2)} → ${t3.toFixed(2)} s`)
     return `đứng ${t0.toFixed(2)} s · từng khối ${jumps.map((d) => d.toFixed(2)).join(' ')} s · chạy tiếp +${(t3 - t2).toFixed(2)} s`
+  })
+}
+
+// ---------- Phép thử giao diện mới (Task 11+) ----------
+async function shellTests() {
+  await test('N1 vỏ kiểu VS Code: tiêu đề, bấm Khối mở/đóng khung bên, panel đáy thu gọn, nút không emoji', async (page) => {
+    await open(page)
+    const title = await page.title()
+    expect(title === 'ThingBot FanRoc Game', `tiêu đề "${title}"`)
+    const act = page.locator('.sh-act button[data-view="blocks"]')
+    const side = page.locator('[data-side="blocks"]')
+    const avail = () => page.evaluate(() => innerWidth - 48)
+    const stageW = () => page.locator('#stage').evaluate((e) => e.getBoundingClientRect().width)
+    expect(!(await side.isVisible()), 'khung Khối đang mở sẵn (trận: mặc định ẩn)')
+    await act.click()
+    await page.waitForTimeout(200)
+    expect(await side.isVisible(), 'bấm Khối mà khung Khối không hiện')
+    const wOpen = await stageW()
+    expect((await act.getAttribute('aria-pressed')) === 'true', 'biểu tượng Khối không sáng khi khung mở')
+    await act.click()
+    await page.waitForTimeout(200)
+    expect(!(await side.isVisible()), 'bấm lại Khối mà khung Khối không ẩn')
+    const w = await stageW()
+    const a = await avail()
+    expect(w >= 0.9 * a, `#stage rộng ${w} px < 90 % của ${a} px`)
+    const ph = await page.locator('.sh-panel').evaluate((e) => e.getBoundingClientRect().height)
+    expect(ph <= 30, `panel đáy cao ${ph} px (thu gọn phải ≤ 30 px)`)
+    const bad = await page.evaluate(() =>
+      [...document.querySelectorAll('button')]
+        .map((b) => `${b.textContent} ${b.getAttribute('aria-label') ?? ''} ${b.title}`)
+        .filter((t) => /\p{Extended_Pictographic}/u.test(t)),
+    )
+    expect(!bad.length, `nút có emoji: ${bad.slice(0, 3).join(' | ')}`)
+    return `"${title}" · sân ${Math.round(wOpen)} → ${Math.round(w)} / ${a} px · panel ${ph} px`
+  })
+
+  await test('N1b thanh chạy: Chạy rồi Tạm dừng ⇒ khối sắp chạy sáng viền, thanh trạng thái "Đang chạy khối", mã Arduino hiện', async (page) => {
+    await open(page)
+    await (await bar(page, 'Luyện tập')).click()
+    await page.waitForFunction(() => window.__fanroc.match.practice)
+    await (await bar(page, 'Mẫu Auto')).click()
+    await blocksSide(page)
+    await runBtn(page, 'Chạy').click()
+    await page.waitForFunction(() => window.__fanroc.editors.state(0) === 'running', null, { timeout: 15000 })
+    await page.waitForTimeout(600)
+    await runBtn(page, 'Tạm dừng').click()
+    await page.waitForTimeout(300)
+    const glow = await page.locator('.fe-panel:not([hidden]) .blocklyHighlighted').count()
+    const status = await page.locator('.sh-status').innerText()
+    const disabled = await runBtn(page, 'Tạm dừng').isDisabled()
+    expect(glow === 1, `${glow} khối sáng viền (cần đúng 1)`)
+    expect(/Đang chạy khối: \S/.test(status), `thanh trạng thái: ${status.replace(/\n/g, ' | ')}`)
+    expect(disabled, 'đang tạm dừng mà nút Tạm dừng vẫn bấm được')
+    await page.locator('.sh-act button[data-view="code"]').click()
+    await page.waitForTimeout(400)
+    const code = await page.locator('.sh-code-view').innerText()
+    const kw = await page.locator('.sh-code-view .k').count()
+    expect(/void setup\(\)/.test(code) && kw > 3, `mã Arduino: ${code.slice(0, 60)} (${kw} từ khoá tô màu)`)
+    await runBtn(page, 'Dừng').click()
+    await page.waitForTimeout(200)
+    const glowAfter = await page.locator('[data-side] .blocklyHighlighted').count()
+    expect(glowAfter === 0, `đã Dừng mà còn ${glowAfter} khối sáng`)
+    return `${status.split('\n').find((t) => t.startsWith('Đang chạy khối'))} · mã ${code.split('\n').length} dòng, ${kw} từ khoá`
   })
 }
 
