@@ -12,6 +12,7 @@ import type { CameraView, Quality } from '../view/scene.ts'
 import { SPEED_NOTE } from '../pace.ts'
 import type { Screen } from './router.ts'
 import { robotName } from './home.ts'
+import { SOURCE_URL } from './external.ts'
 
 // ---------- Ghế ----------
 /**
@@ -149,6 +150,7 @@ const CSS = `
 .st-pop .fe-cfg label { border: 0; padding: 0; font-weight: 500; }
 .st-note { font: 600 12px var(--font); color: var(--muted); }
 .st-note[hidden] { display: none; }
+.st-url { font: 12px var(--mono, monospace); color: var(--muted); user-select: all; -webkit-user-select: all; cursor: text; word-break: break-all; }
 .st-keys { border-collapse: collapse; font-size: 12.5px; width: 100%; }
 .st-keys td { padding: 2px 8px 2px 0; vertical-align: top; }
 .st-keys td:first-child { white-space: nowrap; font-family: var(--mono); font-weight: 700; }
@@ -277,6 +279,10 @@ export function createSettings(): SettingsPopover {
       adv.append(seats)
       parts.push(adv)
     }
+    // Địa chỉ mã nguồn dạng chữ chọn / chép được (app desktop không mở được link thì vẫn còn chỗ này).
+    const src = el('span', 'st-url', SOURCE_URL)
+    src.dataset.role = 'source'
+    parts.push(row('Mã nguồn (AGPL-3.0)', src))
     pop.replaceChildren(...parts)
     api.update()
   }

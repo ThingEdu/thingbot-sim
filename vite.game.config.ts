@@ -1,3 +1,4 @@
+import { cpSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
 import lessons from './vite.config.ts'
@@ -22,11 +23,25 @@ const asIndex = (): Plugin => ({
   },
 })
 
+/**
+ * Từ public/ chỉ chép những gì game dùng: media/ của scratch-blocks (vùng khối). public/board/ là ảnh mạch của bài học,
+ * game không dùng ⇒ không chép (publicDir tắt).
+ */
+const GAME_PUBLIC = ['media']
+const copyGamePublic = (): Plugin => ({
+  name: 'fanroc-game-public',
+  apply: 'build',
+  writeBundle() {
+    for (const d of GAME_PUBLIC) cpSync(resolve(__dirname, 'public', d), resolve(__dirname, OUT, d), { recursive: true, dereference: true })
+  },
+})
+
 export default defineConfig({
   base: './',
   resolve: lessons.resolve,
   worker: lessons.worker,
-  plugins: [asIndex()],
+  publicDir: false,
+  plugins: [asIndex(), copyGamePublic()],
   build: {
     outDir: OUT,
     emptyOutDir: true,

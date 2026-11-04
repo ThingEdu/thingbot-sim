@@ -7,6 +7,7 @@
 // thử Node (shell.test.ts).
 import type { LinkState } from '../link.ts'
 import type { PortValues } from '../ports.ts'
+import { SOURCE_URL, wireExternal } from './external.ts'
 import { icon, type IconName } from './icons.ts'
 
 export type SideView = 'blocks' | 'code' | 'missions'
@@ -189,8 +190,8 @@ const ACT: Record<Activity, { icon: IconName; label: string }> = {
 const SIDE_TITLE: Record<SideView, string> = { blocks: 'Khối', code: 'Mã Arduino', missions: 'Nhiệm vụ' }
 const PANEL_TITLE: Record<PanelTab, string> = { serial: 'Serial', events: 'Sự kiện trận' }
 const INPUT_ICON: Partial<Record<InputKind, IconName>> = { 'Bàn phím': 'keyboard', 'Tay PS2': 'gamepad', 'Chương trình': 'blocks' }
-/** Mã nguồn của trang (AGPL-3.0: người dùng web phải lấy được mã nguồn). */
-export const SOURCE_URL = 'https://github.com/ThingEdu/thingbot-sim'
+/** Mã nguồn của trang (AGPL-3.0) — hằng ở external.ts cùng danh sách link app desktop được mở. */
+export { SOURCE_URL } from './external.ts'
 
 /** Nút "Tải ThingBlock đầy đủ" ở thanh trạng thái: chưa có link chính thức (rỗng) ⇒ không có nút (spec §6.7). */
 export function thingblockLink(url: string): { href: string; label: string } | null {
@@ -383,9 +384,12 @@ export function createShell(root: HTMLElement, opts: { thingblockUrl?: string } 
   const st = { robot: el('span'), input: el('span'), ports: el('span', 'mono'), block: el('span'), fps: el('span', 'mono sh-opt') }
   const inputText = el('span')
   st.input.append(inputText)
-  const source = Object.assign(el('a', 'sh-opt', 'Mã nguồn (AGPL)'), { href: SOURCE_URL, target: '_blank', rel: 'noopener', title: 'Mã nguồn của trang (AGPL-3.0)' })
+  const source = Object.assign(el('a', 'sh-opt', 'Mã nguồn (AGPL)'), { href: SOURCE_URL, target: '_blank', rel: 'noopener', title: `Mã nguồn của trang (AGPL-3.0): ${SOURCE_URL}` })
+  wireExternal(source)
   const tb = thingblockLink(opts.thingblockUrl ?? '')
   const download = tb && Object.assign(el('a', 'sh-opt', tb.label), { href: tb.href, target: '_blank', rel: 'noopener' })
+  // App desktop chỉ mở link có trong EXTERNAL_URLS + phạm vi quyền opener (external.ts): điền THINGBLOCK_URL thì thêm cả hai.
+  if (download) wireExternal(download)
   statusEl.append(st.robot, st.input, st.ports, st.block, el('span', 'sp'), st.fps, ...(download ? [download] : []), source)
 
   // Thanh chạy nổi.

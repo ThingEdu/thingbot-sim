@@ -1,11 +1,19 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "enables the default permissions",
+  "description": "Quyền của cửa sổ game: mặc định của lõi + mở đúng link mã nguồn AGPL bằng trình duyệt (src/fanroc/ui/external.ts EXTERNAL_URLS).",
   "windows": [
     "main"
   ],
   "permissions": [
-    "core:default"
+    "core:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "https://github.com/ThingEdu/thingbot-sim"
+        }
+      ]
+    }
   ]
 }

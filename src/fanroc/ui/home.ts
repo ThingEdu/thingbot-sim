@@ -8,6 +8,7 @@ import type { Alliance } from '../layout.ts'
 import { V_MAX } from '../robot.ts'
 import { ROBOTS, type Drive, type RobotConfig, type RobotType } from '../robots.ts'
 import { icon } from './icons.ts'
+import { STATUS_H } from './shell.ts'
 
 export type TileId = 'tournament' | 'match' | 'missions' | 'workshop'
 /** Thứ tự ô (cũng là thứ tự Tab): Giải đấu trước, chọn sẵn. */
@@ -85,8 +86,9 @@ export function robotStats(cfg: RobotConfig): RobotStats {
 }
 
 // ---------- DOM ----------
+// Các màn phủ (.hm) chừa thanh trạng thái ở đáy: link "Mã nguồn (AGPL)" luôn thấy và bấm được (AGPL), kể cả ở màn chính.
 const CSS = `
-.hm { position: fixed; inset: 0; z-index: 40; overflow: auto; color: #eef2fa; font-family: var(--font); background: linear-gradient(160deg, #0b1440e6 0%, #18246ad0 45%, #3a1460b8 100%); }
+.hm { position: fixed; inset: 0 0 ${STATUS_H}px 0; z-index: 40; overflow: auto; color: #eef2fa; font-family: var(--font); background: linear-gradient(160deg, #0b1440e6 0%, #18246ad0 45%, #3a1460b8 100%); }
 .hm[hidden] { display: none; }
 .hm-in { min-height: 100%; box-sizing: border-box; padding: 22px 26px 26px; display: flex; flex-direction: column; gap: 14px; }
 .hm-top { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
