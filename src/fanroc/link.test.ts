@@ -17,6 +17,7 @@ const pwm = (over: Record<number, number>) => Array.from({ length: 16 }, (_, ch)
 const snap = (run: number, duty: number[], error?: string) =>
   ({ type: 'snapshot', run, snapshot: { pwm: duty, error, running: true }, bus: {} }) as unknown as Message
 const inputs = (cs: Command[]) => Object.fromEntries(cs.filter((c) => c.type === 'input').map((c) => [c.key, c.value]))
+const lastType = (cs: Command[]) => cs.at(-1)?.type
 const runOf = (cs: Command[]) => (cs.find((c) => c.type === 'load') as { run: number }).run
 
 test('load: gửi mã rồi ps2_PRESENT = 1 và đủ mọi khoá tay cầm (cần 128), chưa chạy thì cổng trung tính', () => {
@@ -95,4 +96,90 @@ test('mã không sinh được ⇒ không nạp, báo lỗi; bấm Dừng ⇒ c�
   assert.equal(sent.at(-1)!.type, 'stop')
   assert.equal(link.state, 'stopped')
   assert.deepEqual(link.ports(), NEUTRAL)
+})
+
+// ---------- Tạm dừng / chạy từng khối / Serial (spec 6.1b) ----------
+const snapOf = (run: number, s: Record<string, unknown>) =>
+  ({ type: 'snapshot', run, snapshot: { pwm: pwm({}), error: undefined, running: true, serial: '', t: 0, block: undefined, ...s }, bus: {} }) as unknown as Message
+
+test('pause(): gửi pause, state paused; resume(): gửi run; step(): gửi step, state paused', () => {
+  const { link, sent } = setup()
+  link.load('x')
+  link.start()
+  link.pause()
+  assert.deepEqual(sent.at(-1), { type: 'pause' })
+  assert.equal(link.state, 'paused')
+  link.resume()
+  assert.deepEqual(sent.at(-1), { type: 'run' })
+  assert.equal(link.state, 'running')
+  link.step()
+  assert.deepEqual(sent.at(-1), { type: 'step' })
+  assert.equal(link.state, 'paused')
+  link.step()
+  assert.deepEqual(sent.at(-1), { type: 'step' }, 'đang tạm dừng vẫn chạy từng khối được')
+  assert.equal(link.state, 'paused')
+})
+
+test('step() khi mới nạp (chưa chạy) gửi step; pause/resume/step khi idle hay đã dừng không gửi gì', () => {
+  const { link, sent } = setup()
+  link.pause()
+  link.resume()
+  link.step()
+  assert.deepEqual(sent, [], 'idle: không gửi gì')
+  assert.equal(link.state, 'idle')
+  link.load('x')
+  sent.length = 0
+  link.pause()
+  link.resume()
+  assert.deepEqual(sent, [], 'mới nạp: pause / resume không gửi')
+  link.step()
+  assert.deepEqual(sent, [{ type: 'step' }])
+  assert.equal(link.state, 'paused')
+  link.stop()
+  assert.equal(lastType(sent), 'stop', 'đang tạm dừng bấm Dừng ⇒ gửi stop')
+  sent.length = 0
+  link.pause()
+  link.resume()
+  link.step()
+  assert.deepEqual(sent, [], 'đã dừng: không gửi gì')
+})
+
+test('tạm dừng: robot giữ lệnh cuối (ports ≠ NEUTRAL khi có pwm), snapshot vẫn được nhận', () => {
+  const { link, sent } = setup()
+  link.load('x')
+  const run = runOf(sent)
+  link.start()
+  link.pause()
+  link.receive(snap(run, pwm({ 3: 4095 })))
+  assert.equal(link.ports().M1, 100)
+  assert.notDeepEqual(link.ports(), NEUTRAL)
+})
+
+test('snapshot: block, virtualT, serial cộng dồn (cắt 20 000 ký tự cuối); nạp lại thì xoá', () => {
+  const { link, sent } = setup()
+  link.load('x')
+  const run = runOf(sent)
+  link.start()
+  link.receive(snapOf(run, { serial: 'xin ', block: 'b1', t: 1000 }))
+  link.receive(snapOf(run, { serial: 'chào\n', block: 'b2', t: 2000 }))
+  assert.equal(link.serial, 'xin chào\n')
+  assert.equal(link.block, 'b2')
+  assert.equal(link.virtualT, 2000)
+  link.receive(snapOf(run, { serial: 'a'.repeat(19_999) + 'Z' }))
+  assert.equal(link.serial.length, 20_000)
+  assert.ok(link.serial.endsWith('aZ') && link.serial.startsWith('a'), 'giữ 20 000 ký tự cuối')
+  link.load('y')
+  assert.equal(link.serial, '')
+  assert.equal(link.block, undefined)
+  assert.equal(link.virtualT, 0)
+})
+
+test('tạm dừng: tay cầm vẫn gửi (lần chạy từng khối kế đọc đúng tay)', () => {
+  const { link, sent } = setup()
+  link.load('x')
+  link.start()
+  link.pause()
+  sent.length = 0
+  link.input({ ...PS2_NEUTRAL, ps2_PSS_LY: 0 })
+  assert.equal(inputs(sent).adcps2_PSS_LY, 0)
 })

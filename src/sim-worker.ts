@@ -12,6 +12,7 @@
  */
 import { Session, type Snapshot } from '@thingblock/thingblock-sim'
 import { evaluateLogRules, parseRule, type Rule, type RuleResult } from '@thingblock/thingblock-sim/checker'
+import { stepToNextBlock } from './sim-step.ts'
 
 export interface Bus {
   /** Số lần chương trình đọc từng chân GPIO, kể từ snapshot trước. */
@@ -34,6 +35,11 @@ export type Command =
   | { type: 'run' }
   | { type: 'stop' }
   | { type: 'input'; key: string; value: number }
+  // Cộng thêm cho trang FanRoc (spec 6.1b); bài học robot.edu.vn không gửi hai lệnh này.
+  /** Tạm dừng: dừng đồng hồ, giữ bo ảo; `run` chạy tiếp từ chỗ dừng. */
+  | { type: 'pause' }
+  /** Chạy từng khối: chạy tới khối kế (tối đa 5 s ảo, không chờ đồng hồ thật) rồi tạm dừng. */
+  | { type: 'step' }
 
 /** Mỗi thư mang số lần chạy (`run` của lệnh `load`) để trang bỏ được thư còn sót của lần chạy trước. */
 export type Message = { run: number } & (
@@ -181,6 +187,24 @@ scope.onmessage = ({ data }) => {
       break
     case 'input':
       session?.setInput(data.key, data.value)
+      break
+    case 'pause':
+    case 'step':
+      if (timer) clearInterval(timer)
+      timer = null
+      if (!session) return
+      if (data.type === 'pause') {
+        session.running = false
+        post(session.snapshot())
+        break
+      }
+      try {
+        post(stepToNextBlock(session))
+        check(session)
+      } catch (e) {
+        send({ type: 'error', message: e instanceof Error ? e.message : String(e) })
+        session.running = false
+      }
       break
     case 'stop':
       if (timer) clearInterval(timer)

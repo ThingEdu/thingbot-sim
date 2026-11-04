@@ -71,6 +71,7 @@ const STATUS: Record<LinkState, string> = {
   idle: 'Chưa chạy. Bấm ▶ Chạy để nạp chương trình lên ThingBot.',
   loaded: 'Đã nạp, chờ hết 10 giây xả bóng…',
   running: 'Đang chạy',
+  paused: 'Đang tạm dừng — robot giữ lệnh cuối',
   stopped: 'Đã dừng — robot đứng yên',
   error: 'Chương trình lỗi — robot đứng yên, trận vẫn tiếp tục',
 }
