@@ -255,7 +255,11 @@ export function createEditors(container: HTMLElement, robots: { label: string; c
       t.link.stop()
       const { code, error } = t.blocks.simCode()
       const ok = t.link.load(code, error)
-      for (const f of followers) if (f.src === i) (ok ? f.link.load(code) : f.link.stop())
+      for (const f of followers) {
+        if (f.src !== i) continue
+        f.link.stop() // như thẻ nguồn: dừng bo cũ trước khi nạp lại
+        if (ok) f.link.load(code)
+      }
       startIfOpen(t.link)
       for (const f of followers) if (f.src === i) startIfOpen(f.link)
     },
@@ -310,6 +314,7 @@ export function createEditors(container: HTMLElement, robots: { label: string; c
       // (setGate) đóng lúc đang tạm dừng nên bo mới chờ ở 'loaded' và chạy khi phiên chạy tiếp.
       const s = tabs[src].link
       if ((s.state === 'running' || s.state === 'loaded' || s.state === 'paused') && s.code !== null) {
+        b.link.stop()
         b.link.load(s.code)
         startIfOpen(b.link)
       }

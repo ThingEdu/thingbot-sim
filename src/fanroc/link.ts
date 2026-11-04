@@ -12,6 +12,9 @@ export type LinkState = 'idle' | 'loaded' | 'running' | 'paused' | 'stopped' | '
 
 /** Serial giữ tối đa bấy nhiêu ký tự cuối (khung Serial của trang). */
 export const SERIAL_MAX = 20_000
+/** Chờ bo ảo trả lời pause / step tối đa chừng này ms thật; quá hạn thì bỏ lệnh khỏi hàng chờ (worker treo không làm
+ *  nút kẹt mãi, và thư tới sau không xong nhầm lời hứa của lệnh khác). */
+export const REPLY_TIMEOUT_MS = 3000
 
 /** Lý do bo ảo dừng (BoardTrap của thingblock-sim) nói bằng tiếng Việt. */
 const TRAPS: Record<string, string> = {
@@ -92,9 +95,9 @@ export class RobotLink {
    * Tạm dừng (⏸): chỉ khi đang chạy. Robot giữ lệnh cuối; trang quyết có chạy vật lý không. Lời hứa xong khi snapshot
    * trả lời tới (`virtualT` = đúng lúc bo dừng), hoặc ngay nếu không đang chạy.
    */
-  pause(): Promise<void> {
+  pause(timeoutMs = REPLY_TIMEOUT_MS): Promise<void> {
     if (this.state !== 'running') return Promise.resolve()
-    const done = new Promise<void>((resolve) => this.pending.push({ kind: 'pause', done: resolve }))
+    const done = this.expect('pause', timeoutMs)
     this.post({ type: 'pause' })
     this.set('paused')
     return done
@@ -109,11 +112,12 @@ export class RobotLink {
 
   /**
    * Chạy từng khối (⏭): tới khối kế rồi tạm dừng. Lời hứa xong khi snapshot trả lời của lệnh này tới (`virtualT`,
-   * `block`, cổng đã cập nhật), hoặc khi link dừng / lỗi / nạp lại; xong ngay nếu không có chương trình để chạy.
+   * `block`, cổng đã cập nhật), hoặc khi link dừng / lỗi / nạp lại / quá `timeoutMs`; xong ngay nếu không có chương
+   * trình để chạy.
    */
-  step(): Promise<void> {
+  step(timeoutMs = REPLY_TIMEOUT_MS): Promise<void> {
     if (this.state !== 'running' && this.state !== 'paused' && this.state !== 'loaded') return Promise.resolve()
-    const done = new Promise<void>((resolve) => this.pending.push({ kind: 'step', done: resolve }))
+    const done = this.expect('step', timeoutMs)
     this.post({ type: 'step' })
     this.set('paused')
     return done
@@ -161,6 +165,28 @@ export class RobotLink {
 
   private sendPad(): void {
     for (const [k, v] of Object.entries(this.feed.next(this.pad))) this.post({ type: 'input', key: `adc${k}`, value: v })
+  }
+
+  /**
+   * Xếp một thư trả lời phải chờ. Quá `ms` mà chưa tới thì bỏ khỏi hàng (lời hứa xong): thư tới sau đó — nếu có — sẽ
+   * bị coi là trả lời của lệnh kế; đổi lại một thư mất không làm lệch mọi lệnh về sau.
+   */
+  private expect(kind: 'pause' | 'step', ms: number): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const entry = {
+        kind,
+        done: () => {
+          clearTimeout(timer)
+          resolve()
+        },
+      }
+      const timer = setTimeout(() => {
+        const k = this.pending.indexOf(entry)
+        if (k >= 0) this.pending.splice(k, 1)
+        resolve()
+      }, ms)
+      this.pending.push(entry)
+    })
   }
 
   /** Bỏ mọi thư trả lời đang chờ; lời hứa của step() xong luôn. */

@@ -31,8 +31,8 @@ export type GameMode = 'match' | 'practice' | 'mission'
 
 /** Chạy từng khối: sân chạy tối đa chừng này giây cho một khối (khối `đợi` rất dài, hay `loop()` rỗng). */
 export const STEP_MAX_S = 5
-/** Chờ bo ảo trả lời lệnh từng khối tối đa chừng này ms thật (worker treo thì nút không kẹt mãi). */
-const STEP_REPLY_MS = 3000
+/** Link đang thuộc phiên nào (phiên mới nhận link ⇒ phiên cũ dispose không dừng nó). */
+const owner = new WeakMap<RobotLink, GameSession>()
 
 export interface CreateOpts {
   mode: GameMode
@@ -69,7 +69,7 @@ export class GameSession {
   private readonly agents: (Agent | null)[]
   private acc = 0
   private disposed = false
-  private stepping: Promise<void> | null = null
+  private stepPromise: Promise<void> | null = null
 
   static async create(o: CreateOpts): Promise<GameSession> {
     const mission = o.mode === 'mission'
@@ -100,6 +100,7 @@ export class GameSession {
     this.humans = mode === 'mission' ? [] : (['red', 'blue'] as const).map((a) => new HumanPlayer(a))
     for (const h of this.humans) h.onEvent = (s) => match.log(s)
     this.drivers = seats.map((s) => s.driver)
+    for (const l of this.links()) owner.set(l, this)
     this.agents = seats.map((s, i) => this.agentFor(i, s.driver))
   }
 
@@ -122,6 +123,7 @@ export class GameSession {
   setDriver(i: number, d: Driver): void {
     if (i < 0 || i >= this.robots.length) return
     this.drivers[i] = d
+    if (d.kind === 'program') owner.set(d.link, this)
     this.agents[i] = this.agentFor(i, d)
     this.ports[i] = NEUTRAL
     if (this.paused && d.kind === 'program') void d.link.pause()
@@ -158,24 +160,31 @@ export class GameSession {
    */
   stepBlock(): Promise<void> {
     if (this.disposed) return Promise.resolve()
-    if (this.stepping) return this.stepping
+    if (this.stepPromise) return this.stepPromise
     const gateOpen = this.mode !== 'match' || this.match.phase === 'play'
     const pausing = this.pauseAll()
     const links = this.links().filter((l) => l.state === 'paused' || (l.state === 'loaded' && gateOpen))
     if (!links.length) return Promise.resolve()
+    // Chạy tiếp (resume) giữa chừng ⇒ bỏ phần sân của bước này: vòng khung hình đã chạy sân theo thời gian thật.
+    const aborted = () => this.disposed || !this.paused
     const run = async () => {
       // Đang chạy thì chờ bo dừng hẳn trước: thời gian ảo bo chạy tiếp tới lúc nhận pause không tính vào khối này.
-      await withTimeout(Promise.all(pausing), STEP_REPLY_MS)
-      if (this.disposed) return
+      await Promise.all(pausing)
+      if (aborted()) return
       const before = links.map((l) => l.virtualT)
-      await withTimeout(Promise.all(links.map((l) => l.step())), STEP_REPLY_MS)
-      if (this.disposed) return
+      await Promise.all(links.map((l) => l.step()))
+      if (aborted()) return
       const us = Math.max(0, ...links.map((l, k) => l.virtualT - before[k]))
       const n = Math.round(Math.min(STEP_MAX_S, us / 1e6) / PHYSICS_DT)
-      for (let k = 0; k < n && !this.ended() && !this.disposed; k++) this.tick()
+      for (let k = 0; k < n && !this.ended() && !aborted(); k++) this.tick()
     }
-    this.stepping = run().finally(() => (this.stepping = null))
-    return this.stepping
+    this.stepPromise = run().finally(() => (this.stepPromise = null))
+    return this.stepPromise
+  }
+
+  /** Đang chạy từng khối (chờ bo ảo trả lời / chạy sân của khối): trang khoá nút Tạm dừng / Chạy tiếp. */
+  get stepping(): boolean {
+    return this.stepPromise !== null
   }
 
   pause(): void {
@@ -189,11 +198,14 @@ export class GameSession {
     for (const l of this.links()) l.resume()
   }
 
-  /** Kết thúc phiên: dừng mọi bo ảo của ghế "chương trình", giải phóng Rapier. Sau đó advance / stepBlock không làm gì. */
+  /**
+   * Kết thúc phiên: dừng các bo ảo phiên này còn giữ (link đã được phiên mới nhận thì để nguyên), giải phóng Rapier.
+   * Sau đó advance / stepBlock không làm gì.
+   */
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
-    for (const l of this.links()) l.stop()
+    for (const l of this.links()) if (owner.get(l) === this) (owner.delete(l), l.stop())
     this.world.rapier.free()
   }
 
@@ -237,11 +249,4 @@ export class GameSession {
     this.match.step(PHYSICS_DT, this.ports)
     this.onStep?.(this)
   }
-}
-
-/** Xong khi `p` xong hoặc sau `ms` (không giữ tiến trình Node lại sau khi xong). */
-function withTimeout(p: Promise<unknown>, ms: number): Promise<void> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const late = new Promise<void>((resolve) => (timer = setTimeout(resolve, ms)))
-  return Promise.race([p.then(() => undefined), late]).finally(() => clearTimeout(timer))
 }

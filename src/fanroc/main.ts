@@ -212,9 +212,16 @@ async function start(): Promise<void> {
     else game.resume()
     showPaused()
   }
+  /** Đang chạy từng khối thì khoá Tạm dừng / Chạy tiếp / Từng khối tới khi khối chạy xong. */
   const stepBlock = async () => {
-    await game.stepBlock()
-    showPaused()
+    const g = game
+    pauseBtn.disabled = stepBtn.disabled = true
+    try {
+      await g.stepBlock()
+    } finally {
+      pauseBtn.disabled = stepBtn.disabled = false
+      showPaused()
+    }
   }
   expose()
 

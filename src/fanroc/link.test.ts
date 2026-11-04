@@ -207,3 +207,20 @@ test('step() xong đúng lúc snapshot trả lời của nó tới (sau trả l�
   link.stop()
   await q
 })
+
+test('step() quá hạn không có trả lời ⇒ xong và rời hàng chờ; thư kế tiếp là của lệnh kế, không xong nhầm', async () => {
+  const { link, sent } = setup()
+  const reply = (t: number) =>
+    link.receive({ type: 'snapshot', run: runOf(sent), snapshot: { pwm: pwm({}), t, running: false }, bus: {} } as unknown as Message)
+  link.load('x')
+  reply(0) // trả lời load
+  await link.step(20) // bo không trả lời: xong sau 20 ms
+  let done = false
+  const p = link.step(10_000).then(() => (done = true))
+  reply(500_000) // trả lời step thứ hai
+  await Promise.resolve()
+  await Promise.resolve()
+  assert.equal(done, true, 'trả lời phải thuộc step thứ hai')
+  await p
+  link.stop()
+})

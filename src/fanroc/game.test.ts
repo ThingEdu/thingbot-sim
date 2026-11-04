@@ -14,24 +14,30 @@ const FORWARD = Array.from({ length: 16 }, (_, ch) => (ch === 3 || ch === 5 ? Ma
 
 /**
  * Bo ảo giả: trả snapshot như worker thật (load / pause / step trả `running: false`), pwm cố định; mỗi lệnh step đẩy
- * thời gian ảo thêm `stepUs` µs. Trả lời ở microtask sau (như thư của Worker), không đồng bộ.
+ * thời gian ảo thêm `stepUs` µs. Trả lời ở microtask sau (như thư của Worker), không đồng bộ. Lúc nhận pause, bo còn
+ * gửi một nhịp chạy (`running: true`, +30 ms) rồi trả lời pause (+20 ms nữa): thời gian chạy tiếp tới lúc dừng không
+ * thuộc khối kế. `hold` ⇒ trả lời step giữ lại tới khi gọi `release()`.
  */
-function fakeLink(stepUs: number) {
+function fakeLink(stepUs: number, hold = false) {
   const sent: Command[] = []
   let run = 0
   let t = 0
+  let held: (() => void) | null = null
   const link: RobotLink = new RobotLink((c) => {
     sent.push(c)
-    const reply = (running: boolean) =>
-      queueMicrotask(() =>
-        link.receive({ type: 'snapshot', run, snapshot: { pwm: FORWARD, t, running, block: 'b' }, bus: {} } as unknown as Message),
-      )
+    const snap = (running: boolean) =>
+      link.receive({ type: 'snapshot', run, snapshot: { pwm: FORWARD, t, running, block: 'b' }, bus: {} } as unknown as Message)
+    const reply = (running: boolean, dt = 0) => queueMicrotask(() => ((t += dt), snap(running)))
     if (c.type === 'load') ((run = c.run), (t = 0), reply(false))
-    else if (c.type === 'pause') reply(false)
-    else if (c.type === 'step') ((t += stepUs), reply(false))
+    else if (c.type === 'pause') (reply(true, 30_000), reply(false, 20_000))
+    else if (c.type === 'step') {
+      if (hold) held = () => ((t += stepUs), snap(false))
+      else reply(false, stepUs)
+    }
   })
-  return { link, sent }
+  return { link, sent, release: () => held?.() }
 }
+const ticks = () => new Promise((r) => setTimeout(r, 0))
 
 const poses = (g: GameSession) => g.robots.map((r) => ({ ...r.pose }))
 
@@ -182,4 +188,48 @@ test(`stepBlock: Δ virtualT lớn bị chặn ở ${STEP_MAX_S} s; không có c
   } finally {
     g.dispose()
   }
+})
+
+test('stepBlock: bấm Chạy tiếp khi bo chưa trả lời ⇒ không chạy dồn Δ của khối lên sân (chỉ advance chạy)', async () => {
+  const { link, release } = fakeLink(3_000_000, true)
+  const g = await GameSession.create({
+    mode: 'mission', seats: [{ cfg: MAKER, team: 'Em', driver: { kind: 'program', link } }], seed: 1, balls: false,
+  })
+  try {
+    let steps = 0
+    g.onStep = () => steps++
+    link.load('code')
+    g.advance(PHYSICS_DT, 1)
+    assert.equal(link.state, 'running')
+    steps = 0
+    const p = g.stepBlock()
+    assert.equal(g.stepping, true)
+    await ticks() // trả lời pause tới, step đã gửi, trả lời step còn giữ
+    g.resume()
+    assert.equal(g.paused, false)
+    const n = g.advance(PHYSICS_DT, 1)
+    release()
+    await p
+    assert.equal(g.stepping, false)
+    assert.equal(steps, n, `sân chạy ${steps} bước, advance chỉ ${n} bước (không được thêm 180 bước của khối 3 s)`)
+  } finally {
+    g.dispose()
+  }
+})
+
+test('dispose: chỉ dừng link phiên còn giữ — link đã giao cho phiên mới thì chạy tiếp', async () => {
+  const { link } = fakeLink(0)
+  const seat = (): SeatSpec[] => [{ cfg: MAKER, team: 'Em', driver: { kind: 'program', link } }]
+  const old = await GameSession.create({ mode: 'mission', seats: seat(), seed: 1, balls: false })
+  const next = await GameSession.create({ mode: 'mission', seats: seat(), seed: 2, balls: false })
+  try {
+    link.load('code')
+    next.advance(PHYSICS_DT, 1)
+    assert.equal(link.state, 'running')
+    old.dispose()
+    assert.equal(link.state, 'running', 'phiên cũ không được dừng link của phiên mới')
+  } finally {
+    next.dispose()
+  }
+  assert.equal(link.state, 'stopped')
 })
