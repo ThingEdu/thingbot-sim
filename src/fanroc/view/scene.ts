@@ -22,7 +22,8 @@ export const ORBIT_SPEED = 0.05
 export const FOLLOW_ZOOM = [0.6, 1, 1.6] as const
 /** Camera Theo robot ở mức `zoom`: lùi sau robot `back` m, cao `up` m, nhìn điểm trước mũi `ahead` m. */
 export function followOffset(zoom: number): { back: number; up: number; ahead: number } {
-  return { back: 0.95 * zoom, up: 0.12 + 0.55 * zoom, ahead: 0.25 + 0.3 * zoom }
+  // Cao tối thiểu ~0,55 m: robot sát rào Khu Điều Khiển (cao 0,3 m) vẫn không bị rào che ở mức gần.
+  return { back: 0.95 * zoom, up: 0.3 + 0.4 * zoom, ahead: 0.25 + 0.3 * zoom }
 }
 export type Quality = 'low' | 'high'
 

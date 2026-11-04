@@ -1,4 +1,4 @@
-# FANROC Thanh Hỏa / ThingBot FanRoc Game — các điều đã tự quyết khi thi công (R1–R134)
+# FANROC Thanh Hỏa / ThingBot FanRoc Game — các điều đã tự quyết khi thi công (R1–R138)
 
 Đợt 1 (R1–R34) thi công ngày 03/11/2026 theo kế hoạch `docs/superpowers/plans/2026-11-03-fanroc-sim.md`
 và đặc tả `docs/superpowers/specs/2026-11-03-fanroc-sim-design.md`; đợt 2 — giao diện game "ThingBot FanRoc Game"
@@ -242,6 +242,10 @@ Mục nên xem trước: **R37, R57/R59, R96, R56, R83, R94, R103, R106, R115/R1
 | R132 | Số bạn của giải chỉ áp khi đang ở màn của giải (Pit / ghi danh, trận giải, Xem nhanh, Xưởng mở từ Pit), không ghi vào ⚙ › Hai bạn chơi; rời màn giải thì bàn phím về đúng cài đặt của em. Khoá R85/R89 trong giải giữ nguyên | — |
 | R133 | Trận máy chạy ngầm lỗi ⇒ dòng báo ở Pit kèm nút "Thử lại" (xoá lỗi, chạy lại hàng trận máy); lỗi còn hiện khi rời Pit rồi quay lại, tới khi Thử lại hoặc Giải mới | Lỗi lặp lại thì em bấm Thử lại mãi — chưa có lối báo "sân hỏng" |
 | R134 | Màn chơi gọn (anh duyệt 04/11): màn chính, trận, giải, nhiệm vụ (danh sách), Luật chơi, Robot mẫu ẩn cột biểu tượng, khung Serial, thanh trạng thái; 🏠 ⚙ nổi góc phải trên (nằm trên màn phủ ⇒ hết lỗi ⚙ bị che). Xưởng và màn làm nhiệm vụ giữ đủ vỏ lập trình. ⚙ › Chế độ giáo viên (lưu trong cài đặt) bật lại đủ vỏ ở màn có khối (trận, trận giải). Thanh chạy và thẻ robot nhỏ vẫn giữ trong trận (cần để Chạy / Tạm dừng / đổi camera). Chữ trên ô màn chính rút còn một dòng ngắn; link AGPL ở ⚙ | Học sinh muốn xem Serial giữa trận phải bật Chế độ giáo viên |
+| R135 | Camera Theo robot lùi xa (mức vừa: sau 0,95 m, cao 0,7 m), lăn chuột đổi 3 mức gần / vừa / xa; mức gần cao ≥ 0,54 m để rào Khu Điều Khiển không che robot. Robot mẫu: khung 3D vừa cỡ robot (cả phần vươn), nút "Thử cơ cấu" | Lăn chuột ở góc Theo robot không còn phóng to tự do như góc Toàn sân |
+| R136 | Mẫu Maker dựng từ CAD Onshape "Bộ thingbot mới" của anh (assets/robot-maker.json, ~26k tam giác, 370 KB; công cụ scripts/cad/). Đế 4 bánh CAD dùng cho cả đế 2 bánh (hình), đế omni / mecanum thay bánh CAD bằng bánh đa hướng tự dựng cùng chỗ. Khớp tay vòng ước theo hình (cadModel.ts HOOP_PIVOT) | Khớp tay vòng có thể lệch so với robot thật — anh xem nút Thử cơ cấu |
+| R137 | Anh chốt 05/11: Mẫu Maker cắm cờ bằng ĐUÔI — thanh răng lùi ra sau mang servo + giá cờ; thanh răng kéo dây nhấc tay vòng. Mô phỏng: giá cờ lúc thu 126,5 mm sau tâm (trên nóc), thanh răng lùi 0,2 m (CAD ~213 mm, trần luật 500 mm: 300 + 162 = 462 mm); robot máy lùi đuôi vào lỗ | Tay vòng nhấc theo M4 (hình); M3 vẫn là cổng "tay vòng xúc bóng" trong bảng cổng — robot thật có thể khác |
+| R138 | Mẫu Maker không còn vươn điểm xả bóng tới trước ⇒ chỉ thả bóng ở rãnh mũi xe chạm (Rãnh 1); robot máy lập kế hoạch theo rãnh với tới. Thêm gỡ kẹt khi đi 3 s không lại gần đích. Điểm robot máy 4 Mẫu Maker: Dễ 238 / Vừa 393 / Khó 438 (cũ 417 / 621 / 892) | Trận với robot máy thấp điểm hơn trước; nếu robot thật đổ được Rãnh 2–3 thì cần số đo của anh |
 
 ### Việc còn chờ anh
 

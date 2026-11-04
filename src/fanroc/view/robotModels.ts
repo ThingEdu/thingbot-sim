@@ -7,6 +7,7 @@
 import * as THREE from 'three'
 import type { Alliance } from '../layout.ts'
 import { ROBOTS, type RobotConfig } from '../robots.ts'
+import { CAD_WHEELS, HOOP_LIFT, HOOP_PIVOT, makerCad } from './cadModel.ts'
 
 const mat = (color: number, o: THREE.MeshStandardMaterialParameters = {}) =>
   new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0.05, ...o })
@@ -351,18 +352,71 @@ function buildSort(cfg: RobotConfig, g: THREE.Group): Omit<Parts, 'wheels'> {
 
 const BUILD = { maker: buildMaker, ui: buildUi, co: buildCo, sort: buildSort }
 
+/**
+ * Mẫu Maker theo CAD Onshape (cadModel.ts): thân + thanh răng + tay vòng + 4 bánh. Thanh răng lùi ra sau theo
+ * `extend` mang servo + giá cờ; tay vòng nhấc theo thanh răng (dây kéo). Đế 4 bánh omni / mecanum: bánh CAD thay bằng
+ * bánh đa hướng tự dựng ở đúng chỗ bánh CAD.
+ */
+function buildMakerCad(cfg: RobotConfig, g: THREE.Group): Parts {
+  const { mat, groups } = makerCad()
+  const mesh = (name: string) => {
+    const o = new THREE.Mesh(groups[name].geo, mat)
+    o.position.copy(groups[name].pivot)
+    return o
+  }
+  g.add(mesh('body'))
+  const rack = new THREE.Group()
+  rack.add(mesh('rack'))
+  g.add(rack)
+  const hoop = new THREE.Group()
+  hoop.position.copy(HOOP_PIVOT)
+  const hm = mesh('hoop')
+  hm.position.sub(HOOP_PIVOT)
+  hoop.add(hm)
+  g.add(hoop)
+  const wheels: Wheel[] = CAD_WHEELS.map((name) => {
+    const p = groups[name].pivot
+    if (cfg.drive !== 'diff2') return wheel(32.5, 25, p.x, p.z, g, cfg.drive)
+    const obj = new THREE.Group()
+    obj.position.copy(p)
+    const m = mesh(name)
+    m.position.set(0, 0, 0)
+    obj.add(m)
+    g.add(obj)
+    return { obj, x: p.x / 1000 }
+  })
+  // Cờ trong giá cờ: đáy đế cờ dưới điểm kẹp nửa chiều cao đế.
+  const flag = makeFlag()
+  flag.scale.setScalar(1000)
+  g.add(flag)
+  const max = ROBOTS.maker.maxExtend
+  return {
+    wheels,
+    update: (p) => {
+      rack.position.z = -p.extend * 1000
+      hoop.rotation.x = -(Math.min(1, p.extend / max) * HOOP_LIFT)
+      flag.position.copy(p.grip3).multiplyScalar(1000)
+      flag.position.y -= 22.5
+      flag.visible = p.hasFlag
+    },
+  }
+}
+
 export function buildRobotModel(cfg: RobotConfig, alliance: Alliance): RobotModel {
   const def = ROBOTS[cfg.type]
   const group = new THREE.Group()
   const body = new THREE.Group()
   body.scale.setScalar(0.001)
   group.add(body)
-  const mech = BUILD[cfg.type](cfg, body)
-  const wheels = buildDrive(cfg, body)
+  const cad = cfg.type === 'maker' ? buildMakerCad(cfg, body) : null
+  const mech = cad ?? BUILD[cfg.type](cfg, body)
+  const wheels = cad ? cad.wheels : buildDrive(cfg, body)
   // Dải màu liên minh quanh thân.
   const bandMat = mat(BAND[alliance], { transparent: true, opacity: 0.85 })
-  const band = box(def.size.w + 0.004, 0.012, def.size.l * 0.6, bandMat, 0, 0.045, 0)
-  group.add(band)
+  if (cad) {
+    // Mẫu Maker CAD: hai dải mỏng ốp ngoài hai tấm bên (khung CAD rộng 240 mm, tấm bên cao ~35 mm) — không phủ khung.
+    for (const sx of [-1, 1]) group.add(box(0.003, 0.014, 0.2, bandMat, sx * 0.1215, 0.032, -0.035))
+  } else group.add(box(def.size.w + 0.004, 0.012, def.size.l * 0.6, bandMat, 0, 0.045, 0))
   group.traverse((o) => {
     if (o instanceof THREE.Mesh && o.material !== M.acrylic) {
       o.castShadow = true
@@ -383,7 +437,8 @@ export function buildRobotModel(cfg: RobotConfig, alliance: Alliance): RobotMode
     dispose() {
       const geos = new Set<THREE.BufferGeometry>()
       group.traverse((o) => {
-        if (o instanceof THREE.Mesh) geos.add(o.geometry)
+        // Lưới CAD dùng chung cho mọi robot (cadModel.ts): không giải phóng theo robot.
+        if (o instanceof THREE.Mesh && !o.geometry.userData.shared) geos.add(o.geometry)
       })
       for (const g of geos) g.dispose()
       bandMat.dispose()

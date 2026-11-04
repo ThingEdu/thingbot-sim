@@ -32,6 +32,12 @@ export interface RobotDef {
    * (tuyến tính theo S1 / 180). Không có thì S1 không làm gì.
    */
   arm?: { reach: number; up: number }
+  /**
+   * Robot cắm cờ bằng đuôi (LIFT_AXIS 'back'): tâm giá giữ cờ lúc thanh răng thu hết cách tâm xe `rest` m về phía sau;
+   * `half` = nửa cỡ giá + đế cờ (phần nhô ra sau); `front` = phần thanh răng nhô trước mũi lúc thu (lùi thanh thì mũi
+   * ngắn lại tối đa chừng này). CAD Mẫu Maker: cả cụm dài 302 mm (đuôi khung −116 … mũi thanh răng +186 mm quanh tâm khung).
+   */
+  rearGrip?: { rest: number; half: number; front: number }
 }
 
 export const ROBOTS: Record<RobotType, RobotDef> = {
@@ -42,8 +48,10 @@ export const ROBOTS: Record<RobotType, RobotDef> = {
     mech: { M3: 'Tay vòng xúc bóng', M4: 'Thanh trượt răng' },
     servos: { S1: 'Nâng tay', S2: 'Kẹp cờ', S3: 'Cửa xả' },
     storage: 6, hpLoad: false, flag: true,
-    release: { y: 0.2, reach: 0.05 }, maxExtend: 0.13,
+    // Thanh răng 300 mm, bánh răng giữa xe: lùi được ~200 mm (CAD) — đúng trần mở rộng 500 mm của luật.
+    release: { y: 0.2, reach: 0.05 }, maxExtend: 0.2,
     arm: { reach: 0, up: 0.06 },
+    rearGrip: { rest: 0.1265, half: 0.0235, front: 0.039 },
   },
   ui: {
     type: 'ui', name: 'Xe Ủi',
@@ -143,6 +151,22 @@ export const LIFT_AXIS: Partial<Record<RobotType, 'forward' | 'back' | 'up'>> = 
 export function localGripPoint(def: RobotDef, extend: number, armFrac: number): { x: number; y: number; z: number } {
   const axis = LIFT_AXIS[def.type]
   const up = axis === 'up' ? extend : 0
-  const out = def.size.l / 2 + def.release.reach + (axis === 'forward' || axis === 'back' ? extend : 0) + armFrac * (def.arm?.reach ?? 0)
-  return { x: 0, y: def.release.y + up + armFrac * (def.arm?.up ?? 0), z: axis === 'back' ? -out : out }
+  const arm = armFrac * (def.arm?.reach ?? 0)
+  const y = def.release.y + up + armFrac * (def.arm?.up ?? 0)
+  if (axis === 'back') return { x: 0, y, z: -((def.rearGrip?.rest ?? def.size.l / 2 + def.release.reach) + extend + arm) }
+  return { x: 0, y, z: def.size.l / 2 + def.release.reach + (axis === 'forward' ? extend : 0) + arm }
+}
+
+/**
+ * Mức mở rộng một chiều tính theo luật của robot cắm cờ bằng đuôi: phần nhô ra sau trừ phần mũi ngắn lại (thanh răng
+ * lùi thì đầu trước của nó cũng lùi vào), m; robot khác 0.
+ */
+export function rearExtent(def: RobotDef, extend: number, armFrac: number): number {
+  return Math.max(0, rearOverhang(def, extend, armFrac) - Math.min(extend, def.rearGrip?.front ?? 0))
+}
+
+/** Phần nhô ra sau đuôi xe của robot cắm cờ bằng đuôi (giá cờ + đế cờ vượt mép sau), m; robot khác 0. */
+export function rearOverhang(def: RobotDef, extend: number, armFrac: number): number {
+  if (LIFT_AXIS[def.type] !== 'back') return 0
+  return Math.max(0, -localGripPoint(def, extend, armFrac).z + (def.rearGrip?.half ?? 0) - def.size.l / 2)
 }

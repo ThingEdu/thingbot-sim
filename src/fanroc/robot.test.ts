@@ -4,7 +4,7 @@ import { FanrocWorld, PHYSICS_DT } from './world.ts'
 import { RobotBody, V_MAX } from './robot.ts'
 import { NEUTRAL, type PortValues } from './ports.ts'
 import { BALL_R, HOLE, PEAK_Y } from './layout.ts'
-import { ROBOTS, type RobotConfig } from './robots.ts'
+import { localGripPoint, ROBOTS, type RobotConfig } from './robots.ts'
 
 const MAKER: RobotConfig = { type: 'maker', drive: 'diff2', actuator: 'tt' }
 
@@ -117,13 +117,14 @@ test('Nâng/vươn M4 = 100: extend tăng 0.08 m/s, kẹp ở maxExtend, footpri
   assert.equal(r.extend, 0)
 })
 
-/** Đặt Maker sao cho điểm kẹp (đuôi xe + reach: Mẫu Maker cắm cờ bằng đuôi) nằm ngay trên lỗ cờ Núi A. */
+/** Đặt Maker sao cho điểm kẹp (giá cờ ở đuôi thanh răng: Mẫu Maker cắm cờ bằng đuôi) nằm ngay trên lỗ cờ Núi A. */
 const overHoleA = async () => {
   const w = await FanrocWorld.create(1)
   const r = new RobotBody(w, MAKER, 'red', 0)
   const h = w.holeCentres()[0]
-  // yaw π: mũi hướng +z, đuôi hướng −z về phía lỗ.
-  r.setPose({ x: h.x, z: h.z + ROBOTS.maker.size.l / 2 + ROBOTS.maker.release.reach, yaw: Math.PI })
+  // yaw π: mũi hướng +z, đuôi hướng −z về phía lỗ; thanh răng lùi hết (giá cờ ra sau đuôi).
+  r.extend = ROBOTS.maker.maxExtend
+  r.setPose({ x: h.x, z: h.z - localGripPoint(ROBOTS.maker, r.extend, 0).z, yaw: Math.PI })
   return { w, r, h }
 }
 
@@ -158,7 +159,8 @@ test('R16: lỗ cờ đang có bóng ⇒ không cắm, lastMessage báo, robot v
 
 test('Cờ mở chỗ khác ⇒ rơi xuống sàn thành vật dynamic; kẹp đóng lại gần cờ ⇒ nhặt lại', async () => {
   const { w, r } = await corridor()
-  drive(w, r, { S2: 150 }, 0.1)
+  // Mẫu Maker giữ cờ trên nóc: lùi thanh răng ra sau đuôi trước, cờ mới rơi xuống sàn (không rơi lên nóc xe).
+  drive(w, r, { M4: 100, S2: 150 }, 3)
   drive(w, r, { S2: 30 }, 1)
   assert.equal(r.hasFlag, false)
   assert.ok(r.flagBody, 'cờ rơi phải có body')

@@ -209,7 +209,7 @@ test('vươn ra ngoài rào S02 ⇒ thẻ vàng một lần mỗi đợt', async
   assert.equal(m.pens[0].yellow, 1)
   run(m, only(0, { M4: 100 }), 2)
   assert.equal(m.pens[0].yellow, 1, 'cùng một đợt chỉ một thẻ')
-  run(m, only(0, { M4: -100 }), 3)
+  run(m, only(0, { M4: -100 }), 4) // thu hết (0,2 m ở 0,08 m/s = 2,5 s) rồi ở trong rào đủ lâu để sang đợt mới
   run(m, only(0, { M4: 100 }), 2)
   assert.equal(m.pens[0].yellow, 2)
   assert.equal(m.events.filter((e) => e.text.includes('S02')).length, 2)
@@ -327,7 +327,9 @@ test('cán cờ nằm trên sàn (P10) ⇒ cảnh cáo, không phạt điểm', 
   const { robots, m } = await setup()
   m.t = 0
   robots[0].setPose({ x: 0, z: 0, yaw: 0 })
-  run(m, only(0, { S2: 0 }), 1) // mở kẹp xa lỗ cờ ⇒ cờ rơi ra sàn trước mũi xe
+  // Mẫu Maker giữ cờ trên nóc: lùi thanh răng ra sau rồi mở kẹp xa lỗ cờ ⇒ cờ rơi ra sàn sau đuôi xe.
+  run(m, only(0, { M4: 100 }), 3)
+  run(m, only(0, { M4: 0, S2: 0 }), 1)
   const f = robots[0].flagBody!.translation()
   assert.ok(f.y < 0.05, `cờ chưa nằm sàn: y = ${f.y}`)
   assert.equal(m.events.filter((e) => e.text.includes('P10')).length, 0)

@@ -73,7 +73,7 @@ test('ROBOTS: kích thước và kho theo spec 4.3', () => {
   assert.deepEqual(ROBOTS.ui.drives, ['diff2'])
   assert.equal(ROBOTS.co.hpLoad, true)
   assert.equal(ROBOTS.sort.storage, 10)
-  assert.equal(ROBOTS.maker.maxExtend, 0.13)
+  assert.equal(ROBOTS.maker.maxExtend, 0.2) // thanh răng CAD lùi ~200 mm
 })
 
 test('ruleChecks Xe Cắm Cờ: tay S1 vươn hết (armFrac 1) tính vào mở rộng: 280 + 140 = 420 mm đạt', () => {
@@ -87,7 +87,8 @@ test('localGripPoint: Mẫu Maker kẹp cờ ở đuôi, thanh răng lùi ra sau
   const { localGripPoint } = await import('./robots.ts')
   const m0 = localGripPoint(ROBOTS.maker, 0, 0)
   const m1 = localGripPoint(ROBOTS.maker, 0.1, 0)
-  assert.ok(m0.z < -ROBOTS.maker.size.l / 2, `điểm kẹp z ${m0.z} phải ở sau đuôi`)
+  assert.ok(m0.z < 0 && m0.z > -ROBOTS.maker.size.l / 2, `lúc thu giá cờ trên nóc, nửa sau xe: z ${m0.z}`)
+  assert.ok(localGripPoint(ROBOTS.maker, ROBOTS.maker.maxExtend, 0).z < -ROBOTS.maker.size.l / 2 - 0.15, 'lùi hết: ra sau đuôi > 15 cm')
   assert.ok(Math.abs(m0.z - m1.z - 0.1) < 1e-9 && m1.y === m0.y)
   const c0 = localGripPoint(ROBOTS.co, 0, 0)
   const c1 = localGripPoint(ROBOTS.co, 0.05, 0)

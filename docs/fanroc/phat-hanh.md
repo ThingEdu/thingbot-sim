@@ -45,6 +45,7 @@ Mỗi lần chạy thật là quyết định của người vận hành; nên t
 ## 3. Checklist trước khi công khai
 
 - [ ] **Lưới núi CAD** (`src/fanroc/assets/mountain-mesh.json`) là của anh Tuấn: cần anh đồng ý rõ trước bất kỳ sự kiện công khai nào. Không đăng / push tệp này.
+- [ ] **Hình robot CAD** (`src/fanroc/assets/robot-maker.json`, dựng từ mẫu Onshape "Bộ thingbot mới") là của anh Tuấn: cần anh đồng ý rõ trước khi đăng công khai.
 - [ ] **Tên và logo FANROC**: đã được ban tổ chức cho phép dùng.
 - [ ] **Link mã nguồn AGPL** hiện rõ trong trang và bấm vào mở đúng kho mã.
 - [ ] **Link ThingBlock**: hiện **chưa có** (`THINGBLOCK_URL` đang để `''`). Xác nhận đúng ý định, hoặc điền link khi sẵn sàng.

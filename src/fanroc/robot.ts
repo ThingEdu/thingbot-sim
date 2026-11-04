@@ -10,7 +10,7 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import type { FanrocWorld } from './world.ts'
 import { HOLE, PEAK_Y, START_POSES, type Alliance, type Pose } from './layout.ts'
 import { servo360, type PortValues } from './ports.ts'
-import { LIFT_AXIS, ROBOTS, portMap, type PortMap, type RobotConfig, type RobotDef } from './robots.ts'
+import { LIFT_AXIS, localGripPoint, rearExtent, rearOverhang, ROBOTS, portMap, type PortMap, type RobotConfig, type RobotDef } from './robots.ts'
 
 export type Vec2 = { x: number; z: number }
 
@@ -145,10 +145,6 @@ export class RobotBody {
     return LIFT_AXIS[this.def.type] === 'back'
   }
 
-  private get backExtend(): number {
-    return this.flagBehind ? this.extend : 0
-  }
-
   /** Phần tay kẹp cờ đang vươn ra (tới trước, hoặc ra sau với robot cắm cờ bằng đuôi), m. */
   private get armReach(): number {
     return this.armFrac * (this.def.arm?.reach ?? 0)
@@ -159,14 +155,14 @@ export class RobotBody {
     return this.forwardExtend + (this.flagBehind ? 0 : this.armReach)
   }
 
-  /** Phần nhô ra sau đuôi xe, m. */
+  /** Phần nhô ra sau đuôi xe (giá cờ trên thanh răng vượt mép sau), m. */
   get backExtension(): number {
-    return this.backExtend + (this.flagBehind ? this.armReach : 0)
+    return rearOverhang(this.def, this.extend, this.armFrac)
   }
 
-  /** Tổng phần mở rộng ra khỏi kích thước xuất phát (trước + sau), m — đưa vào ruleChecks. */
+  /** Tổng phần mở rộng ra khỏi kích thước xuất phát (trước + sau, trừ phần mũi thu vào), m — đưa vào ruleChecks. */
   get extension(): number {
-    return this.forwardExtension + this.backExtension
+    return this.forwardExtension + rearExtent(this.def, this.extend, this.armFrac)
   }
 
   /** Điểm cách mũi xe thêm `ahead` theo phương ngang và cao `y` so với sàn. */
@@ -194,7 +190,7 @@ export class RobotBody {
   gripPoint(): { x: number; y: number; z: number } {
     const up = this.armFrac * (this.def.arm?.up ?? 0)
     const y = this.def.release.y + this.liftUp + up
-    if (this.flagBehind) return this.along(-(this.def.size.l / 2 + this.def.release.reach + this.backExtension), y)
+    if (this.flagBehind) return this.along(localGripPoint(this.def, this.extend, this.armFrac).z, y)
     return this.ahead(this.def.release.reach + this.forwardExtend + this.armReach, y)
   }
 
