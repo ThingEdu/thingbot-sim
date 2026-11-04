@@ -3,8 +3,8 @@ import assert from 'node:assert/strict'
 import { FanrocWorld, PHYSICS_DT } from './world.ts'
 import { RobotBody } from './robot.ts'
 import { Match } from './match.ts'
-import { HumanPlayer } from './human.ts'
 import { Agent, wheelCmd, type Skill } from './agent.ts'
+import { playAgents, type Seat } from './quickmatch.ts'
 import { NEUTRAL, type PortValues } from './ports.ts'
 import type { RobotConfig } from './robots.ts'
 
@@ -16,26 +16,19 @@ const TEAMS = ['Đội 1', 'Đội 2', 'Đội 3', 'Đội 4']
 type Played = { score: number; flags: number; loads: { t: number; text: string }[]; deadZone: number }
 
 /**
- * Một trận headless: 4 Mẫu Maker diff2 cùng mức agent, Human Player tự động hai bên (sự kiện ghi vào trận),
- * mỗi bước: agent ra cổng → Human Player → match.step. Thế giới và agent cùng seed ⇒ chạy lại ra đúng kết quả cũ.
+ * Một trận headless: 4 Mẫu Maker diff2 cùng mức agent (dùng playAgents dùng chung với giải đấu).
+ * Giữ thứ tự robot cũ của bài đo này [Đỏ 0, Đỏ 1, Xanh 0, Xanh 1] (khác SEATS của trang) để số đo 416,7 / 621,0 / 891,7 không đổi.
  */
+const ORDER: Seat[] = [['red', 0], ['red', 1], ['blue', 0], ['blue', 1]]
 async function play(skill: Skill, seed: number): Promise<Played> {
-  const w = await FanrocWorld.create(seed)
-  const robots = [0, 1, 2, 3].map((i) => new RobotBody(w, MAKER, i < 2 ? 'red' : 'blue', (i % 2) as 0 | 1))
-  const m = new Match(w, robots, TEAMS, { seed })
-  const humans = (['red', 'blue'] as const).map((a) => new HumanPlayer(a))
-  humans.forEach((h) => (h.onEvent = (s) => m.log(s)))
-  const agents = robots.map((r, i) => new Agent(r, MAKER, skill, seed * 10 + i))
   let deadZone = 0
-  while (m.phase !== 'end') {
-    const view = { world: w, robots, match: m, humans }
-    const ports = agents.map((a) => a.update(view, PHYSICS_DT))
-    for (const p of ports) for (const k of WHEELS) if (p[k] !== 0 && Math.abs(p[k]) < 20) deadZone++
-    for (const h of humans) h.auto({ world: w, robots, phase: m.phase, endgame: m.endgame }, PHYSICS_DT)
-    m.step(PHYSICS_DT, ports)
-  }
+  const r = await playAgents({
+    cfgs: [MAKER, MAKER, MAKER, MAKER], skills: [skill, skill, skill, skill], teams: TEAMS, seed, order: ORDER,
+    onStep: (ports) => { for (const p of ports) for (const k of WHEELS) if (p[k] !== 0 && Math.abs(p[k]) < 20) deadZone++ },
+  })
+  const m = r.matchObj
   return {
-    score: m.result().score.total,
+    score: r.match,
     flags: m.flags.filter(Boolean).length,
     loads: m.events.filter((e) => e.text.includes('nhận bóng')).map((e) => ({ t: e.t, text: e.text })),
     deadZone,
