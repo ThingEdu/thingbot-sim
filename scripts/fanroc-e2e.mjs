@@ -2,7 +2,7 @@
  * Phép thử đầu-cuối của sân FANROC trên trình duyệt thật (Playwright, lấy từ checkout ThingBlock như ftc-e2e.mjs
  * của nhánh spike/ursim).
  *
- *   npm run e2e:fanroc                 # tự bật Vite dev trên một cổng trống, chạy E1–E10, tắt Vite
+ *   npm run e2e:fanroc                 # tự bật Vite dev trên một cổng trống, chạy E1–E11 (E5 bỏ qua), tắt Vite
  *   FANROC_URL=http://localhost:5191/mo-phong/fanroc.html npm run e2e:fanroc   # dùng trang đang chạy sẵn
  *   npm run e2e:fanroc -- E3 E5        # chỉ chạy các phép thử có tên bắt đầu như vậy
  *
@@ -101,6 +101,11 @@ async function test(name, fn, viewport = { width: 1440, height: 860 }) {
   results.push({ name, ok })
   console.log(`${ok ? 'ĐẠT  ' : 'TRƯỢT'}  ${name}  (${((Date.now() - t0) / 1000).toFixed(1)} s)  ${detail}`)
   await context.close()
+}
+/** Phép thử tạm bỏ (ghi lý do), không tính vào số ĐẠT / TRƯỢT. */
+function skip(name, why) {
+  if (only.length && !only.some((o) => name.startsWith(o))) return
+  console.log(`BỎ QUA  ${name}  — ${why}`)
 }
 const expect = (cond, msg) => {
   if (!cond) throw new Error(msg)
@@ -294,36 +299,9 @@ async function main() {
     return `đi ${(a.z - b.z).toFixed(2)} m rồi dừng (trôi ${dist(c, d).toFixed(4)} m) · "${text}" · đồng hồ ${t1.toFixed(1)} → ${t2.toFixed(1)} s`
   })
 
-  await test('E5 bàn phím: Robot 1 ở Khu Tiếp Tế, khay có bóng xanh, S rồi D ⇒ robot có 1 bóng', async (page) => {
-    await practice(page, 2) // hai tay cầm lúc bắt đầu trận ⇒ Human Player bấm phím
-    const log = await page.locator('#hud').innerText()
-    expect(log.includes('Human Player: hai người — bấm phím'), 'Human Player không ở chế độ bấm phím')
-    await page.evaluate(() => document.activeElement?.blur())
-    // Nhặt bóng từ Khu Xuất Phát (Q) cho tới khi khay có bóng xanh.
-    for (let k = 0; k < 40 && !(await page.evaluate(() => window.__fanroc.humans[0].tray.g)); k++) {
-      await page.keyboard.press('KeyQ')
-      await page.waitForTimeout(30)
-    }
-    const tray0 = await page.evaluate(() => ({ ...window.__fanroc.humans[0].tray }))
-    expect(tray0.g > 0, `khay không có bóng xanh sau 40 lần nhặt (${JSON.stringify(tray0)})`)
-    // Đặt Robot 1 vào giữa Khu Tiếp Tế đỏ (RobotBody.setPose có sẵn, không thêm móc thử).
-    const z = ZONES.load.red
-    await page.evaluate((p) => window.__fanroc.robots[0].setPose(p), { x: (z.x0 + z.x1) / 2, z: (z.z0 + z.z1) / 2, yaw: 0 })
-    await page.waitForTimeout(200)
-    const held = () => page.evaluate(() => {
-      const r = window.__fanroc.robots[0]
-      return r.stored.length + (r.compartments ? r.compartments.o.length + r.compartments.g.length : 0)
-    })
-    const n0 = await held()
-    await page.keyboard.press('KeyS')
-    await page.keyboard.press('KeyD')
-    await page.waitForTimeout(200)
-    const n1 = await held()
-    const tray1 = await page.evaluate(() => ({ ...window.__fanroc.humans[0].tray }))
-    expect(n0 === 0 && n1 === 1, `bóng trong robot ${n0} → ${n1}`)
-    expect(tray1.g === tray0.g - 1, `khay xanh ${tray0.g} → ${tray1.g}`)
-    return `khay xanh ${tray0.g} → ${tray1.g}, robot ${n0} → ${n1} bóng`
-  })
+  // E5 (Human Player bấm phím Q/A/S/D) bỏ: Task 10 bỏ KEYMAP, Human Player luôn tự động (chốt 04/11). Task 16 viết lại
+  // phép thử đầu-cuối theo giao diện mới; luật nạp bóng P04–P07 có phép thử Node ở human.test.ts.
+  skip('E5 bàn phím Human Player', 'đã bỏ KEYMAP (Task 10) — Human Player tự động, xem human.test.ts')
 
   await test('E6 trận ×40 với 4 agent ⇒ Hết giờ, bảng đội 4 dòng, điểm trận = tổng các mục', async (page) => {
     await open(page)
@@ -450,6 +428,36 @@ async function main() {
     expect(dist(a, b) > 0.1, `sau 2 s Robot 1 chỉ đi ${dist(a, b).toFixed(3)} m (pha ${m.phase}, t = ${m.t.toFixed(2)} s)`)
     expect(/^Luyện tập · \d+:\d\d$/.test(clock), `đồng hồ "${clock}"`)
     return `đi ${dist(a, b).toFixed(3)} m trong 2 s · pha ${m.phase}, t = ${m.t.toFixed(1)} s · đồng hồ "${clock}"`
+  })
+
+  await test('E11 Tạm dừng ⇒ đồng hồ + robot đứng, tốc độ khoá ×1; Từng khối ⇒ sân chạy đúng một khối (≤ 5 s); Chạy tiếp', async (page) => {
+    await practice(page)
+    await panel(page).locator('button', { hasText: 'Mẫu Auto' }).click()
+    await run(page, 0)
+    await bar(page, 'Tạm dừng').click()
+    const t0 = await page.evaluate(() => window.__fanroc.match.t)
+    const a = await pose(page)
+    await page.waitForTimeout(600)
+    const t1 = await page.evaluate(() => window.__fanroc.match.t)
+    expect(t1 === t0 && dist(a, await pose(page)) < 1e-6, `tạm dừng mà đồng hồ ${t0} → ${t1}`)
+    expect((await linkState(page, 0)) === 'paused', `bo ảo: ${await linkState(page, 0)}`)
+    expect((await page.evaluate(() => window.__fanroc.setSpeed(40))) === 1, 'tạm dừng vẫn phải khoá ×1 (R24)')
+    // Từng khối: khối đặt động cơ không tốn thời gian ảo, khối đợi thì sân chạy đúng thời gian đợi.
+    const jumps = []
+    for (let k = 0; k < 12 && !jumps.some((d) => d > 0.05); k++) {
+      const before = await page.evaluate(() => window.__fanroc.match.t)
+      await bar(page, 'Từng khối').click()
+      await page.waitForTimeout(150)
+      jumps.push((await page.evaluate(() => window.__fanroc.match.t)) - before)
+    }
+    expect(jumps.some((d) => d > 0.05) && jumps.every((d) => d >= 0 && d <= 5 + 1e-6), `bước: ${jumps.map((d) => d.toFixed(2)).join(' ')}`)
+    expect((await linkState(page, 0)) === 'paused', 'sau Từng khối bo ảo vẫn tạm dừng')
+    const t2 = await page.evaluate(() => window.__fanroc.match.t)
+    await bar(page, 'Chạy tiếp').click()
+    await page.waitForTimeout(500)
+    const t3 = await page.evaluate(() => window.__fanroc.match.t)
+    expect((await linkState(page, 0)) === 'running' && t3 - t2 > 0.2, `chạy tiếp: ${t2.toFixed(2)} → ${t3.toFixed(2)} s`)
+    return `đứng ${t0.toFixed(2)} s · từng khối ${jumps.map((d) => d.toFixed(2)).join(' ')} s · chạy tiếp +${(t3 - t2).toFixed(2)} s`
   })
 }
 

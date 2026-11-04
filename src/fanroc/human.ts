@@ -1,5 +1,6 @@
 // Human Player: khay bóng, nhặt bóng trong Khu Xuất Phát, nạp cho robot ở Khu Tiếp Tế (spec §4.2, luật P04–P07).
-// Chỉ là logic thuần trên thế giới vật lý; phím bấm-nhả (không giữ) nên KEYMAP chỉ là bảng ánh xạ, việc lọc lặp phím thuộc trang.
+// Chỉ là logic thuần trên thế giới vật lý. Human Player luôn tự động (`auto`, chốt 04/11: bỏ phím Q/A/S/D–U/J/K/L);
+// `press` là từng thao tác luật mà `auto` gọi (và phép thử gọi thẳng).
 import type { FanrocWorld } from './world.ts'
 import type { RobotBody } from './robot.ts'
 import { ZONES, type Alliance, type Phase, type Rect } from './layout.ts'
@@ -7,19 +8,7 @@ import { ZONES, type Alliance, type Phase, type Rect } from './layout.ts'
 export type HpAction = 'pick' | 'orange' | 'green' | 'load'
 export type HpContext = { world: FanrocWorld; robots: RobotBody[]; phase: Phase; endgame: boolean }
 
-/** Một bàn phím chia đôi: hp 0 = Human Player của robot người lái 1, hp 1 = của robot người lái 2. */
-export const KEYMAP: Record<string, { hp: 0 | 1; action: HpAction }> = {
-  KeyQ: { hp: 0, action: 'pick' },
-  KeyA: { hp: 0, action: 'orange' },
-  KeyS: { hp: 0, action: 'green' },
-  KeyD: { hp: 0, action: 'load' },
-  KeyU: { hp: 1, action: 'pick' },
-  KeyJ: { hp: 1, action: 'orange' },
-  KeyK: { hp: 1, action: 'green' },
-  KeyL: { hp: 1, action: 'load' },
-}
-
-/** Máy 1 người: Human Player tự động nhặt và nạp mỗi chừng này giây. */
+/** Human Player tự động nhặt và nạp mỗi chừng này giây. */
 const AUTO_EVERY = 0.8
 const NAME = { o: 'cam', g: 'xanh' } as const
 
@@ -87,7 +76,7 @@ export class HumanPlayer {
     return null
   }
 
-  /** Chế độ tự động (máy 1 người): mỗi 0.8 s nhặt một bóng và nạp một bóng. */
+  /** Chế độ tự động: mỗi 0.8 s nhặt một bóng và nạp một bóng. */
   auto(ctx: HpContext, dt: number): void {
     this.pickWait += dt
     if (this.pickWait >= AUTO_EVERY) {

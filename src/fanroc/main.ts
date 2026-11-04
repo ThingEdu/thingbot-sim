@@ -1,29 +1,26 @@
 /**
- * Trang FANROC Thanh Hỏa: sân 3D, vùng khối ThingBlock thật cho Robot 1 và Robot 2 (mỗi robot một bo ThingBot ảo),
- * tay cầm làm bộ thu PS2, Human Player bằng bàn phím, agent đồng đội cho robot không có người lái.
+ * Trang FANROC Thanh Hỏa (giao diện cũ tối thiểu, Task 11 dựng vỏ game mới): sân 3D, vùng khối ThingBlock thật cho
+ * Robot 1 và Robot 2 (mỗi robot một bo ThingBot ảo), tay cầm làm bộ thu PS2, Human Player tự động, agent đồng đội cho
+ * robot không có người lái. Vòng lặp trận nằm trong GameSession (game.ts); trang chỉ khởi tạo, nối nút và vẽ.
  *
  * Thứ tự robot (cũng là số trên bảng điểm): Robot 1 = đỏ ô trái (người lái 1, tay cầm 1), Robot 2 = xanh ô trái
- * (người lái 2, tay cầm 2), Robot 3 = đỏ ô phải (đồng đội Robot 1), Robot 4 = xanh ô phải (đồng đội Robot 2). Human
- * Player hp 0 / hp 1 của KEYMAP là của liên minh đỏ / xanh, tức của người lái 1 / 2.
+ * (người lái 2, tay cầm 2), Robot 3 = đỏ ô phải (đồng đội Robot 1), Robot 4 = xanh ô phải (đồng đội Robot 2).
  *
  * Ai lái robot nào (ruling R27): mỗi robot một ô chọn tường minh — "Chương trình" (Robot 1 / 2, thẻ khối của mình),
  * "Agent Dễ/Vừa/Khó", hoặc "Chương trình của Robot N" (Robot 3 / 4, bo ảo riêng, tay cầm trung tính). Mặc định
  * Robot 1 = Chương trình, Robot 2–4 = Agent Vừa. Ghế "Chương trình" không bao giờ do agent lái: chưa chạy, ■ Dừng hay
  * lỗi đều là đứng yên (Review Focus 2). Đổi người lái chỉ bắt đầu trận mới khi robot phải đổi kiểu / đế.
  * Trận: chương trình chạy khi hết 10 s xả bóng; Luyện tập: xả bóng tua sẵn lúc tạo trận (R31), chương trình chạy ngay. Tay cầm gắn ghế theo lần cắm đầu (R26).
- * Có chương trình khối đang chạy thì tốc độ xem khoá ở ×1 (R24).
+ * Có chương trình khối đã nạp / đang chạy / tạm dừng thì tốc độ xem khoá ở ×1 (R24).
+ * Tạm dừng / Từng khối (spec §6.1b): GameSession.pause / stepBlock — vật lý, đồng hồ, agent, Human Player cùng đứng.
  *
- * Vòng lặp bước cố định: cộng dồn thời gian thật × tốc độ xem, chạy vật lý theo PHYSICS_DT (tối đa 4 bước cho mỗi
+ * Mỗi khung: GameSession.advance(thời gian thật × tốc độ xem) chạy vật lý theo PHYSICS_DT (tối đa 4 bước cho mỗi
  * khung ở tốc độ ×1, nhân theo tốc độ xem, và không quá ngân sách thời gian mỗi khung — phần dư bỏ đi để không
- * "xoáy chết"), rồi vẽ một lần mỗi khung. `window.__fanroc` mở cho kiểm thử trình duyệt (ruling R4).
+ * "xoáy chết"), rồi vẽ một lần. `window.__fanroc` mở cho kiểm thử trình duyệt (ruling R4).
  */
-import { FanrocWorld, PHYSICS_DT } from './world.ts'
-import { RobotBody } from './robot.ts'
-import { Match } from './match.ts'
-import { HumanPlayer, KEYMAP } from './human.ts'
-import { Agent, type Skill } from './agent.ts'
-import { NEUTRAL, type PortValues } from './ports.ts'
-import type { Alliance } from './layout.ts'
+import { GameSession, type Driver } from './game.ts'
+import type { Skill } from './agent.ts'
+import type { RobotLink } from './link.ts'
 import type { RobotConfig } from './robots.ts'
 import { PadSeats, type SeatStatus } from './gamepad.ts'
 import { effectiveSpeed, SPEED_NOTE } from './pace.ts'
@@ -37,7 +34,6 @@ const hudEl = document.querySelector<HTMLElement>('#hud')!
 const blocksEl = document.querySelector<HTMLElement>('#blocks')!
 
 const TEAMS = ['Dế Xanh', 'Chuồn Chuồn', 'Kiến Lửa', 'Ong Vàng']
-const SEATS: [Alliance, 0 | 1][] = [['red', 0], ['blue', 0], ['red', 1], ['blue', 1]]
 const SKILL_NAME: Record<Skill, string> = { easy: 'Dễ', medium: 'Vừa', hard: 'Khó' }
 /** Số bước vật lý tối đa mỗi khung ở tốc độ ×1 (nhân theo tốc độ xem). */
 const MAX_STEPS = 4
@@ -95,24 +91,6 @@ function picker(text: string, options: [string, string][], value: string, onChan
 }
 
 type SeatMode = 'program' | `agent-${Skill}` | 'copy-0' | 'copy-1'
-type Game = {
-  world: FanrocWorld; robots: RobotBody[]; match: Match; humans: HumanPlayer[]; agents: Agent[]; cfgs: RobotConfig[]; ports: PortValues[]
-  /** Human Player bấm phím (hai người) hay tự động, chốt lúc bắt đầu trận. */
-  manualHp: boolean
-}
-
-async function newGame(seed: number, cfgs: RobotConfig[], skills: Skill[], practice: boolean, manualHp: boolean): Promise<Game> {
-  const world = await FanrocWorld.create(seed)
-  const robots = SEATS.map(([a, slot], i) => new RobotBody(world, cfgs[i], a, slot))
-  const match = new Match(world, robots, TEAMS, { seed, practice })
-  const humans = (['red', 'blue'] as const).map((a) => new HumanPlayer(a))
-  humans.forEach((h) => (h.onEvent = (s) => match.log(s)))
-  const agents = robots.map((r, i) => new Agent(r, cfgs[i], skills[i], seed * 10 + i))
-  return { world, robots, match, humans, agents, cfgs, ports: [], manualHp }
-}
-
-/** Bàn phím của Human Player: chỉ nhận lần bấm (bỏ lặp phím khi giữ), không nhận khi đang gõ vào ô nhập. */
-const typing = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))
 
 async function start(): Promise<void> {
   arena.textContent = 'Sân đang tải…'
@@ -126,26 +104,37 @@ async function start(): Promise<void> {
   let practice = false
   /** Ai lái từng robot (ruling R27): chọn tường minh, không phụ thuộc lịch sử bấm nút. */
   const modes: SeatMode[] = ['program', 'agent-medium', 'agent-medium', 'agent-medium']
-  const followers: ({ ports(): PortValues; dispose(): void } | null)[] = [null, null, null, null]
+  const followers: ({ link: RobotLink; dispose(): void } | null)[] = [null, null, null, null]
   const cfgFor = (i: number): RobotConfig => {
     const m = modes[i]
     if (m.startsWith('copy-')) return editors.cfg(Number(m.slice(5)))
     return i < 2 ? editors.cfg(i) : defaultConfig('maker')
   }
   const skillOf = (i: number): Skill => (modes[i].startsWith('agent-') ? (modes[i].slice(6) as Skill) : 'medium')
-  /** Hai tay cầm lúc bắt đầu trận ⇒ hai người, Human Player bấm phím; không thì tự động. Chốt một lần mỗi trận. */
-  const twoPeople = () => seats.read().status.filter((x) => x === 'ok' || x === 'nonstandard').length >= 2
-  const hpNote = (manual: boolean) =>
-    manual ? 'Human Player: hai người — bấm phím (đỏ Q A S D, xanh U J K L)' : 'Human Player tự động (một người; cắm đủ 2 tay cầm rồi bấm Trận mới để bấm phím)'
+  /** Người lái của ghế i theo ô chọn: bo ảo của thẻ, bo ảo đồng đội (follower) hoặc agent. */
+  const driverFor = (i: number): Driver => {
+    const m = modes[i]
+    if (m === 'program') return { kind: 'program', link: editors.link(i) }
+    const f = followers[i]
+    if (m.startsWith('copy-') && f) return { kind: 'program', link: f.link }
+    return { kind: 'agent', skill: skillOf(i) }
+  }
+  const newGame = (s: number) =>
+    GameSession.create({
+      mode: practice ? 'practice' : 'match',
+      seed: s,
+      seats: [0, 1, 2, 3].map((i) => ({ cfg: cfgFor(i), team: TEAMS[i], driver: driverFor(i) })),
+    })
 
-  let game = await newGame(seed, [0, 1, 2, 3].map(cfgFor), [0, 1, 2, 3].map(skillOf), practice, twoPeople())
-  game.match.log(hpNote(game.manualHp))
+  let game = await newGame(seed)
+  game.match.log('Human Player tự động')
   arena.textContent = ''
   const scene = createScene(arena)
   const hud = createHud(hudEl)
   editors.setGate(
-    () => practice || game.match.phase === 'play',
-    () => (game.match.phase === 'end' ? 'Trận đã kết thúc — bấm Trận mới' : 'Đã nạp, chờ hết 10 giây xả bóng…'),
+    () => game.canRun,
+    () =>
+      game.paused ? 'Đang tạm dừng — bấm Chạy tiếp' : game.match.phase === 'end' ? 'Trận đã kết thúc — bấm Trận mới' : 'Đã nạp, chờ hết 10 giây xả bóng…',
   )
   editors.onError((i, msg) => hud.log(`Robot ${i + 1}: ${msg}`))
 
@@ -174,7 +163,8 @@ async function start(): Promise<void> {
   }
   const expose = () => {
     ;(window as unknown as { __fanroc: unknown }).__fanroc = {
-      world: game.world, robots: game.robots, match: game.match, humans: game.humans, setSpeed, editors,
+      world: game.world, robots: game.robots, match: game.match, humans: game.humans, setSpeed, editors, session: game,
+      pause: () => setPaused(true), resume: () => setPaused(false), stepBlock: () => stepBlock(),
       pose: (i: number) => {
         const p = game.robots[i].pose
         return { x: p.x, z: p.z, yaw: p.yaw }
@@ -197,10 +187,10 @@ async function start(): Promise<void> {
         restartAgain = false
         editors.stopAll()
         const old = game
-        game = await newGame(++seed, [0, 1, 2, 3].map(cfgFor), [0, 1, 2, 3].map(skillOf), practice, twoPeople())
-        old.world.rapier.free()
+        game = await newGame(++seed)
+        old.dispose()
         game.match.log(practice ? 'Luyện tập: không xả bóng, không hết giờ — chương trình chạy ngay khi bấm ▶ Chạy' : 'Trận mới: chương trình chạy khi hết 10 giây xả bóng')
-        game.match.log(hpNote(game.manualHp))
+        showPaused()
         expose()
       } while (restartAgain)
     } finally {
@@ -208,6 +198,24 @@ async function start(): Promise<void> {
     }
   }
   editors.onConfig(() => void restart())
+
+  // Tạm dừng / chạy tiếp / từng khối (spec §6.1b). Nút chữ tạm thời — Task 11 thay bằng thanh chạy biểu tượng SVG.
+  const pauseBtn = button('Tạm dừng', () => setPaused(!game.paused))
+  const stepBtn = button('Từng khối', () => void stepBlock())
+  stepBtn.title = 'Chạy một khối của chương trình rồi tạm dừng (khối đợi 1 giây thì sân chạy 1 giây)'
+  const showPaused = () => {
+    pauseBtn.textContent = game.paused ? 'Chạy tiếp' : 'Tạm dừng'
+    pauseBtn.setAttribute('aria-pressed', String(game.paused))
+  }
+  const setPaused = (p: boolean) => {
+    if (p) game.pause()
+    else game.resume()
+    showPaused()
+  }
+  const stepBlock = async () => {
+    await game.stepBlock()
+    showPaused()
+  }
   expose()
 
   /** Đổi người lái của robot i. Chỉ bắt đầu trận mới khi robot phải đổi kiểu / đế (chạy chương trình của thẻ khác). */
@@ -218,10 +226,7 @@ async function start(): Promise<void> {
     followers[i]?.dispose()
     followers[i] = m.startsWith('copy-') ? editors.follow(Number(m.slice(5)), (msg) => hud.log(`Robot ${i + 1}: ${msg}`)) : null
     if (JSON.stringify(cfgFor(i)) !== JSON.stringify(game.cfgs[i])) return void restart()
-    if (m.startsWith('agent-')) {
-      const g = game
-      g.agents[i] = new Agent(g.robots[i], g.cfgs[i], skillOf(i), seed * 10 + i)
-    }
+    game.setDriver(i, driverFor(i))
   }
   // Bấm ▶ Chạy ở thẻ của robot đang do agent lái ⇒ chuyển robot đó sang "Chương trình" (thấy ngay trên ô chọn).
   editors.onRun((i) => {
@@ -282,7 +287,7 @@ async function start(): Promise<void> {
   setCodeHidden(matchMedia('(max-width: 760px)').matches)
   const gap = document.createElement('span')
   gap.className = 'gap'
-  bar.append(codeBtn, ...modeBtns, ...seatPickers, again, gap, ...camBtns, ...speedBtns, speedNote, ...qBtns)
+  bar.append(codeBtn, ...modeBtns, ...seatPickers, again, pauseBtn, stepBtn, gap, ...camBtns, ...speedBtns, speedNote, ...qBtns)
   const padsEl = document.createElement('div')
   padsEl.className = 'fr-pads'
   padsEl.setAttribute('aria-live', 'polite')
@@ -305,29 +310,7 @@ async function start(): Promise<void> {
     padsText = text
     padsEl.replaceChildren(...text.split('\n').map((t) => Object.assign(document.createElement('span'), { textContent: t })))
   }
-  addEventListener('keydown', (e: KeyboardEvent) => {
-    const k = KEYMAP[e.code]
-    const g = game
-    if (!k || e.repeat || typing(e.target) || !g.manualHp) return
-    const why = g.humans[k.hp].press(k.action, { world: g.world, robots: g.robots, phase: g.match.phase, endgame: g.match.endgame })
-    if (why) hud.log(`Human Player ${k.hp === 0 ? 'đỏ' : 'xanh'}: ${why}`)
-  })
-
-  const step = (g: Game) => {
-    const view = { world: g.world, robots: g.robots, match: g.match, humans: g.humans }
-    g.ports = g.robots.map((_, i) => {
-      const m = modes[i]
-      // Ghế "Chương trình" không bao giờ do agent lái: chưa chạy / đã dừng / lỗi ⇒ NEUTRAL (editors.ports).
-      if (m === 'program') return editors.ports(i)
-      if (m.startsWith('copy-')) return followers[i]?.ports() ?? NEUTRAL
-      return g.agents[i].update(view, PHYSICS_DT)
-    })
-    if (!g.manualHp) for (const h of g.humans) h.auto({ world: g.world, robots: g.robots, phase: g.match.phase, endgame: g.match.endgame }, PHYSICS_DT)
-    g.match.step(PHYSICS_DT, g.ports)
-  }
-
   let last = performance.now()
-  let acc = 0
   const frame = (now: number) => {
     const { pads, status } = seats.read()
     showPads(status)
@@ -335,17 +318,9 @@ async function start(): Promise<void> {
     editors.release()
     showSpeed()
     const speed = speedNow()
-    acc += (Math.min(100, now - last) / 1000) * speed
+    const dt = Math.min(100, now - last) / 1000
     last = now
-    const t0 = performance.now()
-    const max = MAX_STEPS * Math.max(1, speed)
-    let n = 0
-    while (acc >= PHYSICS_DT && n < max && game.match.phase !== 'end' && performance.now() - t0 < STEP_BUDGET_MS) {
-      step(game)
-      acc -= PHYSICS_DT
-      n++
-    }
-    if (n === max || performance.now() - t0 >= STEP_BUDGET_MS || game.match.phase === 'end') acc = 0
+    game.advance(dt, speed, { steps: MAX_STEPS * Math.max(1, speed), ms: STEP_BUDGET_MS })
     scene.sync(game.world, game.robots, game.match, game.ports)
     hud.update(game.match, game.robots, game.cfgs, game.ports)
     requestAnimationFrame(frame)

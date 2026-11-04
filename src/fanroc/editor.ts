@@ -22,6 +22,8 @@ export interface Editors {
   run(i: number): void
   stop(i: number): void
   ports(i: number): PortValues
+  /** Bo ảo (RobotLink) của thẻ i — người lái `{ kind: 'program' }` của GameSession. */
+  link(i: number): RobotLink
   /** Tay cầm của khung hình này cho bộ thu PS2 của robot i (null = trung tính). */
   input(i: number, pad: Ps2State | null): void
   cfg(i: number): RobotConfig
@@ -33,7 +35,7 @@ export interface Editors {
   setGate(gate: () => boolean, waiting: () => string): void
   /** Gọi mỗi khung: chương trình đã nạp và đang chờ thì chạy khi cổng mở (hoặc cập nhật dòng chờ). */
   release(): void
-  /** Có chương trình học sinh nào đã nạp hoặc đang chạy (kể cả bo ảo của robot đồng đội). */
+  /** Có chương trình học sinh nào đã nạp, đang chạy hay tạm dừng (kể cả bo ảo của robot đồng đội) — R24. */
   anyActive(): boolean
   /** Người dùng bấm ▶ Chạy ở thẻ i. */
   onRun(cb: (i: number) => void): void
@@ -42,7 +44,7 @@ export interface Editors {
   /** Vẽ lại vùng khối của thẻ đang mở theo kích thước mới (vùng khối vừa hiện lại). */
   resize(): void
   /** Một bo ảo nữa chạy theo chương trình của thẻ `src` (robot đồng đội): nạp / chạy / dừng cùng thẻ đó, tay cầm trung tính. */
-  follow(src: number, onError: (msg: string) => void): { ports(): PortValues; dispose(): void }
+  follow(src: number, onError: (msg: string) => void): { link: RobotLink; ports(): PortValues; dispose(): void }
 }
 
 const CSS = `
@@ -262,6 +264,7 @@ export function createEditors(container: HTMLElement, robots: { label: string; c
       for (const f of followers) if (f.src === i) f.link.stop()
     },
     ports: (i) => tabs[i]?.link.ports() ?? NEUTRAL,
+    link: (i) => tabs[i].link,
     input(i, pad) {
       tabs[i]?.link.input(pad)
     },
@@ -287,7 +290,8 @@ export function createEditors(container: HTMLElement, robots: { label: string; c
       }
       for (const f of followers) startIfOpen(f.link)
     },
-    anyActive: () => [...tabs.map((t) => t.link), ...followers.map((f) => f.link)].some((l) => l.state === 'loaded' || l.state === 'running'),
+    anyActive: () =>
+      [...tabs.map((t) => t.link), ...followers.map((f) => f.link)].some((l) => l.state === 'loaded' || l.state === 'running' || l.state === 'paused'),
     onRun(cb) {
       runCbs.push(cb)
     },
@@ -302,13 +306,15 @@ export function createEditors(container: HTMLElement, robots: { label: string; c
       const entry = { src, link: b.link }
       b.link.onError = onError
       followers.push(entry)
-      // Thẻ nguồn đang chạy thì robot đồng đội chạy cùng chương trình ngay.
+      // Thẻ nguồn có chương trình (đã nạp / đang chạy / tạm dừng) thì robot đồng đội nạp cùng chương trình ngay; cổng
+      // (setGate) đóng lúc đang tạm dừng nên bo mới chờ ở 'loaded' và chạy khi phiên chạy tiếp.
       const s = tabs[src].link
-      if ((s.state === 'running' || s.state === 'loaded') && s.code !== null) {
+      if ((s.state === 'running' || s.state === 'loaded' || s.state === 'paused') && s.code !== null) {
         b.link.load(s.code)
         startIfOpen(b.link)
       }
       return {
+        link: b.link,
         ports: () => b.link.ports(),
         dispose() {
           b.link.stop()

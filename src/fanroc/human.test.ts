@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { FanrocWorld } from './world.ts'
 import { RobotBody } from './robot.ts'
-import { HumanPlayer, KEYMAP, type HpContext } from './human.ts'
+import { HumanPlayer, type HpContext } from './human.ts'
 import { ZONES, BALL_R } from './layout.ts'
 import type { RobotConfig } from './robots.ts'
 
@@ -22,14 +22,6 @@ const inLoad = (r: RobotBody) => {
 }
 /** Robot đỏ ở giữa sân, xa mọi khu. */
 const away = (r: RobotBody) => r.setPose({ x: 0, z: 0, yaw: 0 })
-
-test('KEYMAP: bốn phím mỗi bên', () => {
-  assert.deepEqual(KEYMAP.KeyQ, { hp: 0, action: 'pick' })
-  assert.deepEqual(KEYMAP.KeyD, { hp: 0, action: 'load' })
-  assert.deepEqual(KEYMAP.KeyU, { hp: 1, action: 'pick' })
-  assert.deepEqual(KEYMAP.KeyK, { hp: 1, action: 'green' })
-  assert.equal(Object.keys(KEYMAP).length, 8)
-})
 
 test('pick: lấy đúng bóng trong Khu Xuất Phát, bóng ngoài vùng không bị lấy, mỗi lần một bóng', async () => {
   const w = await FanrocWorld.create(1)
@@ -195,7 +187,7 @@ test('auto: mỗi 0.8 s nhặt một bóng, chưa đủ 0.8 s thì chưa làm g�
   assert.deepEqual(hp.tray, { o: 3, g: 0 })
 })
 
-/** Khay có 3 cam + 2 xanh (nhặt bằng phím), robot đỏ đứng trong Khu Tiếp Tế. */
+/** Khay có 3 cam + 2 xanh (nhặt bằng press), robot đỏ đứng trong Khu Tiếp Tế. */
 const stocked = async (cfg: RobotConfig) => {
   const w = await FanrocWorld.create(1)
   const hp = new HumanPlayer('red')
@@ -224,4 +216,27 @@ test('auto: robot thường nhận màu khay có nhiều hơn (hoà thì cam); d
   }
   assert.equal(await run(), 'oogog') // khay 3o2g: o, (2o2g hoà) o, (1o2g) g, (1o1g hoà) o, g
   assert.equal(await run(), await run())
+})
+
+test('auto (P04–P07): tự nhặt bóng trong Khu Xuất Phát rồi nạp cho robot ở Khu Tiếp Tế; End Game + đã đỗ ⇒ không nạp', async () => {
+  const w = await FanrocWorld.create(1)
+  const s = mid(ZONES.start.red)
+  for (let k = 0; k < 2; k++) ball(w, 150 + k, s.x + k * 0.05, s.z)
+  const hp = new HumanPlayer('red')
+  const events: string[] = []
+  hp.onEvent = (t) => events.push(t)
+  const r = new RobotBody(w, MAKER, 'red', 0)
+  inLoad(r)
+  hp.auto(ctx(w, [r]), 0.8)
+  assert.deepEqual(r.stored, [150])
+  assert.deepEqual(events, ['Human Player nhặt bóng xanh', 'Robot 1 nhận bóng xanh'])
+  r.parked = true
+  hp.auto(ctx(w, [r], { endgame: true }), 0.8)
+  assert.deepEqual(r.stored, [150], 'đã đỗ trong End Game: không nạp')
+  assert.deepEqual(hp.tray, { o: 0, g: 1 })
+  // Giai đoạn xả bóng: không nhặt.
+  const hp2 = new HumanPlayer('red')
+  ball(w, 152, s.x - 0.05, s.z)
+  hp2.auto(ctx(w, [], { phase: 'release' }), 0.8)
+  assert.deepEqual(hp2.tray, { o: 0, g: 0 })
 })
