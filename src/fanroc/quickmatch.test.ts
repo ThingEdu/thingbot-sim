@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { playAgents, SEATS } from './quickmatch.ts'
+import { playAgents, penaltyPoints, SEATS } from './quickmatch.ts'
 import { teamScore } from './scoring.ts'
 import type { RobotConfig } from './robots.ts'
 import type { Skill } from './agent.ts'
@@ -28,6 +28,20 @@ test('playAgents: cùng seed ⇒ cùng điểm trận; điểm đội = teamScor
   a.teams.forEach((t, i) => {
     const p = a.matchObj.pens[i]
     assert.equal(t.score, teamScore(a.match, p))
-    assert.equal(t.penalty, p.red ? a.match : 5 * p.minor + 10 * p.yellow)
+    assert.equal(t.penalty, penaltyPoints(p, a.match))
   })
+})
+
+test('penaltyPoints: 5·nhẹ + 10·vàng, thẻ đỏ = cả điểm trận, khớp teamScore', () => {
+  assert.equal(penaltyPoints({ minor: 2, yellow: 1, red: false }, 300), 20)
+  assert.equal(penaltyPoints({ minor: 0, yellow: 0, red: false }, 300), 0)
+  assert.equal(penaltyPoints({ minor: 1, yellow: 0, red: true }, 300), 300)
+  for (const p of [{ minor: 2, yellow: 1, red: false }, { minor: 0, yellow: 0, red: false }, { minor: 9, yellow: 9, red: false }]) {
+    for (const m of [0, 15, 300]) assert.equal(teamScore(m, p), Math.max(0, m - penaltyPoints(p, m)))
+  }
+  assert.equal(teamScore(300, { minor: 0, yellow: 0, red: true }), 0)
+})
+
+test('playAgents: số cấu hình/mức/tên đội lệch số ghế ⇒ lỗi rõ ràng', async () => {
+  await assert.rejects(playAgents({ ...opts(1), teams: ['A', 'B'] }), /tên đội/)
 })

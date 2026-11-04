@@ -7,6 +7,7 @@ import { HumanPlayer } from './human.ts'
 import { Agent, type Skill } from './agent.ts'
 import type { PortValues } from './ports.ts'
 import type { FieldTally } from './scoring.ts'
+import type { Penalty } from './match.ts'
 import type { RobotConfig } from './robots.ts'
 
 type Alliance = 'red' | 'blue'
@@ -33,11 +34,20 @@ export interface QuickResult {
   /** Ghế của từng phần tử trong teams (Đỏ/Xanh, slot). */
   seats: Seat[]
   /** Thế giới/trận đã giải phóng vật lý — chỉ để đọc sự kiện, cờ. */
+  /** Chỉ để ĐỌC (sự kiện, cờ, phạt): thế giới đã giải phóng nên step()/mọi thứ chạy vật lý đều không hợp lệ. */
   matchObj: Match
+}
+
+/** Điểm phạt của một đội: 5·nhẹ + 10·vàng; thẻ đỏ ⇒ mất cả điểm trận. */
+export function penaltyPoints(p: Penalty, matchScore: number): number {
+  return p.red ? matchScore : 5 * p.minor + 10 * p.yellow
 }
 
 export async function playAgents(o: QuickOpts): Promise<QuickResult> {
   const order = o.order ?? SEATS
+  const n = order.length
+  if (o.cfgs.length !== n || o.skills.length !== n || o.teams.length !== n)
+    throw new Error(`Trận ngầm cần ${n} cấu hình robot, ${n} mức agent và ${n} tên đội (nhận ${o.cfgs.length}/${o.skills.length}/${o.teams.length})`)
   const w = await FanrocWorld.create(o.seed)
   try {
     const robots = order.map(([a, slot], i) => new RobotBody(w, o.cfgs[i], a, slot))
@@ -55,7 +65,7 @@ export async function playAgents(o: QuickOpts): Promise<QuickResult> {
     const r = m.result()
     const teams = r.teams.map((t, i) => {
       const p = m.pens[i]
-      return { team: t.team, score: t.score, penalty: p.red ? r.score.total : 5 * p.minor + 10 * p.yellow }
+      return { team: t.team, score: t.score, penalty: penaltyPoints(p, r.score.total) }
     })
     return { match: r.score.total, teams, tally: m.tally(), seats: order, matchObj: m }
   } finally {
