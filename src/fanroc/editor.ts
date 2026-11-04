@@ -11,6 +11,7 @@ import type { Ps2State } from './gamepad.ts'
 import { ROBOTS, type Actuator, type Drive, type RobotConfig, type RobotType } from './robots.ts'
 import { sample, TOOLBOX } from './programs.ts'
 import { tbFileName, toTb } from './tb.ts'
+import { hasParamProcedures, installMakeBlockDialog, openMakeBlockDialog, registerParamProcedures, TB_PARAM_WARNING } from './procedures.ts'
 
 export interface Editors {
   /** Thẻ đang mở. */
@@ -60,6 +61,8 @@ const CSS = `
 .fe-status { padding: 0 8px 6px; font-size: 12px; color: var(--muted); }
 .fe-error { margin: 0 8px 8px; padding: 6px 8px; border-radius: 6px; background: rgba(226, 71, 59, 0.1); color: var(--hi); font-size: 13px; font-weight: 600; }
 .fe-error[hidden] { display: none; }
+.fe-warn { margin: 0 8px 8px; padding: 6px 8px; border-radius: 6px; background: rgba(240, 170, 30, 0.15); color: #7a4b00; font-size: 13px; }
+.fe-warn[hidden] { display: none; }
 .fe-ws { flex: 1; min-height: 260px; position: relative; }
 `
 
@@ -106,6 +109,8 @@ function board(): { link: RobotLink; dispose(): void } {
 }
 
 export function createEditors(container: HTMLElement, robots: { label: string; cfg: RobotConfig }[]): Editors {
+  registerParamProcedures(ScratchBlocks)
+  const makeBlock = openMakeBlockDialog(document.body)
   const style = el('style')
   style.textContent = CSS
   document.head.append(style)
@@ -139,8 +144,11 @@ export function createEditors(container: HTMLElement, robots: { label: string; c
     const error = el('div', 'fe-error')
     error.setAttribute('role', 'alert')
     error.hidden = true
+    const warn = el('div', 'fe-warn')
+    warn.setAttribute('role', 'status')
+    warn.hidden = true
     const ws = el('div', 'fe-ws')
-    panel.append(bar, status, error, ws)
+    panel.append(bar, status, error, warn, ws)
     container.append(panel)
 
     const { link } = board()
@@ -199,13 +207,20 @@ export function createEditors(container: HTMLElement, robots: { label: string; c
         for (const cb of runCbs) cb(i)
       }, 'fe-run'),
       btn('■ Dừng', () => api.stop(i)),
-      btn('Tải về để nạp', () => void download(t.cfg.type, api.program(i))),
+      btn('Tải về để nạp', () => {
+        const program = api.program(i)
+        // Khối của em có ô số chưa nạp được ThingBot thật (R37): báo rõ nhưng vẫn cho tải.
+        warn.hidden = !hasParamProcedures(program)
+        warn.textContent = warn.hidden ? '' : TB_PARAM_WARNING
+        void download(t.cfg.type, program)
+      }),
     )
     drive.replaceChildren(...ROBOTS[t.cfg.type].drives.map((d) => Object.assign(el('option', undefined, DRIVE_NAME[d]), { value: d })))
     drive.value = t.cfg.drive
     act.disabled = t.cfg.drive !== 'diff2'
 
     t.blocks = createBlocks(ws, TOOLBOX)
+    installMakeBlockDialog(t.blocks.workspace, makeBlock)
     t.blocks.load(sample(t.cfg, 'teleop'))
     return t
   })

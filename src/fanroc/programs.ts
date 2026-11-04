@@ -16,6 +16,7 @@
 // Ngọn Núi A gần nhất, mở cửa xả 2 giây, lùi lại, sang rào trái, xuôi theo rào rồi vào Vùng Bảo Vệ đỏ.
 // Thời gian tính cho Robot 1 (đỏ, ô xuất phát trái); robot ở ô khác phải sửa số giây.
 import { portMap, ROBOTS, type RobotConfig, type RobotType } from './robots.ts'
+import { MY_BLOCKS_CATEGORY } from './procedures.ts'
 
 type B = Record<string, unknown>
 
@@ -91,6 +92,7 @@ export const TOOLBOX = {
       block('thingBotC3_releaseServo'),
     ]),
     category('Tay cầm PS2', '#FF3399', '#C71585', [block('ps2_readData'), block('ps2_getButton'), block('ps2_GetJoystick')]),
+    MY_BLOCKS_CATEGORY,
   ],
 }
 
@@ -103,6 +105,8 @@ export const TOOLBOX_OPCODES: ReadonlySet<string> = new Set([
   'thingBotC3_init', 'thingBotC3_initPS2', 'thingBotC3_setMotor', 'thingBotC3_setServoAngle', 'thingBotC3_moveServoAngle', 'thingBotC3_releaseServo',
   'ps2_readData', 'ps2_getButton', 'ps2_GetJoystick',
   'math_number', 'math_positive_number', 'math_whole_number', 'text',
+  // Khối của em (chuyên mục động, scratch-blocks tự dựng lời gọi).
+  'procedures_definition', 'procedures_prototype', 'procedures_call', 'argument_reporter_string_number',
 ])
 
 // ---------- Cơ cấu theo cấu hình ----------

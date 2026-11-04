@@ -5,6 +5,7 @@
 // serialization của vùng khối (`{ blocks: { blocks: [...] }, variables?: [...] }`, như `Editors.program(i)` và SAMPLES),
 // không phải dạng `{ stacks, variables }` của tb-builder; vị trí x/y của khối mũ giữ nguyên như trên vùng khối.
 import JSZip from 'jszip'
+import { readMutation } from './procedures.ts'
 
 type Json = Record<string, unknown>
 interface SerializedBlock {
@@ -14,7 +15,8 @@ interface SerializedBlock {
   fields?: Record<string, unknown>
   inputs?: Record<string, { shadow?: SerializedBlock; block?: SerializedBlock }>
   next?: { block?: SerializedBlock }
-  extraState?: { proccode?: string }
+  /** Mutation của khối của em: chuỗi XML `<mutation …>` như scratch-blocks lưu (hoặc đối tượng thuộc tính). */
+  extraState?: unknown
 }
 interface VariableRef { id?: string; name?: string }
 interface Variable { id?: string; name: string; type?: string }
@@ -68,7 +70,7 @@ export function toProject(state: object): ProjectJson {
     return [kind[0], String(shadow.fields?.[kind[1]] ?? '')]
   }
 
-  const add = (b: SerializedBlock, parent: string | null, pos: { x: number; y: number } | null): string => {
+  const add = (b: SerializedBlock, parent: string | null, pos: { x: number; y: number } | null, parentType?: string): string => {
     const id = nextId('b')
     const out: Json = { opcode: b.type, next: null, parent, inputs: {}, fields: {}, shadow: false, topLevel: pos !== null }
     if (pos) Object.assign(out, pos)
@@ -83,16 +85,26 @@ export function toProject(state: object): ProjectJson {
       } else fields[name] = [String(value), null]
     }
 
-    if (b.type === 'procedures_definition') {
+    // Khối của em (R38): mutation đọc từ chuỗi XML của scratch-blocks; prototype là khối bóng con của định nghĩa (ô
+    // `custom_block`), ô tham số trên prototype là bóng `argument_reporter_string_number` — đúng dạng Scratch 3.
+    const m = readMutation(b.extraState)
+    const mutation = (keys: string[]) => ({
+      tagName: 'mutation', children: [], proccode: m.proccode ?? '',
+      ...Object.fromEntries(keys.map((k) => [k, m[k] ?? (k === 'warp' ? 'false' : '[]')])),
+    })
+    if (b.type === 'procedures_prototype') {
+      Object.assign(out, { shadow: true, mutation: mutation(['argumentids', 'argumentnames', 'argumentdefaults', 'warp']) })
+    }
+    if (b.type === 'procedures_call') out.mutation = mutation(['argumentids', 'warp'])
+    if (b.type === 'argument_reporter_string_number' && parentType === 'procedures_prototype') out.shadow = true
+    if (b.type === 'procedures_definition' && !b.inputs?.custom_block?.block) {
+      // Định nghĩa không kèm prototype (dạng cũ: mutation ghi trên chính định nghĩa): dựng một prototype không tham số.
       const protoId = nextId('p')
       blocks[protoId] = {
         opcode: 'procedures_prototype', next: null, parent: id, inputs: {}, fields: {}, shadow: true, topLevel: false,
-        mutation: { tagName: 'mutation', children: [], proccode: b.extraState?.proccode, argumentids: '[]', argumentnames: '[]', argumentdefaults: '[]', warp: 'false' },
+        mutation: mutation(['argumentids', 'argumentnames', 'argumentdefaults', 'warp']),
       }
       inputs.custom_block = [1, protoId]
-    }
-    if (b.type === 'procedures_call') {
-      out.mutation = { tagName: 'mutation', children: [], proccode: b.extraState?.proccode, argumentids: '[]', warp: 'false' }
     }
 
     for (const [name, input] of Object.entries(b.inputs ?? {})) {
@@ -102,8 +114,10 @@ export function toProject(state: object): ProjectJson {
         if (input.block.type === 'data_variable') {
           const v = resolveVar(input.block.fields?.VARIABLE as VariableRef)
           ref = [12, v.name, v.id]
-        } else ref = add(input.block, id, null)
-        inputs[name] = shadow ? [3, ref, shadow] : [2, ref]
+        } else ref = add(input.block, id, null, b.type)
+        // Khối bóng (prototype trong định nghĩa, ô tham số trên prototype) là [1, id] như Scratch 3.
+        const isShadow = (blocks[ref as string] as Json | undefined)?.shadow === true
+        inputs[name] = shadow ? [3, ref, shadow] : [isShadow ? 1 : 2, ref]
       } else if (shadow) inputs[name] = [1, shadow]
     }
 

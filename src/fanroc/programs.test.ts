@@ -104,6 +104,8 @@ test('hộp công cụ: đúng danh sách của kế hoạch, mọi khối đề
     else if (o && typeof o === 'object') {
       const r = o as Record<string, unknown>
       if (r.kind === 'block') types.add(r.type as string)
+      // Chuyên mục động "Khối của em": scratch-blocks tự dựng định nghĩa / prototype / lời gọi / ô tham số.
+      if (r.custom === 'PROCEDURE') for (const t of ['procedures_definition', 'procedures_prototype', 'procedures_call', 'argument_reporter_string_number']) types.add(t)
       if (r.shadow) walk([{ kind: 'block', ...(r.shadow as object) }])
       Object.values(r).forEach(walk)
     }
