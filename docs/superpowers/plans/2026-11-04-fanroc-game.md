@@ -26,6 +26,7 @@
 - `localStorage`: mọi đọc/ghi bọc try/catch; hỏng / bị chặn ⇒ chạy với mặc định, không vỡ trang. Không xoá khoá ngoài tiền tố `fanroc.v1.`.
 - Cổng 5190 thuộc checkout khác: không dùng. Lưới núi CAD (`assets/mountain-mesh.json`) không đăng/push.
 - Mỗi phép thử phải chứng minh được là có thể hỏng: phá tạm phần mã nó bảo vệ, thấy đỏ, trả lại (ghi cách phá vào thông điệp commit).
+- **Mùa giải (spec §6.8):** mã chung (tournament, store, keys, game, ui/*) nhận thông tin riêng của đề qua `Season` (`src/fanroc/season.ts`: `{ id: 'fanroc-2026', name: 'FANROC 2026 · Thanh Hỏa', year: 2026, robots, scoring, missions, rules }`, tạo ở Task 7 cùng store) thay vì import thẳng; khoá lưu trữ tiến độ / chương trình / giải = `fanroc.v1.<season.id>.<loại>`, cài đặt = `fanroc.v1.settings`. Không làm chọn mùa.
 - Ledger + quyết định: `.superpowers/sdd/<plan>/progress.md`; quyết định mới đánh số tiếp từ **R35** và chép vào `docs/fanroc/quyet-dinh.md` ở Task 16.
 
 ## Review Focus
@@ -217,8 +218,8 @@ export const MACHINE_TEAMS: { name: string; skill: Skill; robot: RobotType }[]  
 **Interfaces:**
 ```ts
 export interface KV { getItem(k: string): string | null; setItem(k: string, v: string): void }
-export const KEYS = { settings: 'fanroc.v1.settings', missions: 'fanroc.v1.missions', workshop: 'fanroc.v1.workshop', tournament: 'fanroc.v1.tournament', profile: 'fanroc.v1.profile' } as const
-export function createStore(kv?: KV | null): Store   // mặc định globalThis.localStorage trong try/catch
+export const keys = (season: string) => ({ settings: 'fanroc.v1.settings', profile: 'fanroc.v1.profile', missions: `fanroc.v1.${season}.missions`, workshop: `fanroc.v1.${season}.workshop`, tournament: `fanroc.v1.${season}.tournament` })
+export function createStore(season: string, kv?: KV | null): Store   // mặc định globalThis.localStorage trong try/catch
 export interface Store {
   settings(): Settings; saveSettings(s: Settings): void
   mission(id: string): MissionProgress; saveMission(id: string, p: MissionProgress): void

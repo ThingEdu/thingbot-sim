@@ -259,6 +259,19 @@ sinh **làm quen ThingBlock, đề thi 2026–2027, robot mẫu và luật chơi
 - Trước khi công khai bản web sự kiện: hỏi anh Tuấn về lưới núi CAD, tên/biểu trưng FANROC (Ban Tổ chức), và có
   link mã nguồn AGPL trên trang.
 
+### 6.8 Hướng dài hạn: game cập nhật đề theo mùa, thêm mini game FGC — "Robotics is a Sport" (anh Tuấn nêu 04/11)
+
+Như game bóng đá ra bản mới mỗi mùa, game sẽ **cập nhật đề nhiều năm** (FANROC 2026–2027, các năm sau) và thêm
+**mini game theo đề FGC** (gắn với hướng RASO / `makerviet/riso`, bộ máy tính điểm `riso-rules`). **Đợt này không làm
+máy nhiều mùa**, chỉ **không chặn đường** cho nó (Claude quyết):
+- Mã mới chung cho mọi đề (giải đấu, lưu trữ, bàn phím → PS2, vỏ giao diện, GameSession, Xưởng, nhiệm vụ con rùa)
+  không gọi thẳng số liệu riêng của FANROC; thứ riêng của đề (sân, luật tính điểm, robot mẫu, nhiệm vụ chặng 3–4,
+  thẻ Luật chơi) đi qua một đối tượng `Season` (`id`, `name`, `year`) — đợt này chỉ có một mùa
+  `fanroc-2026` dựng từ các tệp `src/fanroc/*` hiện có.
+- Khoá lưu trữ có mã mùa: `fanroc.v1.<mùa>.…` cho tiến độ / chương trình / giải; cài đặt chung không theo mùa.
+- Màn chính hiện tên mùa; chỗ chọn mùa để dành (một mùa thì không hiện).
+- Thiết kế máy nhiều mùa + mini game FGC (dữ liệu đề dạng gói, `riso-rules` WASM hay không) là **một spec riêng sau**.
+
 ## 7. Ràng buộc
 
 - Giữ nguyên stack và cấu trúc: TypeScript, Vite (`/mo-phong/`), Three 0.180, Rapier 0.14, scratch-blocks
