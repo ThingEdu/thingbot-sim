@@ -83,11 +83,12 @@ test('ruleChecks Xe Cắm Cờ: tay S1 vươn hết (armFrac 1) tính vào mở 
   assert.equal(c?.ok, true)
 })
 
-test('localGripPoint: Mẫu Maker vươn tới trước theo thanh trượt, Xe Cắm Cờ nâng lên theo thùng', async () => {
+test('localGripPoint: Mẫu Maker kẹp cờ ở đuôi, thanh răng lùi ra sau; Xe Cắm Cờ nâng lên theo thùng', async () => {
   const { localGripPoint } = await import('./robots.ts')
   const m0 = localGripPoint(ROBOTS.maker, 0, 0)
   const m1 = localGripPoint(ROBOTS.maker, 0.1, 0)
-  assert.ok(Math.abs(m1.z - m0.z - 0.1) < 1e-9 && m1.y === m0.y)
+  assert.ok(m0.z < -ROBOTS.maker.size.l / 2, `điểm kẹp z ${m0.z} phải ở sau đuôi`)
+  assert.ok(Math.abs(m0.z - m1.z - 0.1) < 1e-9 && m1.y === m0.y)
   const c0 = localGripPoint(ROBOTS.co, 0, 0)
   const c1 = localGripPoint(ROBOTS.co, 0.05, 0)
   assert.ok(Math.abs(c1.y - c0.y - 0.05) < 1e-9 && c1.z === c0.z)

@@ -17,7 +17,7 @@ type Played = { score: number; flags: number; loads: { t: number; text: string }
 
 /**
  * Một trận headless: 4 Mẫu Maker diff2 cùng mức agent (dùng playAgents dùng chung với giải đấu).
- * Giữ thứ tự robot cũ của bài đo này [Đỏ 0, Đỏ 1, Xanh 0, Xanh 1] (khác SEATS của trang) để số đo 416,7 / 621,0 / 891,7 không đổi.
+ * Giữ thứ tự robot cũ của bài đo này [Đỏ 0, Đỏ 1, Xanh 0, Xanh 1] (khác SEATS của trang) (số đo 05/11 sau khi Mẫu Maker cắm cờ bằng đuôi, chỉ thả Rãnh 1: 306 / 368 / 401).
  */
 const ORDER: Seat[] = [['red', 0], ['red', 1], ['blue', 0], ['blue', 1]]
 async function play(skill: Skill, seed: number): Promise<Played> {

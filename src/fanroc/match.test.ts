@@ -203,8 +203,8 @@ test('leo núi P12 hai lần ⇒ lần đầu cảnh cáo, lần sau 1 lỗi', a
 test('vươn ra ngoài rào S02 ⇒ thẻ vàng một lần mỗi đợt', async () => {
   const { w, robots, m } = await setup()
   m.t = 0
-  // Maker sát rào phía xa, mặt hướng −z; M4 vươn thanh trượt ra ngoài rào.
-  robots[0].setPose({ x: -0.6, z: -FIELD / 2 + 0.16, yaw: 0 })
+  // Maker sát rào phía xa, đuôi hướng −z (yaw π); M4 lùi thanh răng ra sau, ra ngoài rào.
+  robots[0].setPose({ x: -0.6, z: -FIELD / 2 + 0.16, yaw: Math.PI })
   run(m, only(0, { M4: 100 }), 2)
   assert.equal(m.pens[0].yellow, 1)
   run(m, only(0, { M4: 100 }), 2)
@@ -287,7 +287,7 @@ test('G15 không tính khi một robot có góc trong Vùng Bảo Vệ / Khu Ti�
 test('luyện tập: không hết giờ, không phạt (sự kiện ghi "luyện tập")', async () => {
   const { robots, m } = await setup(undefined, true)
   m.t = 0
-  robots[0].setPose({ x: -0.6, z: -FIELD / 2 + 0.16, yaw: 0 })
+  robots[0].setPose({ x: -0.6, z: -FIELD / 2 + 0.16, yaw: Math.PI })
   run(m, only(0, { M4: 100 }), 2)
   assert.equal(m.pens[0].yellow, 0)
   assert.ok(m.events.some((e) => e.text.includes('S02') && e.text.includes('luyện tập')))

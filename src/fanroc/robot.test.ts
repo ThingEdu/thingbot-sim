@@ -103,7 +103,7 @@ test('Xe Ủi không có cửa xả S3 (R33): lệnh S3 = 150 không xả bóng 
   assert.equal(w.balls[0].st, 'held')
 })
 
-test('Nâng/vươn M4 = 100: extend tăng 0.08 m/s, kẹp ở maxExtend, footprint dài thêm', async () => {
+test('Nâng/vươn M4 = 100: extend tăng 0.08 m/s, kẹp ở maxExtend, footprint dài thêm (Mẫu Maker: thêm về phía đuôi)', async () => {
   const { w, r } = await corridor()
   drive(w, r, { M4: 100 }, 1)
   assert.ok(Math.abs(r.extend - 0.08) < 0.005, `extend ${r.extend}`)
@@ -112,16 +112,18 @@ test('Nâng/vươn M4 = 100: extend tăng 0.08 m/s, kẹp ở maxExtend, footpri
   const zs = r.footprint().map((c) => c.z)
   const len = Math.max(...zs) - Math.min(...zs)
   assert.ok(Math.abs(len - (ROBOTS.maker.size.l + ROBOTS.maker.maxExtend)) < 0.005, `dài ${len}`)
+  assert.ok(r.backExtension > 0.12 && r.forwardExtension === 0, `trước ${r.forwardExtension} / sau ${r.backExtension}`)
   drive(w, r, { M4: -100 }, 3)
   assert.equal(r.extend, 0)
 })
 
-/** Đặt Maker sao cho điểm kẹp (mũi + reach) nằm ngay trên lỗ cờ Núi A. */
+/** Đặt Maker sao cho điểm kẹp (đuôi xe + reach: Mẫu Maker cắm cờ bằng đuôi) nằm ngay trên lỗ cờ Núi A. */
 const overHoleA = async () => {
   const w = await FanrocWorld.create(1)
   const r = new RobotBody(w, MAKER, 'red', 0)
   const h = w.holeCentres()[0]
-  r.setPose({ x: h.x, z: h.z + ROBOTS.maker.size.l / 2 + ROBOTS.maker.release.reach, yaw: 0 })
+  // yaw π: mũi hướng +z, đuôi hướng −z về phía lỗ.
+  r.setPose({ x: h.x, z: h.z + ROBOTS.maker.size.l / 2 + ROBOTS.maker.release.reach, yaw: Math.PI })
   return { w, r, h }
 }
 
@@ -204,14 +206,17 @@ test('Lao vào rào và vào núi: bị chặn, không leo lên (thân vẫn sá
 })
 
 for (const type of ['maker', 'co'] as const) {
-  test(`Cờ (${ROBOTS[type].name}): lái thẳng vào Núi A theo trục lỗ, vươn + tay S1, mở kẹp ⇒ onFlag(0) (không dịch chuyển tức thời)`, async () => {
+  // Mẫu Maker cắm cờ bằng đuôi (thanh răng lùi ra sau): lùi đuôi vào núi; Xe Cắm Cờ tiến mũi vào.
+  const back = type === 'maker'
+  test(`Cờ (${ROBOTS[type].name}): ${back ? 'lùi đuôi' : 'lái thẳng'} vào Núi A theo trục lỗ, vươn + tay S1, mở kẹp ⇒ onFlag(0) (không dịch chuyển tức thời)`, async () => {
     const w = await FanrocWorld.create(1)
     const r = new RobotBody(w, { type, drive: 'diff2', actuator: 'tt' }, 'red', 0)
     const h = w.holeCentres()[0]
-    r.setPose({ x: h.x, z: 0.9, yaw: 0 })
+    r.setPose({ x: h.x, z: 0.9, yaw: back ? Math.PI : 0 })
     const got: number[] = []
     r.onFlag = (m) => got.push(m)
-    drive(w, r, { M1: 100, M2: 100, M4: 100, S1: 180, S2: 150 }, 4)
+    const v = back ? -100 : 100
+    drive(w, r, { M1: v, M2: v, M4: 100, S1: 180, S2: 150 }, 4)
     assert.equal(r.hasFlag, true)
     const g = r.gripPoint()
     assert.ok(g.y > PEAK_Y, `điểm kẹp thấp hơn đỉnh núi: ${g.y}`)

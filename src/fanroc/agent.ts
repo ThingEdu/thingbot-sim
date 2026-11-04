@@ -10,7 +10,7 @@ import type { Match } from './match.ts'
 import type { HumanPlayer } from './human.ts'
 import { FIELD, MATCH_S, MOUNTAINS, MOUNTAIN_FOOT, ZONES, toMountain, type Rect } from './layout.ts'
 import { NEUTRAL, type PortValues } from './ports.ts'
-import { portMap, type PortMap, type RobotConfig } from './robots.ts'
+import { LIFT_AXIS, portMap, type PortMap, type RobotConfig } from './robots.ts'
 
 export type Skill = 'easy' | 'medium' | 'hard'
 export type AgentView = { world: FanrocWorld; robots: RobotBody[]; match: Match; humans: HumanPlayer[] }
@@ -82,6 +82,10 @@ const REPLAN_S = 1.2
 const STUCK_V = 0.03
 const STUCK_S = 1.2
 const RECOVER_S = 0.7
+/** Đi tới đích (goTo) mà NO_PROGRESS_S giây không lại gần thêm NO_PROGRESS_M ⇒ coi như kẹt (lắc qua lại giữa rào và
+ *  núi: lúc quay lúc nhích nên bộ "đứng yên" không bắt được) ⇒ lùi gỡ và lập đường lại. */
+const NO_PROGRESS_S = 3
+const NO_PROGRESS_M = 0.03
 /** Tiến vào núi: dừng khi đứng yên chừng này giây (đã chạm gờ). */
 const CONTACT_S = 0.3
 /** Điểm chờ trước một mặt núi, cách tâm lỗ cờ. */
@@ -379,6 +383,8 @@ export class Agent {
   private stuckT = 0
   private recover = 0
   private recoverTurn = 1
+  /** Canh tiến độ của goTo: đích đang đi, khoảng cách gần nhất đã đạt, thời gian từ lần gần thêm cuối. */
+  private progress: { goal: Vec2; best: number; t: number } | null = null
   private stillT = 0
   private noise = 0
   private noiseIn = 0
@@ -605,6 +611,9 @@ export class Agent {
   private mountainTask(view: AgentView, anyColor: boolean): Task | null {
     const tally = view.match.tally()
     const nGreen = this.robot.stored.filter((i) => view.world.balls[i].color === 'g').length || 1
+    // Rãnh với tới được: chỉ robot có thanh trượt vươn tới trước mới đẩy bóng ra Rãnh 2 / 3 (DROP_EXTEND);
+    // còn lại (vd. Mẫu Maker CAD: thanh răng lùi ra sau) thả ở rãnh mũi xe chạm — Rãnh 1.
+    const reach = LIFT_AXIS[this.robot.def.type] === 'forward' ? [0, 1, 2] : [0]
     let best: Task | null = null
     let bestV = -Infinity
     for (let m = 0; m < MOUNTAINS.length; m++) {
@@ -617,12 +626,13 @@ export class Agent {
       if (this.S.ev) {
         // Giá trị kỳ vọng: phủ các rãnh còn trống của núi có cờ (cờ 20 → 40) trước, phần còn lại vào rãnh giá trị cao nhất.
         const missing = [0, 1, 2].filter((k) => counts[k] === 0)
-        const fill = flagged ? missing.slice(0, nGreen) : []
-        const rest = counts[2] >= GROOVE3_FULL ? 1 : 2
+        const fill = flagged ? missing.filter((k) => reach.includes(k)).slice(0, nGreen) : []
+        const rest = !reach.includes(2) ? reach[reach.length - 1] : counts[2] >= GROOVE3_FULL ? 1 : 2
         plan = [...fill, ...Array(Math.max(0, nGreen - fill.length)).fill(rest)]
         value = plan.reduce((s, k) => s + POINTS[k], 0) + (flagged && fill.length === missing.length && missing.length > 0 ? 20 : 0)
       } else {
-        const k = this.S.grooves[Math.floor(this.rnd() * this.S.grooves.length)]
+        const ks = this.S.grooves.filter((k) => reach.includes(k))
+        const k = ks.length ? ks[Math.floor(this.rnd() * ks.length)] : reach[0]
         plan = Array(nGreen).fill(k)
         value = POINTS[k] * nGreen + (this.skill === 'easy' ? this.rnd() * 30 : 0)
       }
@@ -806,9 +816,11 @@ export class Agent {
   private runFlag(view: AgentView, t: Extract<Task, { kind: 'flag' }>): void {
     const r = this.robot
     const h = view.world.holeCentres()[t.m]
+    // Robot cắm cờ bằng đuôi (Mẫu Maker): lùi đuôi vào lỗ, rời núi thì tiến ra.
+    const away = r.flagBehind ? CMD_SLOW : -CMD_SLOW
     if (!r.hasFlag) {
-      // Đã cắm (hoặc làm rơi): lùi ra rồi xong.
-      this.cmd.fwd = -CMD_SLOW
+      // Đã cắm (hoặc làm rơi): rời núi rồi xong.
+      this.cmd.fwd = away
       if (t.phase !== 'back') {
         t.phase = 'back'
         t.t = 0
@@ -831,7 +843,7 @@ export class Agent {
       return
     }
     if (t.phase === 'back') {
-      this.cmd.fwd = -CMD_SLOW
+      this.cmd.fwd = away
       this.cmd.lift = -1
       if (t.t > 0.5) {
         t.phase = 'go'
@@ -848,7 +860,7 @@ export class Agent {
     const g = r.gripPoint()
     const d = Math.hypot(g.x - h.x, g.z - h.z)
     const ready = r.extend >= r.def.maxExtend - 1e-6 && (r.def.arm?.reach ? r.armFrac > 0.99 : true)
-    this.pushTo(h, CMD_SLOW)
+    this.pushTo(h, CMD_SLOW, r.flagBehind)
     if (r.lastMessage) {
       // R16: lỗ có bóng — bỏ núi này.
       this.giveUp.add(t.m)
@@ -905,7 +917,8 @@ export class Agent {
       // Giữ mũi tì gờ, chỉnh mức vươn theo rãnh của bóng tiếp theo rồi mở cửa đúng lúc.
       this.pushTo(h, CMD_MIN)
       const k = t.plan[0] ?? t.plan[t.plan.length - 1] ?? 1
-      const want = DROP_EXTEND[k]
+      // Chỉ robot có thanh trượt vươn tới trước mới đẩy điểm xả ra các rãnh xa; còn lại thả ở rãnh mũi xe chạm.
+      const want = LIFT_AXIS[r.def.type] === 'forward' ? DROP_EXTEND[k] : 0
       const err = want - r.extend
       this.cmd.lift = this.ports.lift ? (err > 0.004 ? 1 : err < -0.004 ? -1 : 0) : 0
       const okColor = out === 'g' || (t.anyColor && this.carried() > 0)
@@ -982,7 +995,23 @@ export class Agent {
   private goTo(view: AgentView, goal: Vec2, tol: number, toLoad: boolean): boolean {
     const r = this.robot
     const p = r.pose
-    if (dist(p, goal) <= tol) return true
+    const d0 = dist(p, goal)
+    if (d0 <= tol) {
+      this.progress = null
+      return true
+    }
+    if (!this.progress || dist(this.progress.goal, goal) > 0.05) this.progress = { goal, best: d0, t: 0 }
+    else if (d0 < this.progress.best - NO_PROGRESS_M) {
+      this.progress.best = d0
+      this.progress.t = 0
+    } else if ((this.progress.t += this.dt) > NO_PROGRESS_S && this.recover <= 0) {
+      this.progress = { goal, best: d0, t: 0 }
+      this.recover = RECOVER_S
+      this.recoverTurn = this.rnd() < 0.5 ? -1 : 1
+      this.path = []
+      this.pathGoal = null
+      return false
+    }
     this.replanIn -= this.dt
     if (!this.pathGoal || dist(this.pathGoal, goal) > 0.05 || this.replanIn <= 0 || this.path.length === 0) {
       const left = MATCH_S - view.match.t
@@ -1009,15 +1038,16 @@ export class Agent {
    * Tiến thẳng vào lỗ h (mũi xe nhắm tâm lỗ: điểm kẹp / điểm xả nằm trên trục xe nên đi qua lỗ dù xe lệch ngang);
    * lệch hướng quá PUSH_TURN thì quay tại chỗ trước.
    */
-  private pushTo(h: Vec2, speed: number): void {
+  private pushTo(h: Vec2, speed: number, reverse = false): void {
     const p = this.robot.pose
-    const e = wrap(yawTo(p, h) - p.yaw + this.noise)
+    // Lùi: đuôi xe (hướng yaw + π) nhắm tâm lỗ; quay trái vẫn xoay đuôi cùng chiều nên bộ P giữ nguyên dấu.
+    const e = wrap(yawTo(p, h) - p.yaw - (reverse ? Math.PI : 0) + this.noise)
     if (Math.abs(e) > PUSH_TURN) {
       this.cmd.fwd = 0
       this.cmd.turn = Math.sign(e) * CMD_TURN
       return
     }
-    this.cmd.fwd = speed
+    this.cmd.fwd = reverse ? -speed : speed
     this.cmd.turn = Math.max(-25, Math.min(25, K_TURN * e))
   }
 

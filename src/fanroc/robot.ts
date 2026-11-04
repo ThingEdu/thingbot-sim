@@ -140,21 +140,44 @@ export class RobotBody {
     return LIFT_AXIS[this.def.type] === 'forward' ? this.extend : 0
   }
 
-  /** Phần tay kẹp cờ đang vươn tới trước, m. */
+  /** Cắm cờ bằng đuôi xe (Mẫu Maker: thanh răng lùi ra sau mang giá cờ). */
+  get flagBehind(): boolean {
+    return LIFT_AXIS[this.def.type] === 'back'
+  }
+
+  private get backExtend(): number {
+    return this.flagBehind ? this.extend : 0
+  }
+
+  /** Phần tay kẹp cờ đang vươn ra (tới trước, hoặc ra sau với robot cắm cờ bằng đuôi), m. */
   private get armReach(): number {
     return this.armFrac * (this.def.arm?.reach ?? 0)
   }
 
-  /** Tổng phần nhô ra trước mũi xe (vươn + tay kẹp), m — đưa vào ruleChecks / đỗ. */
+  /** Phần nhô ra trước mũi xe (vươn + tay kẹp), m. */
   get forwardExtension(): number {
-    return this.forwardExtend + this.armReach
+    return this.forwardExtend + (this.flagBehind ? 0 : this.armReach)
+  }
+
+  /** Phần nhô ra sau đuôi xe, m. */
+  get backExtension(): number {
+    return this.backExtend + (this.flagBehind ? this.armReach : 0)
+  }
+
+  /** Tổng phần mở rộng ra khỏi kích thước xuất phát (trước + sau), m — đưa vào ruleChecks. */
+  get extension(): number {
+    return this.forwardExtension + this.backExtension
   }
 
   /** Điểm cách mũi xe thêm `ahead` theo phương ngang và cao `y` so với sàn. */
   private ahead(ahead: number, y: number): { x: number; y: number; z: number } {
+    return this.along(this.def.size.l / 2 + ahead, y)
+  }
+
+  /** Điểm cách tâm xe `d` theo trục xe (âm = phía sau) và cao `y` so với sàn. */
+  private along(d: number, y: number): { x: number; y: number; z: number } {
     const t = this.body.translation()
     const { f } = this.axes()
-    const d = this.def.size.l / 2 + ahead
     return { x: t.x + f.x * d, y: t.y + y, z: t.z + f.z * d }
   }
 
@@ -167,18 +190,20 @@ export class RobotBody {
     return this.ahead(this.def.release.reach + this.forwardExtend, this.def.release.y + this.liftUp)
   }
 
-  /** Điểm kẹp cờ: như điểm xả, cộng phần tay kẹp S1 (R17). */
+  /** Điểm kẹp cờ: như điểm xả, cộng phần tay kẹp S1 (R17); robot cắm cờ bằng đuôi thì ở sau đuôi xe. */
   gripPoint(): { x: number; y: number; z: number } {
     const up = this.armFrac * (this.def.arm?.up ?? 0)
-    return this.ahead(this.def.release.reach + this.forwardExtend + this.armReach, this.def.release.y + this.liftUp + up)
+    const y = this.def.release.y + this.liftUp + up
+    if (this.flagBehind) return this.along(-(this.def.size.l / 2 + this.def.release.reach + this.backExtension), y)
+    return this.ahead(this.def.release.reach + this.forwardExtend + this.armReach, y)
   }
 
-  /** 4 góc hình chữ nhật thân xe (gồm phần vươn và tay kẹp tới trước): trước trái, trước phải, sau phải, sau trái. */
+  /** 4 góc hình chữ nhật thân xe (gồm phần vươn / tay kẹp tới trước và ra sau): trước trái, trước phải, sau phải, sau trái. */
   footprint(): Vec2[] {
     const t = this.body.translation()
     const { f, r } = this.axes()
     const front = this.def.size.l / 2 + this.forwardExtension
-    const back = -this.def.size.l / 2
+    const back = -this.def.size.l / 2 - this.backExtension
     const half = this.def.size.w / 2
     const at = (a: number, b: number): Vec2 => ({ x: t.x + f.x * a + r.x * b, z: t.z + f.z * a + r.z * b })
     return [at(front, -half), at(front, half), at(back, half), at(back, -half)]

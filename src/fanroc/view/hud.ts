@@ -178,7 +178,7 @@ export function createHud(root: HTMLElement): Hud {
       const r = robots[selected]
       const cfg = cfgs[selected] ?? r?.cfg
       if (r && cfg) {
-        const list = ruleChecks(cfg, r.forwardExtension)
+        const list = ruleChecks(cfg, r.extension)
         const dead = deadZoneLines(ports[selected])
         const key = JSON.stringify(list) + r.stored.length + r.hasFlag + (r.lastMessage ?? '') + dead.join()
         if (key !== lastChecks) {
