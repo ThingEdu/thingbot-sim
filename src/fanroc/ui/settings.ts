@@ -99,6 +99,8 @@ export interface SettingsCtx {
   setSound(v: boolean): void
   layout2p: boolean
   setLayout2p(v: boolean): void
+  /** Có chữ ⇒ không đổi được số bạn (giải đấu: số bạn chốt lúc ghi danh), nút mờ, hiện chữ này. */
+  layoutLocked?: string
   names: [string, string]
   cfg(p: 0 | 1): RobotConfig
   /** Chỉ ở trận / đấu tập. */
@@ -242,7 +244,11 @@ export function createSettings(): SettingsPopover {
     parts.push(row('Camera', ...group<CameraView>([['field', 'Toàn sân'], ['follow', 'Theo robot'], ['driver', 'Ghế lái']], c.camera, c.setCamera)))
     parts.push(row('Đồ hoạ', ...group<Quality>([['high', 'Cao'], ['low', 'Thấp']], c.quality, c.setQuality)))
     parts.push(row('Âm thanh', ...group([[true, 'Bật'], [false, 'Tắt']], c.sound, c.setSound)))
-    parts.push(row('Hai bạn chơi', ...group([[false, 'Một bạn'], [true, 'Hai bạn (chia đôi bàn phím)']], c.layout2p, c.setLayout2p)))
+    const two = group([[false, 'Một bạn'], [true, 'Hai bạn (chia đôi bàn phím)']], c.layout2p, c.setLayout2p)
+    if (c.layoutLocked) for (const b of two) b.disabled = true
+    const twoRow = row('Hai bạn chơi', ...two, ...(c.layoutLocked ? [el('span', 'st-note', c.layoutLocked)] : []))
+    twoRow.dataset.role = 'layout2p'
+    parts.push(twoRow)
     const tables = el('div', 'st-tables')
     if (c.layout2p) {
       tables.append(keyTable(`${c.names[0]} · nửa trái · ${robotName(c.cfg(0))}`, 'left', c.cfg(0)), keyTable(`${c.names[1]} · nửa phải · ${robotName(c.cfg(1))}`, 'right', c.cfg(1)))

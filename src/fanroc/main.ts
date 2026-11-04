@@ -69,6 +69,7 @@ type Player = 0 | 1
 type GoArg = { player?: Player; id?: string; returnTo?: 'tournament' }
 /** Thẻ thử thách tự tích ✓ trong lúc chạy: chấm thử tối đa chừng này lần mỗi giây (đếm bóng tốn). */
 const PREVIEW_HZ = 4
+const TOUR_LAYOUT_LOCKED = 'Giải đấu: số bạn đã chọn lúc ghi danh'
 /** Trận máy chạy ngầm: mỗi lát chừng này ms rồi nhường cho khung hình / nút bấm. */
 const MACHINE_SLICE_MS = 24
 /** Lưu chương trình đang làm của nhiệm vụ sau khi vùng khối thôi đổi chừng này ms. */
@@ -149,6 +150,9 @@ async function start(): Promise<void> {
     if (screen !== 'tmatch' || !tour || tourIndex < 0) return -1
     return playersIn(tour, tourIndex).find((x) => x.player === p)?.seat ?? -1
   }
+  /** Đang ở màn của giải (Pit / ghi danh, trận giải, Xem nhanh, Xưởng mở từ Pit): ⚙ không đổi số bạn. */
+  const tourLocksLayout = () =>
+    screen === 'tournament' || screen === 'tmatch' || screen === 'treplay' || (screen === 'workshop' && wsReturn === 'tournament')
   /** Nhãn chương trình của bạn p trong giải: bản lưu ở Xưởng cho robot của giải, không thì Mặc định (Review Focus 5). */
   const tourLabel = (p: Player) => {
     const e = tourEntrant(p)
@@ -853,7 +857,10 @@ async function start(): Promise<void> {
     sound: settings.sound,
     setSound: (v) => ((settings.sound = v), saveSettings()),
     layout2p: settings.layout2p,
+    layoutLocked: tourLocksLayout() ? TOUR_LAYOUT_LOCKED : undefined,
     setLayout2p: (v) => {
+      // Giải đấu: số bạn (bố cục bàn phím) chốt lúc ghi danh — đổi giữa giải thì trận ghi với tay lái sai.
+      if (tourLocksLayout()) return reopen()
       settings.layout2p = v
       saveSettings()
       makePads()

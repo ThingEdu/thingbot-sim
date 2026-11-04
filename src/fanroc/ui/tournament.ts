@@ -271,14 +271,23 @@ function table(rows: StandingRow[]): HTMLElement {
   const t = el('table', 'tn-table')
   t.dataset.role = 'standings'
   const hr = el('tr')
-  for (const h of ['Hạng', 'Đội', 'Điểm các trận', 'Điểm xếp hạng', 'Trận cao nhất']) hr.append(el('th', undefined, h))
+  for (const h of ['Hạng', 'Đội', 'Điểm các trận', 'Điểm xếp hạng', 'Trận cao nhất', 'Phạt']) hr.append(el('th', undefined, h))
   t.append(hr)
-  for (const r of rows) {
+  /** Cùng nhóm hoà (tổng, trận cao nhất, phạt đều bằng) với dòng trên. */
+  const sameAsPrev = (k: number) => k > 0 && rows[k - 1].total === rows[k].total && rows[k - 1].best === rows[k].best && rows[k - 1].penalty === rows[k].penalty
+  rows.forEach((r, k) => {
     const tr = el('tr')
     tr.dataset.player = String(r.player)
     tr.dataset.id = r.id
     const rank = el('td', 'n', String(r.rank))
-    if (r.tie && r.total > 0) rank.append(el('span', 'tn-tie', 'bốc thăm'))
+    // "bốc thăm" một lần ở dòng đầu mỗi nhóm hoà (chưa đội nào có điểm thì không ghi).
+    if (r.tie && r.total > 0 && !sameAsPrev(k)) {
+      let n = 1
+      while (k + n < rows.length && sameAsPrev(k + n)) n++
+      const tag = el('span', 'tn-tie', `bốc thăm hạng ${r.rank}–${r.rank + n - 1}`)
+      tag.dataset.role = 'tie'
+      rank.append(tag)
+    }
     const team = el('td')
     if (r.player) {
       const open = r.label.indexOf(' (')
@@ -286,9 +295,9 @@ function table(rows: StandingRow[]): HTMLElement {
     } else team.textContent = r.label
     const total = el('td', 'n')
     total.append(el('b', undefined, String(r.total)))
-    tr.append(rank, team, el('td', 'n', r.scores), total, el('td', 'n', String(r.best)))
+    tr.append(rank, team, el('td', 'n', r.scores), total, el('td', 'n', String(r.best)), el('td', 'n', r.penalty ? `−${r.penalty}` : '0'))
     t.append(tr)
-  }
+  })
   wrap.append(t)
   return wrap
 }
@@ -330,10 +339,15 @@ export function createTournamentScreen(root: HTMLElement, act: TourActions): Tou
   let confirmDrop = false
 
   const put = (v: TourView, ...nodes: HTMLElement[]) => {
+    // Vẽ lại cùng màn (trận máy vừa ghi ⇒ Pit vẽ lại): giữ tiêu điểm ở nút có cùng data-key.
+    const act = document.activeElement as HTMLElement | null
+    const key = !box.hidden && view === v && act && box.contains(act) ? act.dataset.key : undefined
+    if (view !== v) confirmDrop = false
     view = v
     box.dataset.view = v
     inner.replaceChildren(...nodes)
     box.hidden = false
+    if (key) inner.querySelector<HTMLElement>(`[data-key="${key}"]`)?.focus()
   }
   const acts = (...b: HTMLButtonElement[]) => {
     const a = el('div', 'pk-acts')
@@ -478,13 +492,24 @@ export function createTournamentScreen(root: HTMLElement, act: TourActions): Tou
       const play = btn('Vào trận ▶', act.play, 'main')
       play.disabled = !playable
       play.dataset.role = 'play'
-      const ws = v.players.map((x) => btn(v.players.length === 2 ? `Vào Xưởng sửa chương trình · ${x.name}` : 'Vào Xưởng sửa chương trình', () => act.workshop(x.player)))
+      play.dataset.key = 'play'
+      const ws = v.players.map((x) => {
+        const b = btn(v.players.length === 2 ? `Vào Xưởng sửa chương trình · ${x.name}` : 'Vào Xưởng sửa chương trình', () => act.workshop(x.player))
+        b.dataset.key = `ws${x.player}`
+        return b
+      })
       const drop = btn(confirmDrop ? 'Bấm lần nữa để bỏ giải này' : 'Bỏ giải, ghi danh lại', () => {
         if (confirmDrop) return ((confirmDrop = false), act.newTour())
         confirmDrop = true
         drop.textContent = 'Bấm lần nữa để bỏ giải này'
       })
-      nx.append(acts(play, ...ws), acts(btn('Xem lịch', act.schedule), homeBtn(), drop))
+      drop.dataset.key = 'drop'
+      drop.dataset.role = 'drop'
+      const sched = btn('Xem lịch', act.schedule)
+      sched.dataset.key = 'schedule'
+      const home = homeBtn()
+      home.dataset.key = 'home'
+      nx.append(acts(play, ...ws), acts(sched, home, drop))
       nodes.push(nx)
       // Kết quả các trận toàn máy đã chơi ngầm, có nút Xem nhanh (chạy lại trận đó ×40 trên sân).
       const mres = el('div', 'tn-mres')
@@ -492,7 +517,9 @@ export function createTournamentScreen(root: HTMLElement, act: TourActions): Tou
       s.results.forEach((r, i) => {
         if (!r || matchLine(s, i).mine) return
         const d = el('div')
-        d.append(`Trận ${i + 1} · `, alliances(matchLine(s, i)), ` · điểm trận ${r.matchScore}`, btn('Xem nhanh', () => act.replay(i)))
+        const see = btn('Xem nhanh', () => act.replay(i))
+        see.dataset.key = `replay${i}`
+        d.append(`Trận ${i + 1} · `, alliances(matchLine(s, i)), ` · điểm trận ${r.matchScore}`, see)
         mres.append(d)
       })
       if (mres.childElementCount) {
@@ -500,7 +527,6 @@ export function createTournamentScreen(root: HTMLElement, act: TourActions): Tou
         m.append(el('h3', undefined, 'Các trận máy đã chơi'), mres)
         nodes.push(m)
       }
-      confirmDrop = false
       put('pit', ...nodes)
     },
     podium(s, rows) {
@@ -533,6 +559,7 @@ export function createTournamentScreen(root: HTMLElement, act: TourActions): Tou
     },
     hide() {
       box.hidden = true
+      confirmDrop = false
       minis = []
       pads = []
     },

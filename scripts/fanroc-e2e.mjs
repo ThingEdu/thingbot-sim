@@ -1067,6 +1067,17 @@ async function tournamentTests() {
     const standing = await tn(page).locator('[data-role="standings"] tr[data-id]').count()
     const myScores = await tn(page).locator('[data-role="standings"] tr[data-id="p0"] td').nth(2).innerText()
     expect(standing === 8 && myScores !== '—', `Pit ${standing} dòng xếp hạng, điểm các trận của em "${myScores}"`)
+    // Cột Phạt; "bốc thăm" một lần mỗi nhóm hoà (tổng, trận cao nhất, phạt bằng nhau, có điểm).
+    const tie = await page.evaluate(() => {
+      const t = document.querySelector('.hm[data-screen="tournament"] [data-role="standings"]')
+      const head = [...t.querySelectorAll('th')].map((x) => x.textContent)
+      const rows = [...t.querySelectorAll('tr[data-id]')].map((tr) => [...tr.querySelectorAll('td')].slice(3).map((x) => x.textContent).join('|'))
+      const groups = new Map()
+      for (const r of rows) groups.set(r, (groups.get(r) ?? 0) + 1)
+      const want = [...groups.entries()].filter(([k, n]) => n > 1 && !k.startsWith('0|')).length
+      return { head, want, tags: t.querySelectorAll('[data-role="tie"]').length }
+    })
+    expect(tie.head.includes('Phạt') && tie.tags === tie.want, `cột ${tie.head.join(', ')} · nhãn bốc thăm ${tie.tags}, nhóm hoà ${tie.want}`)
     await shot(page, 't15-pit.png')
     // Trận kế của em: chơi dở 20 s rồi tải lại trang.
     await waitPlayable(page)
@@ -1141,7 +1152,24 @@ async function tournamentTests() {
     const ku = await hold('ArrowUp')
     expect(kw[0] > 0.15 && kw[1] < 0.05, `giữ W: bạn 1 đi ${kw[0].toFixed(3)} m, bạn 2 đi ${kw[1].toFixed(3)} m`)
     expect(ku[1] > 0.15 && ku[0] < 0.05, `giữ ↑: bạn 1 đi ${ku[0].toFixed(3)} m, bạn 2 đi ${ku[1].toFixed(3)} m`)
-    return `seed ${seed} · thử phím W ⇒ ${w}, ↑ ⇒ ${up} · W: ${kw.map((d) => d.toFixed(2)).join(' / ')} m · ↑: ${ku.map((d) => d.toFixed(2)).join(' / ')} m`
+    // ⚙ › Hai bạn chơi bị khoá trong giải: bấm "Một bạn" không đổi bố cục, W vẫn chỉ lái robot bạn 1.
+    await settings(page)
+    const lockRow = page.locator('.st-pop [data-role="layout2p"]')
+    const lockText = await lockRow.innerText()
+    await lockRow.locator('button', { hasText: 'Một bạn' }).click({ force: true })
+    await page.evaluate(() => document.querySelector('.st-pop [data-role="layout2p"] button')?.onclick?.())
+    await page.waitForTimeout(300)
+    const pads = await page.evaluate(() => window.__fanroc.keypads().length)
+    const still2p = await page.evaluate(() => window.__fanroc.store.settings().layout2p)
+    await closeSettings(page)
+    await page.locator('#stage canvas').click({ position: { x: 5, y: 5 } })
+    // Robot bạn 1 đã chạy tới có thể chạm vật cản: đặt lại hai robot vào làn trống sát rào bên.
+    await page.evaluate(([s, lane]) => s.forEach((seat, k) => window.__fanroc.robots[seat].setPose(lane[k])), [s, LANE])
+    await page.waitForTimeout(300)
+    const kw2 = await hold('KeyW')
+    expect(/Giải đấu: số bạn đã chọn lúc ghi danh/.test(lockText) && pads === 2 && still2p, `⚙ khoá: "${lockText.replace(/\n/g, ' ')}", tay ảo ${pads}, layout2p ${still2p}`)
+    expect(kw2[0] > 0.15 && kw2[1] < 0.05, `sau khi thử đổi ⚙, giữ W: bạn 1 ${kw2[0].toFixed(3)} m, bạn 2 ${kw2[1].toFixed(3)} m`)
+    return `seed ${seed} · thử phím W ⇒ ${w}, ↑ ⇒ ${up} · W: ${kw.map((d) => d.toFixed(2)).join(' / ')} m · ↑: ${ku.map((d) => d.toFixed(2)).join(' / ')} m · ⚙ khoá, W sau đó ${kw2.map((d) => d.toFixed(2)).join(' / ')} m`
   })
 
   await test('N9b giải đã xong (nạp sẵn) ⇒ ô "Giải đã xong", bục trao giải hạng 1–3 + bảng 8 dòng; Giải mới ⇒ ghi danh, xoá giải', async (page) => {
@@ -1206,6 +1234,42 @@ async function tournamentTests() {
     const me = await tn(page).locator('[data-role="standings"] tr[data-id="p0"]').innerText()
     expect(/Đã lưu v1/.test(note) && /Của em v1/.test(me), `Pit sau khi lưu: "${note}" · "${me.replace(/\s+/g, ' ')}"`)
     return `Xem nhanh ×${sp} (${(t1 - t0).toFixed(1)} s trận / 1 s) ⇒ Về Pit, vẫn 1 trận · Xưởng ⇒ "${note}"`
+  })
+
+  await test('N9e tải lại giữa loạt trận máy ⇒ không trùng, không mất kết quả; xác nhận Bỏ giải giữ qua lần vẽ lại', async (page) => {
+    // Em đấu trận 1; trận 2, 3 toàn máy (một loạt hai trận), trận 4 của em.
+    const seed = findSeed(1, (t) => playersIn(t, 0).length === 1 && !playersIn(t, 1).length && !playersIn(t, 2).length)
+    let t = newTournament({ names: ['Bạn 1', 'Bạn 2'], cfgs: [MAKER, MAKER], players: 1, perTeam: 4, seed })
+    const ids = seatIds(t.schedule[0])
+    t = record(t, 0, played(ids, ids.map(() => ({ score: 150, penalty: 0 })), 150))
+    await open(page)
+    await page.evaluate((v) => window.__fanroc.store.saveTournament(v), t)
+    await page.reload()
+    await page.waitForFunction(() => window.__fanroc?.editors && window.__fanroc.screen === 'home', null, { timeout: 60000 })
+    await page.locator('.hm-tile[data-tile="tournament"]').click()
+    await page.waitForFunction(() => window.__fanroc.tour.view === 'pit' && window.__fanroc.tour.busy())
+    // Bấm Bỏ giải một lần (hỏi lại) rồi chờ trận máy đầu ghi: Pit vẽ lại vẫn giữ lời hỏi lại.
+    await tn(page).locator('button[data-role="drop"]').click()
+    await page.waitForFunction(() => window.__fanroc.store.tournament().results[1] !== null, null, { timeout: 120000 })
+    const dropText = await tn(page).locator('button[data-role="drop"]').innerText()
+    const focused = await page.evaluate(() => document.activeElement?.dataset?.key ?? null)
+    expect(dropText === 'Bấm lần nữa để bỏ giải này' && focused === 'drop', `sau khi trận máy ghi: nút "${dropText}", tiêu điểm ${focused}`)
+    const snap = await page.evaluate(() => {
+      const r = window.__fanroc.store.tournament().results
+      const n = r.filter((x) => x !== null).length
+      location.reload()
+      return { n, r1: JSON.stringify(r[1]) }
+    })
+    await page.waitForFunction(() => window.__fanroc?.editors && window.__fanroc.screen === 'home', null, { timeout: 60000 })
+    const back = await page.evaluate(() => window.__fanroc.store.tournament().results.map((x) => x !== null))
+    const nBack = back.filter(Boolean).length
+    expect(nBack >= snap.n && nBack <= snap.n + 1 && back.indexOf(false) === nBack, `sau khi tải lại: ${back.map(Number).join('')} (trước ${snap.n})`)
+    await page.locator('.hm-tile[data-tile="tournament"]').click()
+    await waitPlayable(page)
+    const end = await page.evaluate(() => window.__fanroc.store.tournament().results)
+    const endN = end.filter((x) => x !== null).length
+    expect(endN === 3 && end[3] === null && JSON.stringify(end[1]) === snap.r1, `xong loạt: ${end.map((x) => Number(x !== null)).join('')}, trận 2 ${JSON.stringify(end[1]) === snap.r1 ? 'giữ nguyên' : 'bị chơi lại'}`)
+    return `seed ${seed} · Bỏ giải hỏi lại giữ qua lần vẽ lại · tải lại khi đã ghi ${snap.n} ⇒ ${nBack} ⇒ xong loạt ${endN} trận, không trùng`
   })
 
   await test('N9c giải lưu hỏng ⇒ "Không đọc được giải đang dở" + Giải mới; bộ nhớ đầy ⇒ Pit báo không lưu được; điện thoại không cuộn ngang', async (page) => {
