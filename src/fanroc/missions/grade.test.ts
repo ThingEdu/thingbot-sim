@@ -10,7 +10,7 @@ import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
 import { MISSIONS } from './data.ts'
-import { grade } from './grade.ts'
+import { grade, shouldGrade, type RunState } from './grade.ts'
 import type { Goal, Mission, RunRecord } from './types.ts'
 import { TOOLBOX_OPCODES } from '../programs.ts'
 import { argumentReporter, procedureCall, procedureState } from '../procedures.ts'
@@ -135,7 +135,7 @@ function ideal(m: Mission): RunRecord {
 // ---------- Chạy trên sân ----------
 /**
  * Chạy chương trình của nhiệm vụ trên sân như vòng lặp trận (bo ảo một nhịp, vật lý một bước) và dừng đúng thời điểm
- * chấm R57: robot đứng yên ≥ 1 s sau khi đã chạy (a), hoặc hết `maxTime` (c). `trail.time` = Trail.lastMoveTime.
+ * chấm do `shouldGrade` quyết (R57/R59), không bấm Chấm. `trail.time` = Trail.lastMoveTime.
  */
 async function runOnField(m: Mission, state: object): Promise<RunRecord & { gradedAt: number; why: 'rest' | 'maxTime' }> {
   const g = H.generate(state)
@@ -157,9 +157,7 @@ async function runOnField(m: Mission, state: object): Promise<RunRecord & { grad
     let touched = false
     trail.add(0, robot.pose, link.ports())
     let why: 'rest' | 'maxTime' = 'maxTime'
-    let k = 0
-    while (k * PHYSICS_DT < m.maxTime - 1e-9) {
-      k++
+    for (let k = 1; ; k++) {
       if (session) link.receive({ type: 'snapshot', run, snapshot: (session as SessionLike).tick(PHYSICS_DT * 1000), bus: {} } as unknown as Message)
       const ports = link.ports()
       robot.apply(ports, PHYSICS_DT)
@@ -169,8 +167,11 @@ async function runOnField(m: Mission, state: object): Promise<RunRecord & { grad
       const c = robot.footprint()
       const pts = [...c, ...c.map((p, i) => ({ x: (p.x + c[(i + 1) % 4].x) / 2, z: (p.z + c[(i + 1) % 4].z) / 2 }))]
       if (pts.some((p) => mountainAt(p.x, p.z) >= 0)) touched = true
-      if (trail.hasMoved && trail.time - trail.lastMoveTime >= 1) {
-        why = 'rest'
+      const reason = shouldGrade(m, { elapsed: trail.time, hasMoved: trail.hasMoved, lastMoveTime: trail.lastMoveTime, pressed: false }, () => {
+        throw new Error('nhiệm vụ lập trình không cần bản ghi để quyết lúc chấm')
+      })
+      if (reason) {
+        why = reason === 'rest' ? 'rest' : 'maxTime'
         break
       }
     }
@@ -420,4 +421,34 @@ test('vùng đích ⭐⭐ / ⭐⭐⭐ nằm trong vùng đích ⭐ (đạt sao c
       assert.ok(base.some((b) => r.x0 >= b.x0 && r.x1 <= b.x1 && r.z0 >= b.z0 && r.z1 <= b.z1), `nhiệm vụ ${m.n}: ${JSON.stringify(r)} ra ngoài ${JSON.stringify(base)}`)
     }
   }
+})
+
+test('shouldGrade (R57/R59): bấm Chấm và hết giờ cho mọi loại; đứng yên chấm ngay nhiệm vụ lập trình', () => {
+  const st = (o: Partial<RunState>): RunState => ({ elapsed: 5, hasMoved: true, lastMoveTime: 3, pressed: false, ...o })
+  const never = () => {
+    throw new Error('không được dựng bản ghi')
+  }
+  const p = byN(7)
+  assert.equal(shouldGrade(p, st({}), never), 'rest')
+  assert.equal(shouldGrade(p, st({ lastMoveTime: 4.5 }), never), null, 'mới đứng yên 0,5 s')
+  assert.equal(shouldGrade(p, st({ hasMoved: false, lastMoveTime: 0 }), never), null, 'chưa chạy lần nào thì không tính đứng yên')
+  assert.equal(shouldGrade(p, st({ lastMoveTime: 4.5, pressed: true }), never), 'pressed')
+  assert.equal(shouldGrade(p, st({ elapsed: p.maxTime, lastMoveTime: p.maxTime }), never), 'maxTime')
+  const match = byN(12)
+  assert.equal(shouldGrade(match, st({ elapsed: 100, lastMoveTime: 10 }), never), null, 'trận không dừng vì đứng yên')
+  assert.equal(shouldGrade(match, st({ elapsed: match.maxTime }), never), 'maxTime')
+  assert.equal(shouldGrade(match, st({ pressed: true }), never), 'pressed')
+})
+
+test('shouldGrade (R59): nhiệm vụ lái bàn phím đứng yên chỉ chấm khi đã đạt mọi điều kiện ⭐', () => {
+  const st = (o: Partial<RunState>): RunState => ({ elapsed: 20, hasMoved: true, lastMoveTime: 10, pressed: false, ...o })
+  const m1 = byN(1)
+  assert.equal(m1.kind, 'drive')
+  const half = () => record(m1, { trail: { distance: 0.5, turned: 90, time: 10 } }) // mới lái nửa chừng rồi dừng nghĩ
+  assert.equal(shouldGrade(m1, st({}), half), null)
+  assert.equal(shouldGrade(m1, st({ lastMoveTime: 19.5 }), () => record(m1)), null, 'đạt rồi nhưng mới đứng 0,5 s')
+  assert.equal(shouldGrade(m1, st({}), () => record(m1)), 'rest', 'đạt mọi điều kiện ⭐ và đứng yên ⇒ chấm')
+  assert.equal(shouldGrade(m1, st({ pressed: true }), half), 'pressed')
+  assert.equal(shouldGrade(m1, st({ elapsed: m1.maxTime }), half), 'maxTime')
+  for (const n of [1, 9, 10]) assert.equal(byN(n).kind, 'drive')
 })

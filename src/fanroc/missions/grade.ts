@@ -8,6 +8,9 @@ import { scoreTally } from '../scoring.ts'
 import type { Pose } from '../layout.ts'
 import type { Goal, GradeResult, HintWhen, Mission, RunRecord } from './types.ts'
 
+/** Robot đứng yên bao lâu (s) thì coi là đã dừng hẳn (R57 a). */
+export const REST_S = 1
+
 const MOUNTAIN_NAME = 'ABCD'
 /** Câu nhật ký trận khi hết giờ (match.ts `finish`). */
 const MATCH_END = /^Hết giờ/
@@ -147,4 +150,28 @@ export function grade(m: Mission, r: RunRecord): GradeResult {
     break
   }
   return { done: tierOk[0], stars, goals: rows.flat().map((x) => ({ text: x.mark + describe(x.g), ok: x.c.ok })), hint }
+}
+
+/** Trạng thái lần chạy mà GameSession đưa vào `shouldGrade` mỗi bước. */
+export type RunState = {
+  /** s kể từ ▶ (Trail.time). */
+  elapsed: number
+  /** Trail.hasMoved / Trail.lastMoveTime. */
+  hasMoved: boolean
+  lastMoveTime: number
+  /** Học sinh vừa bấm Dừng / Chấm. */
+  pressed: boolean
+}
+export type GradeReason = 'pressed' | 'maxTime' | 'rest'
+
+/**
+ * Đã tới lúc chấm chưa (R57 + R59; hợp đồng đầy đủ ở RunRecord, types.ts): trả lý do, hoặc null nếu chạy tiếp.
+ * `record` chỉ được gọi khi cần (nhiệm vụ lái đứng yên: xét các điều kiện ⭐ trên trạng thái hiện tại).
+ */
+export function shouldGrade(m: Mission, s: RunState, record: () => RunRecord): GradeReason | null {
+  if (s.pressed) return 'pressed'
+  if (s.elapsed >= m.maxTime - 1e-9) return 'maxTime'
+  if (m.kind === 'match' || !s.hasMoved || s.elapsed - s.lastMoveTime < REST_S) return null
+  if (m.kind === 'program') return 'rest'
+  return grade(m, record()).done ? 'rest' : null
 }

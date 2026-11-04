@@ -73,13 +73,15 @@ export interface Mission {
 /**
  * Bản ghi một lần chạy — hợp đồng với GameSession (Task 10), quyết định R57.
  *
- * Thời điểm chấm: lần chạy được chấm ngay khi điều đầu tiên trong ba điều sau xảy ra
- *   (a) robot đã đứng yên — trong 1,0 s vừa qua tâm dời < 5 mm và hướng đổi < 2° — sau khi đã chạy ít nhất một lần
- *       (`Trail.hasMoved` và `Trail.time − Trail.lastMoveTime ≥ 1`; ngưỡng ở trail.ts MOVE_STEP / MOVE_TURN_DEG;
- *       thêm "hướng đổi" để quay tại chỗ — tâm gần như không dời — không bị coi là đứng yên);
- *   (b) học sinh bấm Dừng / Chấm;
- *   (c) hết `Mission.maxTime` giây kể từ ▶ (nhiệm vụ trận: hết đồng hồ trận).
- * Nhiệm vụ `kind: 'match'` không dùng (a): trận chỉ được chấm khi hết đồng hồ trận (c) hoặc học sinh bấm Chấm (b).
+ * Thời điểm chấm (R57, sửa bởi R59) — GameSession gọi `shouldGrade` (grade.ts) mỗi bước:
+ *   (b) học sinh bấm Dừng / Chấm — mọi loại nhiệm vụ;
+ *   (c) hết `Mission.maxTime` giây kể từ ▶ (nhiệm vụ trận: hết đồng hồ trận) — mọi loại;
+ *   (a) robot đứng yên — trong 1,0 s vừa qua tâm dời < 5 mm và hướng đổi < 2° — sau khi đã chạy ít nhất một lần
+ *       (`Trail.hasMoved` và `Trail.time − Trail.lastMoveTime ≥ 1`; ngưỡng ở trail.ts MOVE_STEP / MOVE_TURN_DEG,
+ *       "hướng đổi" để quay tại chỗ không bị coi là đứng yên, R58):
+ *         - `kind: 'program'`: chấm ngay;
+ *         - `kind: 'drive'` (lái bàn phím): chỉ chấm khi mọi điều kiện ⭐ đã đạt — em dừng lại suy nghĩ không bị chấm;
+ *         - `kind: 'match'`: không dùng.
  * Mọi trường dưới đây lấy ĐÚNG lúc chấm đó (`end`, `tally`, `events`, `touchedMountain` gộp từ ▶ tới lúc chấm),
  * riêng `trail.time` = `Trail.lastMoveTime`: số giây từ ▶ tới lần cuối robot còn chạy (lúc nó dừng hẳn), KHÔNG tính
  * khoảng 1 s chờ xác nhận đứng yên hay lúc bấm Chấm. Điều kiện ⭐ `time` so với số này (thời gian tới nơi).
