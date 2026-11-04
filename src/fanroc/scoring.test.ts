@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { scoreTally, teamScore, type FieldTally } from './scoring.ts'
+import { allianceShare, scoreTally, teamScore, type FieldTally } from './scoring.ts'
 
 const T = (g1: number, g2: number, g3: number, o = 0) => [{ g: g1, o }, { g: g2, o: 0 }, { g: g3, o: 0 }]
 const z = () => T(0, 0, 0)
@@ -59,4 +59,17 @@ test('teamScore: 200 / 195 / 190 / 0 và không âm', () => {
   assert.equal(teamScore(200, { minor: 0, yellow: 1, red: false }), 190)
   assert.equal(teamScore(200, { minor: 0, yellow: 0, red: true }), 0)
   assert.equal(teamScore(3, { minor: 1, yellow: 0, red: false }), 0)
+})
+
+test('allianceShare: chia phần đỗ Đỏ/Xanh theo ví dụ 1 và 2 của luật, tổng = scoreTally().park', () => {
+  const ex1: FieldTally = { fire: { o: 12, g: 0 }, mtn: [T(10, 4, 0), z(), z(), z()], flags: [false, false, false, false],
+    parks: { red: ['full', 'partial'], blue: ['full', null] } }
+  const ex2: FieldTally = { fire: { o: 20, g: 2 }, mtn: [T(6, 3, 2), T(5, 0, 0), z(), z()], flags: [true, true, false, false],
+    parks: { red: ['full', 'full'], blue: [null, null] } }
+  assert.deepEqual(allianceShare(ex1), { red: { park: 15, bonus: 0 }, blue: { park: 10, bonus: 0 } })
+  assert.deepEqual(allianceShare(ex2), { red: { park: 20, bonus: 10 }, blue: { park: 0, bonus: 0 } })
+  for (const t of [ex1, ex2]) {
+    const s = allianceShare(t)
+    assert.equal(s.red.park + s.red.bonus + s.blue.park + s.blue.bonus, scoreTally(t).park)
+  }
 })
