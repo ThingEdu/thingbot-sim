@@ -65,10 +65,15 @@ test('CONFIRM=yes thay được --yes', () => {
 });
 
 test('từ chối DIR/HOST/PORT nguy hiểm', () => {
-  const bad: Record<string, string>[] = [{ DIR: '' }, { DIR: '/' }, { DIR: '~' }, { DIR: '.' }, { DIR: '../x' }, { DIR: '/etc' }, { HOST: '' }, { PORT: '80' }, { PORT: 'abc' }];
-for (const env of bad) {
+  const bad: Record<string, string>[] = [{ DIR: '' }, { DIR: '/' }, { DIR: '~' }, { DIR: '.' }, { DIR: '../x' }, { DIR: '/etc' }, { HOST: '' }, { HOST: '-v' }, { HOST: '-oProxyCommand=x' }, { HOST: 'a b' }, { SSH_USER: '-oProxyCommand=x' }, { SSH_USER: '-l' }, { PORT: '80' }, { PORT: 'abc' }];
+  for (const env of bad) {
     const r = run(['push', '--yes'], { DRY_RUN: '1', ...env });
     assert.notEqual(r.status, 0, JSON.stringify(env));
     assert.equal(r.called, false);
   }
+});
+
+test('DRY_RUN không in dòng thành công như đã làm xong', () => {
+  const r = run(['push', '--yes'], { DRY_RUN: '1' });
+  assert.doesNotMatch(r.out, /^event-201: đã đẩy/m);
 });

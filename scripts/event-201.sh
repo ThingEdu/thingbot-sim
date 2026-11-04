@@ -44,9 +44,9 @@ done
 
 # ---- kiểm tra giá trị (chặn rsync --delete trúng thư mục nhà / gốc) ----
 [ -n "$HOST" ] || die "HOST rỗng"
-[[ "$HOST" =~ ^[A-Za-z0-9._-]+$ ]] || die "HOST không hợp lệ: $HOST"
+[[ "$HOST" =~ ^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$ ]] || die "HOST không hợp lệ (không được bắt đầu bằng '-'): $HOST"
 if [ -n "$SSH_USER" ]; then
-  [[ "$SSH_USER" =~ ^[A-Za-z0-9._-]+$ ]] || die "SSH_USER không hợp lệ"
+  [[ "$SSH_USER" =~ ^[A-Za-z0-9_]([A-Za-z0-9._-]*[A-Za-z0-9_])?$ ]] || die "SSH_USER không hợp lệ (không được bắt đầu bằng '-')"
   TARGET="$SSH_USER@$HOST"
 else
   TARGET="$HOST"
@@ -82,6 +82,11 @@ need_confirm() {
   fi
 }
 
+# Thông báo thành công: ở DRY_RUN thì gắn nhãn, không giả như đã làm.
+say() {
+  if [ -n "$DRY_RUN" ]; then echo "[DRY_RUN] (sẽ báo) event-201: $*" >&2; else echo "event-201: $*" >&2; fi
+}
+
 run() {
   if [ -n "$DRY_RUN" ]; then
     printf '[DRY_RUN]'; printf ' %q' "$@"; printf '\n'
@@ -94,22 +99,42 @@ run() {
 remote() {
   local script="$1"
   if [ -n "$DRY_RUN" ]; then
-    printf '[DRY_RUN] ssh %s %s bash -s <<SCRIPT\n%s\nSCRIPT\n' "${SSH_OPTS[*]}" "$TARGET" "$script"
+    printf '[DRY_RUN] ssh %s -- %s bash -s <<SCRIPT\n%s\nSCRIPT\n' "${SSH_OPTS[*]}" "$TARGET" "$script"
   else
-    ssh "${SSH_OPTS[@]}" "$TARGET" bash -s <<<"$script"
+    ssh "${SSH_OPTS[@]}" -- "$TARGET" bash -s <<<"$script"
   fi
 }
 
 # Phần chung: vào thư mục DIR, nạp biến pid.
+# $1 = mã thoát khi chưa có thư mục (0 cho stop/status, 1 cho start).
 remote_prelude() {
   cat <<EOS
 set -eu
 DIR='$DIR'
 PORT='$PORT'
 BIND='$BIND'
-cd "\$HOME/\$DIR"
+cd "\$HOME/\$DIR" 2>/dev/null || { echo "chưa có thư mục ~/\$DIR trên máy 201 (chưa push lần nào)"; exit ${1:-0}; }
 ABS="\$PWD"
 PIDFILE="\$ABS/server.pid"
+# Tiến trình có đúng là máy chủ của thư mục này không (chống PID bị dùng lại).
+ours() {
+  local a
+  a="\$(ps -o args= -p "\$1" 2>/dev/null)" || return 1
+  case "\$a" in
+    *http.server*"\$ABS/site"*) return 0 ;;
+    *"caddy run"*"\$ABS/Caddyfile"*) return 0 ;;
+  esac
+  return 1
+}
+# Trả 0 nếu pidfile trỏ tới máy chủ đang chạy; ngược lại dọn pidfile cũ.
+running() {
+  [ -f "\$PIDFILE" ] || return 1
+  local pid
+  pid="\$(cat "\$PIDFILE")"
+  case "\$pid" in ''|*[!0-9]*) rm -f "\$PIDFILE"; return 1;; esac
+  if kill -0 "\$pid" 2>/dev/null && ours "\$pid"; then return 0; fi
+  rm -f "\$PIDFILE"; return 1
+}
 EOS
 }
 
@@ -126,15 +151,15 @@ case "$cmd" in
     fi
     remote "set -eu; mkdir -p \"\$HOME/$DIR/site\""
     # --delete chỉ trong thư mục site/ con của DIR, không bao giờ thư mục nhà.
-    run rsync -az --delete -e "ssh ${SSH_OPTS[*]}" "$ROOT/dist-game/" "$TARGET:$DIR/site/"
-    echo "event-201: đã đẩy dist-game/ -> $TARGET:~/$DIR/site/ (chưa bật máy chủ; dùng 'start --yes')" >&2
+    run rsync -az --delete -e "ssh ${SSH_OPTS[*]}" -- "$ROOT/dist-game/" "$TARGET:$DIR/site/"
+    say "đã đẩy dist-game/ -> $TARGET:~/$DIR/site/ (chưa bật máy chủ; dùng 'start --yes')"
     ;;
 
   start)
     need_confirm
-    remote "$(remote_prelude)
+    remote "$(remote_prelude 1)
 [ -f \"\$ABS/site/index.html\" ] || { echo 'chưa có site/index.html - chạy push trước' >&2; exit 1; }
-if [ -f \"\$PIDFILE\" ] && kill -0 \"\$(cat \"\$PIDFILE\")\" 2>/dev/null; then
+if running; then
   echo \"đang chạy sẵn (pid \$(cat \"\$PIDFILE\"))\"; exit 0
 fi
 if command -v caddy >/dev/null 2>&1; then
@@ -143,35 +168,34 @@ if command -v caddy >/dev/null 2>&1; then
 else
   nohup python3 -m http.server \"\$PORT\" --bind \"\$BIND\" --directory \"\$ABS/site\" > \"\$ABS/server.log\" 2>&1 < /dev/null &
 fi
-echo \$! > \"\$PIDFILE\"
-sleep 1
-kill -0 \"\$(cat \"\$PIDFILE\")\" 2>/dev/null || { echo 'máy chủ không lên được, xem server.log' >&2; exit 1; }
-echo \"đã bật (pid \$(cat \"\$PIDFILE\"))\""
-    echo "event-201: địa chỉ trong mạng LAN: http://$HOST:$PORT/" >&2
+PID=\$!
+echo \"\$PID\" > \"\$PIDFILE\"
+# Chờ tối đa ~5 s cho máy chủ nhận kết nối (caddy chậm hơn python).
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  kill -0 \"\$PID\" 2>/dev/null || break
+  if (exec 3<>\"/dev/tcp/127.0.0.1/\$PORT\") 2>/dev/null; then echo \"đã bật (pid \$PID)\"; exit 0; fi
+  sleep 0.5
+done
+kill -0 \"\$PID\" 2>/dev/null && ours \"\$PID\" && kill \"\$PID\" 2>/dev/null || true
+rm -f \"\$PIDFILE\"
+echo 'máy chủ không lên được, xem ~/'\"\$DIR\"'/server.log' >&2; exit 1"
+    say "địa chỉ trong mạng LAN: http://$HOST:$PORT/"
     ;;
 
   stop)
-    remote "$(remote_prelude)
-[ -f \"\$PIDFILE\" ] || { echo 'không có server.pid - không có gì để tắt'; exit 0; }
-PID=\"\$(cat \"\$PIDFILE\")\"
-case \"\$PID\" in ''|*[!0-9]*) echo 'server.pid hỏng, không tắt gì'; exit 1;; esac
-if kill -0 \"\$PID\" 2>/dev/null; then
-  # Chỉ tắt nếu tiến trình đúng là máy chủ của thư mục này.
-  if ps -o args= -p \"\$PID\" | grep -qF \"\$ABS/\"; then
-    kill \"\$PID\"; echo \"đã tắt pid \$PID\"
-  else
-    echo \"pid \$PID không phải máy chủ của \$ABS - không động tới\" >&2; exit 1
-  fi
+    remote "$(remote_prelude 0)
+if running; then
+  PID=\"\$(cat \"\$PIDFILE\")\"
+  kill \"\$PID\"; rm -f \"\$PIDFILE\"; echo \"đã tắt pid \$PID\"
 else
-  echo 'tiến trình đã tắt từ trước'
-fi
-rm -f \"\$PIDFILE\""
+  echo 'không có máy chủ của kịch bản này đang chạy - không tắt gì'
+fi"
     ;;
 
   status)
-    remote "$(remote_prelude)
-if [ -f \"\$PIDFILE\" ] && kill -0 \"\$(cat \"\$PIDFILE\")\" 2>/dev/null; then
-  echo \"đang chạy (pid \$(cat \"\$PIDFILE\")) - http://\$BIND:\$PORT/\"
+    remote "$(remote_prelude 0)
+if running; then
+  echo \"đang chạy (pid \$(cat \"\$PIDFILE\")) - http://$HOST:\$PORT/\"
 else
   echo 'không chạy'
 fi"

@@ -6,7 +6,7 @@ Tài liệu cho người vận hành (anh Tuấn và đội sự kiện). Hai đ
 
 ## 1. Bản desktop (macOS)
 
-Dựng: `npm run dist:game` (Tauri) — ra tệp `.app` / `.dmg` trong `src-tauri/target/release/bundle/`.
+Dựng: `npm run dist:game` (Tauri) — ra `src-tauri/target/release/bundle/macos/ThingBot FanRoc Game.app` (không dựng `.dmg`).
 
 Cài và mở:
 
