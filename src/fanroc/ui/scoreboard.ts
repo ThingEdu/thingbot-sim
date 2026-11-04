@@ -1,0 +1,380 @@
+// Bảng điểm trận đấu kiểu game (spec §6.1 ③, anh Tuấn chốt 04/11): ô Đỏ trái | điểm trận CHUNG + đồng hồ + pha giữa |
+// ô Xanh phải. 4 đội hợp tác, nhận chung một điểm trận; mỗi ô liên minh hiện 2 đội (tên, nhãn chương trình, phạt, điểm
+// đội = teamScore(điểm chung, phạt)) và phần đỗ Vùng Bảo Vệ + thưởng liên minh (allianceShare). Kèm đếm ngược
+// 3 · 2 · 1 · BẮT ĐẦU!, chữ báo điểm nổi 1,5 s, màn kết quả phủ sân.
+// Phần thuần (scoreLine, scorePops, countdownCue, ScoreTicker, resultView) chạy được trong Node; createScoreboard dựng DOM.
+import type { Match } from '../match.ts'
+import type { RobotBody } from '../robot.ts'
+import type { Skill } from '../agent.ts'
+import { allianceShare, type ScoreBreakdown } from '../scoring.ts'
+import { penaltyPoints } from '../quickmatch.ts'
+import { matchClock } from '../view/hud.ts'
+
+/** Điểm trận tính lại tối đa chừng này lần mỗi giây (tally dò tia trên 300 bóng). */
+export const SCORE_HZ = 4
+
+export type ScorePhase = 'XẢ BÓNG' | 'ĐIỀU KHIỂN' | 'VỀ VÙNG BẢO VỆ' | 'HẾT GIỜ' | 'LUYỆN TẬP'
+export type AllianceLine = { teams: { name: string; score: number; penalty: number; program: string }[]; park: number; bonus: number }
+export interface ScoreLine {
+  red: AllianceLine
+  blue: AllianceLine
+  total: number
+  clock: string
+  phase: ScorePhase
+  /** Điểm trận từng mục (để báo điểm nổi và màn kết quả). */
+  score: ScoreBreakdown
+}
+
+const SKILL_NAME: Record<Skill, string> = { easy: 'Dễ', medium: 'Vừa', hard: 'Khó' }
+
+/** Nhãn chương trình của một ghế: agent ⇒ "Máy Dễ|Vừa|Khó"; chương trình khối ⇒ nhãn người gọi truyền (Xưởng: "Của em vN"), mặc định "Mặc định". */
+export function programLabel(d: { kind: 'agent'; skill: Skill } | { kind: 'program' }, label?: string): string {
+  return d.kind === 'agent' ? `Máy ${SKILL_NAME[d.skill]}` : (label ?? 'Mặc định')
+}
+
+/** Pha trận theo chữ của bảng điểm. Luyện tập (và nhiệm vụ) luôn là LUYỆN TẬP. */
+export function phaseOf(m: Match): ScorePhase {
+  if (m.practice) return 'LUYỆN TẬP'
+  if (m.phase === 'release') return 'XẢ BÓNG'
+  if (m.phase === 'end') return 'HẾT GIỜ'
+  return m.endgame ? 'VỀ VÙNG BẢO VỆ' : 'ĐIỀU KHIỂN'
+}
+
+/**
+ * Dòng bảng điểm của trận lúc này. `programs[i]`: nhãn chương trình của robot i (thiếu ⇒ "Mặc định"). Không giả định
+ * đủ 4 robot (nhiệm vụ chỉ có Robot 1: bên Xanh rỗng). Tốn hai lần tally — người gọi giới hạn SCORE_HZ (ScoreTicker).
+ */
+export function scoreLine(match: Match, robots: RobotBody[], programs: string[] = []): ScoreLine {
+  const res = match.result()
+  const share = allianceShare(match.tally())
+  const total = res.score.total
+  const side = (a: 'red' | 'blue'): AllianceLine => ({
+    teams: robots.flatMap((r, i) =>
+      r.alliance === a
+        ? [{ name: res.teams[i].team, score: res.teams[i].score, penalty: penaltyPoints(match.pens[i], total), program: programs[i] ?? 'Mặc định' }]
+        : [],
+    ),
+    park: share[a].park,
+    bonus: share[a].bonus,
+  })
+  return { red: side('red'), blue: side('blue'), total, clock: matchClock(match.t, match.practice), phase: phaseOf(match), score: res.score }
+}
+
+const ITEMS: [Exclude<keyof ScoreBreakdown, 'total'>, string][] = [
+  ['fire', 'Chữa Cháy'], ['r1', 'Rãnh 1'], ['r2', 'Rãnh 2'], ['r3', 'Rãnh 3'], ['flag', 'Cờ'], ['park', 'Vùng Bảo Vệ'], ['wrong', 'Bóng sai chỗ'],
+]
+/** Số có dấu kiểu bảng điểm: "+15", "−3" (dấu trừ U+2212). */
+const signed = (v: number) => (v > 0 ? `+${v}` : `−${-v}`)
+
+/** Chữ báo nổi cho mỗi mục điểm đã đổi: "+15 · Rãnh 3", "+5 · Chữa Cháy", "−3 · Bóng sai chỗ". */
+export function scorePops(prev: ScoreBreakdown, next: ScoreBreakdown): string[] {
+  return ITEMS.flatMap(([k, name]) => {
+    const d = next[k] - prev[k]
+    return d === 0 ? [] : [`${signed(d)} · ${name}`]
+  })
+}
+
+/**
+ * Đếm ngược ở 3 s cuối của 10 s xả bóng: thời điểm trận đi từ `prevT` (không kể) tới `t` qua mốc −3 / −2 / −1 / 0 ⇒
+ * 3 / 2 / 1 / 0 (0 = "BẮT ĐẦU!"); qua nhiều mốc một lần (tốc độ ×40) lấy mốc sau cùng; không qua mốc ⇒ null.
+ */
+export function countdownCue(prevT: number, t: number): 3 | 2 | 1 | 0 | null {
+  const TOL = 1e-6 // Match cộng dồn dt nên lúc sang thi đấu t ≈ −1e-13
+  for (const k of [0, -1, -2, -3] as const) if (t >= k - TOL && prevT < k - TOL) return (0 - k) as 3 | 2 | 1 | 0
+  return null
+}
+
+/**
+ * Nhịp cập nhật bảng điểm: tính dòng tối đa SCORE_HZ lần/giây (ngay lập tức khi đổi trận hoặc đổi pha), báo nổi các
+ * mục đã đổi kể từ lần trước — chỉ khi cả lần trước lẫn lần này đều trong lúc thi đấu (hoặc lần này vừa hết giờ): bóng
+ * rơi lúc xả bóng và phần còn lăn ngay khi sang thi đấu không phải ghi điểm.
+ */
+export class ScoreTicker {
+  private match: Match | null = null
+  private last = -Infinity
+  private prev: ScoreBreakdown | null = null
+  private phase: ScorePhase | null = null
+
+  tick(nowMs: number, match: Match, robots: RobotBody[], programs: string[] = []): { line: ScoreLine; pops: string[] } | null {
+    if (match !== this.match) {
+      this.match = match
+      this.prev = null
+      this.phase = null
+    } else if (phaseOf(match) === this.phase && nowMs - this.last < 1000 / SCORE_HZ) return null
+    this.last = nowMs
+    const line = scoreLine(match, robots, programs)
+    // Mốc so sánh phải lấy trong lúc thi đấu: lần đầu sau xả bóng chỉ đặt mốc (bóng còn lăn từ lúc xả không phải ghi điểm).
+    const playing = (p: ScorePhase | null) => p === 'ĐIỀU KHIỂN' || p === 'VỀ VÙNG BẢO VỆ' || p === 'LUYỆN TẬP'
+    const scoring = playing(this.phase) && (playing(line.phase) || line.phase === 'HẾT GIỜ')
+    const pops = this.prev && scoring ? scorePops(this.prev, line.score) : []
+    this.prev = line.score
+    this.phase = line.phase
+    return { line, pops }
+  }
+}
+
+export interface ResultView {
+  line: ScoreLine
+  /** Bảng mục theo thứ tự của luật: Chữa Cháy, Rãnh 1–3, Sai vị trí, Cờ, Vùng Bảo Vệ. */
+  items: { label: string; value: number }[]
+}
+
+/** Màn kết quả: lấy `match.result()` (đã chốt lúc hết giờ). */
+export function resultView(match: Match, robots: RobotBody[], programs: string[] = []): ResultView {
+  const line = scoreLine(match, robots, programs)
+  const s = line.score
+  return {
+    line,
+    items: [
+      { label: 'Chữa Cháy', value: s.fire },
+      { label: 'Rãnh 1', value: s.r1 },
+      { label: 'Rãnh 2', value: s.r2 },
+      { label: 'Rãnh 3', value: s.r3 },
+      { label: 'Sai vị trí', value: s.wrong },
+      { label: 'Cờ', value: s.flag },
+      { label: 'Vùng Bảo Vệ', value: s.park },
+    ],
+  }
+}
+
+// ---------- DOM ----------
+
+/** Thời gian một chữ báo điểm nổi, ms. */
+export const POP_MS = 1500
+/** Số chữ báo nổi tối đa cùng lúc (cũ nhất bị bỏ). */
+const POP_MAX = 4
+
+export interface Scoreboard {
+  update(line: ScoreLine, pops: string[]): void
+  /** 3 · 2 · 1; 0 = "BẮT ĐẦU!". */
+  countdown(n: 3 | 2 | 1 | 0): void
+  result(r: ResultView, actions: { again(): void; home(): void; next?(): void }): void
+  hideResult(): void
+  /** Ẩn / hiện cả bảng điểm (nhiệm vụ không dùng bảng điểm trận). */
+  visible(v: boolean): void
+}
+
+const CSS = `
+.sb { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 12; display: grid; grid-template-columns: minmax(0, 230px) auto minmax(0, 230px); max-width: calc(100% - 16px); border-radius: 10px; overflow: hidden; box-shadow: 0 4px 16px #0009; color: #fff; font-family: var(--font); pointer-events: none; user-select: none; }
+.sb[hidden] { display: none; }
+.sb-side { display: grid; align-content: center; gap: 2px; padding: 5px 10px; min-width: 0; }
+.sb-side[data-side="red"] { background: linear-gradient(180deg, #ee4a5e, #c92a3f); }
+.sb-side[data-side="blue"] { background: linear-gradient(180deg, #3a76f5, #1d52cf); }
+.sb-hd { display: flex; gap: 6px; align-items: baseline; font: 900 12px/1.2 var(--font); letter-spacing: .6px; white-space: nowrap; }
+.sb-hd span { font-weight: 600; letter-spacing: 0; opacity: .9; overflow: hidden; text-overflow: ellipsis; }
+.sb-side[data-side="blue"] .sb-hd { flex-direction: row-reverse; }
+.sb-team { display: flex; gap: 6px; align-items: baseline; font: 600 12px/1.25 var(--font); white-space: nowrap; min-width: 0; }
+.sb-side[data-side="blue"] .sb-team { flex-direction: row-reverse; }
+.sb-name { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.sb-prog { font-weight: 500; font-size: 11px; opacity: .8; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.sb-side[data-side="blue"] .sb-prog { text-align: right; }
+.sb-pen { font-size: 11px; font-weight: 800; color: #ffe08a; }
+.sb-ts { font: 900 14px/1 var(--font); font-variant-numeric: tabular-nums; flex: none; }
+.sb-mid { display: grid; justify-items: center; align-content: center; padding: 4px 14px; background: #12141f; min-width: 92px; }
+.sb-total { font: 900 30px/1 var(--font); font-variant-numeric: tabular-nums; }
+.sb-sub { display: flex; gap: 6px; align-items: baseline; white-space: nowrap; }
+.sb-clock { font: 700 15px/1.2 var(--mono); font-variant-numeric: tabular-nums; }
+.sb-phase { font: 800 10px/1 var(--font); letter-spacing: .5px; padding: 2px 5px; border-radius: 4px; background: #ffffff1f; }
+.sb-phase[data-p="VỀ VÙNG BẢO VỆ"] { background: #ff7a1a; }
+.sb-phase[data-p="HẾT GIỜ"] { background: #e2384d; }
+.sb-pops { position: absolute; top: calc(var(--runbar-top, 72px) + 46px); left: 50%; transform: translateX(-50%); z-index: 11; display: grid; gap: 6px; justify-items: center; pointer-events: none; max-width: calc(100% - 16px); }
+.sb-pop { background: linear-gradient(90deg, #e2384d, #ff7a1a); color: #fff; padding: 7px 18px; border-radius: 30px; font: 900 18px/1.2 var(--font); box-shadow: 0 4px 20px #0008; white-space: nowrap; animation: sb-pop ${POP_MS}ms ease-out forwards; }
+.sb-pop[data-neg="true"] { background: linear-gradient(90deg, #5a5f73, #3a3e4f); }
+@keyframes sb-pop { 0% { transform: scale(.6); opacity: 0 } 12% { transform: scale(1.08); opacity: 1 } 22% { transform: scale(1) } 80% { opacity: 1; transform: translateY(0) } 100% { opacity: 0; transform: translateY(-14px) } }
+.sb-count { position: absolute; inset: 0; display: grid; place-items: center; z-index: 13; pointer-events: none; }
+.sb-count b { font: 900 min(26vw, 160px)/1 var(--font); color: #fff; text-shadow: 0 6px 30px #000c, 0 0 2px #000; animation: sb-count 900ms ease-out forwards; }
+.sb-count b[data-go="true"] { font-size: min(14vw, 96px); background: linear-gradient(90deg, #ffd23f, #ff7a1a); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none; filter: drop-shadow(0 6px 20px #000c); animation-duration: 1200ms; }
+@keyframes sb-count { 0% { transform: scale(1.6); opacity: 0 } 20% { transform: scale(1); opacity: 1 } 75% { opacity: 1 } 100% { transform: scale(.9); opacity: 0 } }
+.sb-result { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; padding: 12px; background: #05060dcc; color: #fff; font-family: var(--font); overflow: auto; }
+.sb-result[hidden] { display: none; }
+.sb-card { width: min(760px, 100%); max-height: 100%; overflow: auto; display: grid; gap: 12px; padding: 18px; border-radius: 14px; background: #12141f; box-shadow: 0 10px 40px #000a; }
+.sb-card h2 { margin: 0; text-align: center; font: 900 15px/1.2 var(--font); letter-spacing: 1.5px; color: #ffd23f; }
+.sb-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1fr); gap: 10px; }
+.sb-col { border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.sb-col[data-side="red"] { background: #c92a3f; }
+.sb-col[data-side="blue"] { background: #1d52cf; }
+.sb-col[data-side="total"] { background: #1c1f2e; text-align: center; }
+.sb-col h3 { margin: 0; font: 900 13px/1.2 var(--font); letter-spacing: .8px; }
+.sb-big { font: 900 64px/1 var(--font); font-variant-numeric: tabular-nums; background: linear-gradient(90deg, #ffd23f, #ff7a1a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.sb-note { font-size: 12px; opacity: .8; }
+.sb-row { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.sb-row b { font-variant-numeric: tabular-nums; }
+.sb-col[data-side="total"] .sb-row { text-align: left; }
+.sb-trow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; padding: 6px 8px; border-radius: 6px; background: #0003; font-size: 13px; }
+.sb-trow small { grid-column: 1 / -1; font-size: 11px; opacity: .85; }
+.sb-trow b { font: 900 18px/1 var(--font); font-variant-numeric: tabular-nums; grid-row: span 1; }
+.sb-acts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.sb-acts button { font: 800 14px var(--font); border: 0; border-radius: 22px; padding: 10px 20px; cursor: pointer; background: #2c3044; color: #fff; }
+.sb-acts button.main { background: linear-gradient(90deg, #ff7a1a, #e2384d); }
+.sb-acts button:hover, .sb-acts button:focus-visible { filter: brightness(1.15); }
+@media (max-width: 700px) {
+  .sb { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); width: calc(100% - 16px); }
+  .sb-side { padding: 4px 6px; }
+  .sb-prog, .sb-hd span { display: none; }
+  .sb-mid { min-width: 0; padding: 3px 8px; }
+  .sb-total { font-size: 24px; }
+  .sb-pop { font-size: 15px; padding: 6px 14px; }
+  .sb-cols { grid-template-columns: minmax(0, 1fr); }
+  .sb-col[data-side="total"] { order: -1; }
+  .sb-big { font-size: 52px; }
+}
+`
+
+const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] => {
+  const e = document.createElement(tag)
+  if (cls) e.className = cls
+  if (text !== undefined) e.textContent = text
+  return e
+}
+
+const ALLIANCE_NAME = { red: 'ĐỎ', blue: 'XANH' } as const
+const parkText = (a: AllianceLine) => `Đỗ ${a.park}${a.bonus ? ` + thưởng ${a.bonus}` : ''}`
+const penText = (p: number) => (p ? `−${p}` : '')
+
+/** Dựng bảng điểm trên `stage`; đặt `--runbar-top` của stage để thanh chạy nằm ngay dưới bảng điểm. */
+export function createScoreboard(stage: HTMLElement): Scoreboard {
+  if (!document.getElementById('sb-css')) {
+    const s = el('style')
+    s.id = 'sb-css'
+    s.textContent = CSS
+    document.head.append(s)
+  }
+  const bar = el('div', 'sb')
+  bar.setAttribute('role', 'status')
+  bar.setAttribute('aria-label', 'Bảng điểm')
+  const mkSide = (a: 'red' | 'blue') => {
+    const box = el('div', 'sb-side')
+    box.dataset.side = a
+    const hd = el('div', 'sb-hd')
+    const park = el('span')
+    hd.append(el('b', undefined, ALLIANCE_NAME[a]), park)
+    const rows = el('div')
+    rows.style.display = 'contents'
+    box.append(hd, rows)
+    return { box, park, rows, key: '' }
+  }
+  const red = mkSide('red')
+  const blue = mkSide('blue')
+  const mid = el('div', 'sb-mid')
+  mid.dataset.side = 'total'
+  mid.title = 'Điểm trận chung: cả 4 đội cùng nhận'
+  const total = el('b', 'sb-total', '0')
+  const sub = el('div', 'sb-sub')
+  const clock = el('span', 'sb-clock', '0:10')
+  const phase = el('span', 'sb-phase', 'XẢ BÓNG')
+  sub.append(clock, phase)
+  mid.append(total, sub)
+  bar.append(red.box, mid, blue.box)
+
+  const pops = el('div', 'sb-pops')
+  pops.setAttribute('aria-live', 'polite')
+  const count = el('div', 'sb-count')
+  const result = el('div', 'sb-result')
+  result.hidden = true
+  result.setAttribute('role', 'dialog')
+  result.setAttribute('aria-label', 'Kết quả trận')
+  stage.append(bar, pops, count, result)
+
+  // Thanh chạy nổi (ui/shell.ts) đọc --runbar-top: đặt ngay dưới bảng điểm, đổi theo cỡ bảng (điện thoại / màn to).
+  const placeRunbar = () => {
+    const top = bar.hidden ? 12 : bar.offsetTop + bar.offsetHeight + 8
+    stage.style.setProperty('--runbar-top', `${top}px`)
+  }
+  new ResizeObserver(placeRunbar).observe(bar)
+  placeRunbar()
+
+  const fillSide = (s: typeof red, a: AllianceLine) => {
+    s.park.textContent = parkText(a)
+    const key = a.teams.map((t) => `${t.name}|${t.program}|${t.penalty}|${t.score}`).join('/')
+    if (key === s.key) return
+    s.key = key
+    s.rows.replaceChildren(
+      ...a.teams.map((t) => {
+        const row = el('div', 'sb-team')
+        row.title = `${t.name} · ${t.program}${t.penalty ? ` · phạt ${t.penalty}` : ''} · điểm đội ${t.score}`
+        row.append(el('span', 'sb-name', t.name), el('span', 'sb-prog', t.program), el('span', 'sb-pen', penText(t.penalty)), el('b', 'sb-ts', String(t.score)))
+        return row
+      }),
+    )
+  }
+
+  let countTimer = 0
+  const api: Scoreboard = {
+    update(line, news) {
+      total.textContent = String(line.total)
+      clock.textContent = line.clock
+      phase.textContent = line.phase
+      phase.dataset.p = line.phase
+      fillSide(red, line.red)
+      fillSide(blue, line.blue)
+      for (const text of news) {
+        const p = el('div', 'sb-pop', text)
+        p.dataset.neg = String(text.startsWith('−'))
+        pops.append(p)
+        setTimeout(() => p.remove(), POP_MS)
+      }
+      while (pops.childElementCount > POP_MAX) pops.firstElementChild!.remove()
+    },
+    countdown(n) {
+      const b = el('b', undefined, n === 0 ? 'BẮT ĐẦU!' : String(n))
+      b.dataset.go = String(n === 0)
+      count.replaceChildren(b)
+      clearTimeout(countTimer)
+      countTimer = window.setTimeout(() => count.replaceChildren(), n === 0 ? 1200 : 900)
+    },
+    result(r, actions) {
+      const col = (a: 'red' | 'blue') => {
+        const line = r.line[a]
+        const c = el('section', 'sb-col')
+        c.dataset.side = a
+        c.append(el('h3', undefined, `LIÊN MINH ${ALLIANCE_NAME[a]}`))
+        for (const t of line.teams) {
+          const row = el('div', 'sb-trow')
+          row.append(el('span', undefined, t.name), el('b', undefined, String(t.score)))
+          row.append(el('small', undefined, `${t.program} · ${t.penalty ? `phạt −${t.penalty}` : 'không bị phạt'}`))
+          c.append(row)
+        }
+        const park = el('div', 'sb-row')
+        park.append(el('span', undefined, 'Đỗ Vùng Bảo Vệ'), el('b', undefined, String(line.park)))
+        const bonus = el('div', 'sb-row')
+        bonus.append(el('span', undefined, 'Thưởng liên minh'), el('b', undefined, String(line.bonus)))
+        c.append(park, bonus)
+        return c
+      }
+      const mid = el('section', 'sb-col')
+      mid.dataset.side = 'total'
+      mid.append(el('h3', undefined, 'ĐIỂM TRẬN CHUNG'), el('div', 'sb-big', String(r.line.total)), el('div', 'sb-note', 'Cả 4 đội cùng nhận; điểm đội = điểm chung − phạt'))
+      for (const it of r.items) {
+        const row = el('div', 'sb-row')
+        row.append(el('span', undefined, it.label), el('b', undefined, it.value > 0 ? `+${it.value}` : it.value < 0 ? `−${-it.value}` : '0'))
+        mid.append(row)
+      }
+      const cols = el('div', 'sb-cols')
+      cols.append(col('red'), mid, col('blue'))
+      const acts = el('div', 'sb-acts')
+      const btn = (text: string, on: () => void, main = false) => {
+        const b = el('button', main ? 'main' : undefined, text)
+        b.type = 'button'
+        b.onclick = on
+        return b
+      }
+      acts.append(btn('Chơi lại', actions.again, !actions.next))
+      if (actions.next) acts.append(btn('Trận kế tiếp', actions.next, true))
+      acts.append(btn('Về màn chính', actions.home))
+      const card = el('div', 'sb-card')
+      card.append(el('h2', undefined, 'HẾT GIỜ — KẾT QUẢ TRẬN'), cols, acts)
+      result.replaceChildren(card)
+      result.hidden = false
+    },
+    hideResult() {
+      result.hidden = true
+      result.replaceChildren()
+    },
+    visible(v) {
+      bar.hidden = !v
+      pops.hidden = !v
+      placeRunbar()
+    },
+  }
+  return api
+}

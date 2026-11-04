@@ -33,6 +33,10 @@ import { defaultConfig } from './programs.ts'
 import { NEUTRAL } from './ports.ts'
 import { createScene, defaultQuality, type CameraView, type Quality } from './view/scene.ts'
 import { createHud } from './view/hud.ts'
+import { countdownCue, createScoreboard, programLabel, resultView, ScoreTicker } from './ui/scoreboard.ts'
+import { createSound } from './ui/sound.ts'
+import { createStore } from './store.ts'
+import { FANROC_2026 } from './season.ts'
 import { createShell, highlightCpp, serialNews, serialPatch, type InputKind, type SerialMark } from './ui/shell.ts'
 
 const shell = createShell(document.querySelector<HTMLElement>('#app')!)
@@ -47,15 +51,10 @@ const STEP_BUDGET_MS = 45
 const SPEEDS = [1, 4, 40]
 const CAMERAS: CameraView[] = ['field', 'follow', 'driver']
 
-// Bảng điểm cũ (hud.ts) nổi góc phải trên sân tới khi Task 12 thay bằng bảng điểm Đỏ | chung | Xanh; khung ⚙ tạm
-// (Task 13 thay bằng ui/settings.ts) giữ các lựa chọn của thanh công cụ cũ.
+// Bảng điểm Đỏ | chung | Xanh nằm giữa trên sân (ui/scoreboard.ts); nhật ký, kiểm tra theo luật và bảng đội cuối trận
+// ở thẻ "Sự kiện trận" của khung đáy (view/hud.ts). Khung ⚙ tạm (Task 13 thay bằng ui/settings.ts) giữ các lựa chọn của
+// thanh công cụ cũ.
 const CSS = `
-#stage > #hud.fr-hud { position: absolute; top: 52px; right: 10px; width: 270px; height: auto; max-height: calc(100% - 62px); border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,0.94); color: var(--ink); z-index: 5; }
-#stage > #hud .fr-clock { font-size: 22px; }
-@media (max-width: 900px) { #stage > #hud.fr-hud { width: 200px; max-height: 45%; padding: 8px; gap: 8px; } }
-.sh-pbody .fr-card h2 { display: none; }
-.sh-pbody .fr-log { max-height: none; color: #d4d4d4; }
-.sh-pbody .fr-log span { color: #858585; }
 .sh-serial { margin: 0; white-space: pre-wrap; word-break: break-all; font: inherit; color: #d4d4d4; }
 .sh-serial:empty::before { content: 'Chưa có dòng Serial nào. Khối "Serial in" của chương trình in ra ở đây.'; color: #858585; font-family: var(--font); }
 .sh-code-warn { margin: 8px 10px 0; padding: 6px 8px; border-radius: 6px; background: rgba(240, 170, 30, 0.18); color: #f0c674; font-size: 12.5px; line-height: 1.45; }
@@ -151,11 +150,13 @@ async function start(): Promise<void> {
   game.match.log('Human Player tự động')
   stage.querySelector('.sh-loading')?.remove()
   const scene = createScene(stage)
-  const hudEl = document.createElement('aside')
-  hudEl.id = 'hud'
-  hudEl.setAttribute('aria-label', 'Bảng điểm')
-  stage.append(hudEl)
-  const hud = createHud(hudEl, { log: shell.panel.events })
+  const hud = createHud(shell.panel.events)
+  const board = createScoreboard(stage)
+  const ticker = new ScoreTicker()
+  const store = createStore(FANROC_2026.id)
+  const sound = createSound(() => store.settings().sound)
+  /** Nhãn chương trình từng ghế trên bảng điểm: agent ⇒ "Máy Vừa"; chương trình ⇒ "Mặc định" (Xưởng gắn "Của em vN" ở Task 13). */
+  const programs = () => game.robots.map((_, i) => programLabel(game.driver(i)))
   editors.setGate(
     () => game.canRun,
     () =>
@@ -277,6 +278,7 @@ async function start(): Promise<void> {
         const old = game
         game = await newGame(++seed)
         old.dispose()
+        board.hideResult()
         game.match.log(practice ? 'Luyện tập: không xả bóng, không hết giờ — chương trình chạy ngay khi bấm Chạy' : 'Trận mới: chương trình chạy khi hết 10 giây xả bóng')
         expose()
       } while (restartAgain)
@@ -437,6 +439,42 @@ async function start(): Promise<void> {
     })
   }
 
+  // Bảng điểm: dòng điểm ≤ SCORE_HZ lần/giây + báo nổi; đếm ngược 3 s cuối xả bóng; còi; màn kết quả khi hết giờ.
+  let boardMatch = game.match
+  let prevT = game.match.t
+  let resultShown = false
+  const showBoard = (now: number) => {
+    const m = game.match
+    if (m !== boardMatch) {
+      boardMatch = m
+      prevT = m.t
+      resultShown = false
+    }
+    board.visible(game.mode !== 'mission') // nhiệm vụ: bảng nhiệm vụ riêng (Task 14)
+    const out = ticker.tick(now, m, game.robots, programs())
+    if (out) {
+      board.update(out.line, out.pops)
+      if (out.pops.some((p) => p.startsWith('+'))) sound.ting()
+    }
+    if (!m.practice) {
+      const cue = countdownCue(prevT, m.t)
+      if (cue !== null) {
+        board.countdown(cue)
+        if (cue === 0) sound.whistle()
+        else sound.beep()
+      }
+      if (m.phase === 'end' && !resultShown) {
+        resultShown = true
+        sound.whistle(true)
+        board.result(resultView(m, game.robots, programs()), {
+          again: () => void restart(),
+          home: () => board.hideResult(), // Task 13: về màn chính
+        })
+      }
+    }
+    prevT = m.t
+  }
+
   let last = performance.now()
   const frame = (now: number) => {
     const { pads, status } = seats.read()
@@ -451,6 +489,7 @@ async function start(): Promise<void> {
     game.advance(dt, speed, { steps: MAX_STEPS * Math.max(1, speed), ms: STEP_BUDGET_MS })
     scene.sync(game.world, game.robots, game.match, game.ports)
     hud.update(game.match, game.robots, game.cfgs, game.ports)
+    showBoard(now)
     showRun(status)
     showSerial()
     requestAnimationFrame(frame)

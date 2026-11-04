@@ -1,9 +1,10 @@
-// Bảng điểm tiếng Việt của sân FANROC: đồng hồ, pha trận, điểm trận + từng mục, ô kiểm tra luật của robot đang chọn,
-// bảng đội cuối trận và nhật ký. Chỉ đọc Match / RobotBody; không đổi trạng thái trận.
+// Thông tin trận tiếng Việt ngoài bảng điểm (Task 12: bảng điểm Đỏ | chung | Xanh chuyển sang ui/scoreboard.ts): chữ
+// đồng hồ, cảnh báo vùng chết, và thẻ "Sự kiện trận" — nhật ký, ô kiểm tra theo luật của robot đang chọn, bảng đội cuối
+// trận. Chỉ đọc Match / RobotBody; không đổi trạng thái trận.
 import type { Match } from '../match.ts'
 import type { RobotBody } from '../robot.ts'
 import { ROBOTS, ruleChecks, type RobotConfig } from '../robots.ts'
-import { MATCH_S, RELEASE_S } from '../layout.ts'
+import { MATCH_S } from '../layout.ts'
 import { DEAD_ZONE } from '../robot.ts'
 import type { PortValues } from '../ports.ts'
 
@@ -18,39 +19,29 @@ export interface Hud {
   onSelect?: (i: number) => void
 }
 
-/** Điểm trận tính lại tối đa chừng này lần mỗi giây (tally dò tia trên 300 bóng). */
-const SCORE_HZ = 4
 const ALLIANCE = { red: 'Đỏ', blue: 'Xanh' } as const
-const BREAKDOWN: [keyof ReturnType<Match['result']>['score'], string][] = [
-  ['fire', 'Chữa Cháy'], ['r1', 'Rãnh 1'], ['r2', 'Rãnh 2'], ['r3', 'Rãnh 3'], ['flag', 'Cờ'], ['park', 'Vùng Bảo Vệ'], ['wrong', 'Sai vị trí'],
-]
 
+// Nằm trong thẻ "Sự kiện trận" của khung đáy (nền tối): nhật ký bên trái, kiểm tra theo luật + kết quả các đội bên phải.
 const CSS = `
-.fr-hud { display: grid; gap: 12px; align-content: start; padding: 12px; min-width: 0; height: 100%; overflow: auto; background: #fff; border-left: 1px solid var(--line); }
-.fr-card { display: grid; gap: 8px; }
-.fr-card h2 { margin: 0; font-size: 14px; font-weight: 800; }
-.fr-top { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
-.fr-clock { font: 500 30px/1 var(--mono); font-variant-numeric: tabular-nums; }
-.fr-phase { font: 700 12px/1 var(--font); padding: 5px 8px; border-radius: 5px; background: var(--line); }
-.fr-phase[data-end="true"] { background: var(--hi); color: #fff; }
-.fr-total { font: 800 22px/1 var(--font); margin-left: auto; white-space: nowrap; }
-.fr-bk { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 13px; color: var(--muted); }
-.fr-bk b { color: var(--ink); font: 500 13px var(--mono); }
+.fr-hud { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 340px); gap: 4px 16px; align-items: start; min-width: 0; color: #d4d4d4; font-family: var(--font); }
+@media (max-width: 700px) { .fr-hud { grid-template-columns: minmax(0, 1fr); } }
+.fr-card { display: grid; gap: 4px; min-width: 0; }
+.fr-card h2 { margin: 2px 0 0; font: 700 11px/1.2 var(--font); letter-spacing: .6px; text-transform: uppercase; color: #969696; }
 .fr-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
-.fr-tabs button { font: 600 12px var(--font); border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 5px 4px; cursor: pointer; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fr-tabs button[aria-pressed="true"] { background: var(--teal); border-color: var(--teal); color: #fff; }
-.fr-tabs button[data-a="red"]:not([aria-pressed="true"]) { border-left: 4px solid var(--hi); }
-.fr-tabs button[data-a="blue"]:not([aria-pressed="true"]) { border-left: 4px solid var(--lo); }
-.fr-sub { font-size: 12px; color: var(--muted); }
-.fr-checks, .fr-teams { display: grid; gap: 4px; font-size: 13px; }
+.fr-tabs button { font: 600 11.5px var(--font); border: 1px solid #3c3c3c; background: #252526; color: #ccc; border-radius: 4px; padding: 3px 4px; cursor: pointer; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fr-tabs button[aria-pressed="true"] { background: #094771; border-color: #007acc; color: #fff; }
+.fr-tabs button[data-a="red"] { border-left: 3px solid #e2384d; }
+.fr-tabs button[data-a="blue"] { border-left: 3px solid #2463eb; }
+.fr-sub { font-size: 12px; color: #969696; }
+.fr-checks, .fr-teams { display: grid; gap: 3px; font-size: 12px; }
 .fr-chk { display: flex; gap: 8px; align-items: baseline; }
-.fr-chk i { font: 700 11px var(--font); font-style: normal; padding: 2px 6px; border-radius: 4px; flex: none; }
-.fr-chk i.ok { background: rgba(31, 157, 85, 0.15); color: var(--ok); }
-.fr-chk i.bad { background: rgba(226, 71, 59, 0.15); color: var(--hi); }
-.fr-chk i.note { background: var(--line); color: var(--muted); }
-.fr-teams .fr-chk i { min-width: 34px; text-align: center; font-size: 13px; }
-.fr-log { font-size: 12px; line-height: 1.45; max-height: 260px; overflow: auto; display: grid; gap: 2px; align-content: start; }
-.fr-log span { color: var(--muted); font-family: var(--mono); margin-right: 6px; }
+.fr-chk i { font: 700 10.5px var(--font); font-style: normal; padding: 1px 6px; border-radius: 4px; flex: none; }
+.fr-chk i.ok { background: #1f9d5533; color: #6fd394; }
+.fr-chk i.bad { background: #e2473b33; color: #f48771; }
+.fr-chk i.note { background: #ffffff1a; color: #bbb; }
+.fr-teams .fr-chk i { min-width: 34px; text-align: center; font-size: 12px; }
+.fr-log { font: 12px/1.5 var(--mono); display: grid; gap: 1px; align-content: start; color: #d4d4d4; }
+.fr-log span { color: #858585; margin-right: 6px; }
 `
 
 function injectCss(): void {
@@ -71,6 +62,10 @@ const clockAt = (t: number) => (t < 0 ? mmss(-t) : mmss(MATCH_S - t))
 const elapsed = (t: number) => {
   const c = Math.max(0, Math.floor(t + 1e-6))
   return `${Math.floor(c / 60)}:${String(c % 60).padStart(2, '0')}`
+}
+/** Đồng hồ trần của bảng điểm: trận đếm ngược (xả bóng 0:10 → 0:00, thi đấu 3:00 → 0:00), luyện tập đếm lên. */
+export function matchClock(t: number, practice: boolean): string {
+  return practice ? elapsed(t) : clockAt(t)
 }
 /** Chữ đồng hồ: trận đếm ngược, luyện tập "Luyện tập · m:ss" đếm lên (ruling R31 bỏ hết giờ của luyện tập). */
 export function clockText(t: number, practice: boolean): string {
@@ -100,21 +95,22 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
   return e
 }
 
-/** `log`: chỗ đặt thẻ nhật ký trận nếu khác `root` (vỏ giao diện: thẻ "Sự kiện trận" của khung đáy). */
-export function createHud(root: HTMLElement, opts: { log?: HTMLElement } = {}): Hud {
+/**
+ * Thông tin trận ngoài bảng điểm (bảng điểm Đỏ | chung | Xanh ở ui/scoreboard.ts): nhật ký trận, ô kiểm tra theo luật
+ * của robot đang chọn (kèm cảnh báo vùng chết) và bảng đội cuối trận (lỗi nhẹ / thẻ vàng / thẻ đỏ của từng đội). Dựng
+ * vào `root` — thẻ "Sự kiện trận" của khung đáy.
+ */
+export function createHud(root: HTMLElement): Hud {
   injectCss()
   root.classList.add('fr-hud')
   root.replaceChildren()
 
-  const board = el('section', 'fr-card')
-  const top = el('div', 'fr-top')
-  const clock = el('span', 'fr-clock', clockAt(-RELEASE_S))
-  const phase = el('span', 'fr-phase')
-  const total = el('span', 'fr-total', '0 điểm')
-  top.append(clock, phase, total)
-  const bk = el('div', 'fr-bk')
-  board.append(top, bk)
+  const logCard = el('section', 'fr-card')
+  const logBox = el('div', 'fr-log')
+  logBox.setAttribute('aria-live', 'polite')
+  logCard.append(el('h2', undefined, 'Nhật ký trận'), logBox)
 
+  const right = el('div', 'fr-card')
   const robotCard = el('section', 'fr-card')
   const tabs = el('div', 'fr-tabs')
   const sub = el('div', 'fr-sub')
@@ -125,20 +121,13 @@ export function createHud(root: HTMLElement, opts: { log?: HTMLElement } = {}): 
   const teams = el('div', 'fr-teams')
   teamCard.append(el('h2', undefined, 'Kết quả các đội'), teams)
   teamCard.hidden = true
+  right.append(teamCard, robotCard)
 
-  const logCard = el('section', 'fr-card')
-  const logBox = el('div', 'fr-log')
-  logBox.setAttribute('aria-live', 'polite')
-  logCard.append(el('h2', undefined, 'Nhật ký trận'), logBox)
-
-  root.append(board, robotCard, teamCard)
-  if (opts.log) opts.log.append(logCard)
-  else root.append(logCard)
+  root.append(logCard, right)
 
   let selected = 0
   let shownEvents = 0
   let tabsFor: RobotBody[] | null = null
-  let lastScore = -Infinity
   let lastChecks = ''
   let match0: Match | null = null
 
@@ -161,30 +150,9 @@ export function createHud(root: HTMLElement, opts: { log?: HTMLElement } = {}): 
         shownEvents = 0
         logBox.replaceChildren()
         teamCard.hidden = true
-        lastScore = -Infinity
+        lastChecks = ''
       }
-      // Đồng hồ và pha.
-      clock.textContent = clockText(match.t, match.practice)
-      const end = match.phase === 'end'
-      const endgame = match.phase === 'play' && match.endgame
-      phase.textContent = match.phase === 'release' ? 'Xả bóng · robot đứng yên' : end ? 'Hết giờ' : endgame ? 'End Game' : 'Thi đấu'
-      phase.dataset.end = String(endgame)
-
-      // Điểm trận + từng mục.
-      const now = performance.now()
-      const res = end || now - lastScore >= 1000 / SCORE_HZ ? match.result() : null
-      if (res) {
-        lastScore = now
-        total.textContent = `${res.score.total} điểm`
-        bk.replaceChildren(
-          ...BREAKDOWN.map(([k, name]) => {
-            const s = el('span', undefined, `${name} `)
-            const v = res.score[k]
-            s.append(el('b', undefined, `${v > 0 ? '+' : ''}${v}`))
-            return s
-          }),
-        )
-      }
+      if (selected >= robots.length) selected = 0 // nhiệm vụ: chỉ Robot 1
 
       // Nút chọn robot.
       if (tabsFor !== robots) {
@@ -239,8 +207,9 @@ export function createHud(root: HTMLElement, opts: { log?: HTMLElement } = {}): 
         addLine(stamp(e.t, match.practice), e.text)
       }
 
-      // Bảng đội cuối trận.
-      if (end && teamCard.hidden && res) {
+      // Bảng đội cuối trận (chi tiết phạt; điểm đội cũng có trên màn kết quả).
+      if (match.phase === 'end' && teamCard.hidden) {
+        const res = match.result()
         teamCard.hidden = false
         teams.replaceChildren(
           ...res.teams.map((t, i) => {

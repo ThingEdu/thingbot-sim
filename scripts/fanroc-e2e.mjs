@@ -2,7 +2,7 @@
  * Phép thử đầu-cuối của sân FANROC trên trình duyệt thật (Playwright, lấy từ checkout ThingBlock như ftc-e2e.mjs
  * của nhánh spike/ursim).
  *
- *   npm run e2e:fanroc                 # tự bật Vite dev trên một cổng trống, chạy N1, N1b (vỏ Task 11) và E1–E11 (E5 bỏ qua), tắt Vite
+ *   npm run e2e:fanroc                 # tự bật Vite dev trên một cổng trống, chạy N1, N1b, N1c (vỏ Task 11), N2, N2b (bảng điểm Task 12) và E1–E11 (E5 bỏ qua), tắt Vite
  *   FANROC_URL=http://localhost:5191/mo-phong/fanroc.html npm run e2e:fanroc   # dùng trang đang chạy sẵn
  *   npm run e2e:fanroc -- E3 E5        # chỉ chạy các phép thử có tên bắt đầu như vậy
  *
@@ -23,6 +23,8 @@ const req = createRequire(resolve(THINGBLOCK, 'package.json'))
 const { chromium } = req('playwright')
 const JSZip = createRequire(resolve(ROOT, 'package.json'))('jszip')
 const only = process.argv.slice(2)
+/** Thư mục lưu ảnh chụp (N2, N2b) nếu đặt. */
+const SHOTS = process.env.FANROC_SHOTS ?? ''
 
 // ---------- Máy chủ Vite riêng (không dùng cổng 5190 của checkout khác) ----------
 const freePort = () =>
@@ -200,13 +202,16 @@ async function main() {
   browser = await chromium.launch({ args: ['--use-angle=metal', '--ignore-gpu-blocklist'] })
   await shellTests()
 
-  await test('E1 trang tải, không lỗi console, tiêu đề và chữ HUD tiếng Việt', async (page) => {
+  await test('E1 trang tải, không lỗi console, tiêu đề và chữ bảng điểm tiếng Việt', async (page) => {
     await open(page)
     await page.waitForTimeout(1500)
     const title = await page.title()
-    const hud = await page.locator('#hud').innerText()
+    // Task 12: bảng điểm Đỏ | chung | Xanh thay HUD cũ; kiểm tra theo luật ở thẻ "Sự kiện trận".
+    const hud = await page.locator('.sb').innerText()
+    const events = await page.locator('.sh-pbody[data-panel="events"]').textContent()
     expect(title === 'ThingBot FanRoc Game', `tiêu đề "${title}"`) // Task 11: tên sản phẩm mới
-    expect(/Xả bóng/.test(hud) && /điểm/.test(hud) && /Chữa Cháy/.test(hud), `HUD: ${hud.slice(0, 80)}`)
+    expect(/XẢ BÓNG/.test(hud) && /ĐỎ/.test(hud) && /XANH/.test(hud) && /Dế Xanh/.test(hud), `bảng điểm: ${hud.replace(/\n/g, ' ').slice(0, 120)}`)
+    expect(/Kiểm tra theo luật/.test(events) && /Nhật ký trận/.test(events), `thẻ Sự kiện trận: ${events.slice(0, 80)}`)
     expect((await page.locator('.fe-tabs button').first().innerText()).startsWith('Robot 1'), 'thiếu thẻ khối Robot 1')
     // Bấm "Trận mới" ba lần liền (cùng một khung): các lần dựng trận không chồng nhau, không giải phóng một thế giới
     // Rapier hai lần (lỗi JS sẽ làm phép thử trượt), trận cuối vẫn chạy.
@@ -217,7 +222,7 @@ async function main() {
     await page.waitForTimeout(2000)
     const t = await page.evaluate(() => window.__fanroc.match.t)
     expect(t > -9.5, `sau 3 lần Trận mới đồng hồ đứng ở t = ${t.toFixed(2)}`)
-    return `"${title}" · HUD: ${hud.split('\n').slice(0, 2).join(' ')} · 3 lần Trận mới liền: t = ${t.toFixed(1)} s`
+    return `"${title}" · bảng điểm: ${hud.split('\n').slice(0, 4).join(' ')} · 3 lần Trận mới liền: t = ${t.toFixed(1)} s`
   })
 
   await test('E2 mẫu TeleOp + đẩy 2 cần lên 2 s ⇒ Robot 1 tiến về phía núi', async (page) => {
@@ -326,7 +331,7 @@ async function main() {
   // phép thử đầu-cuối theo giao diện mới; luật nạp bóng P04–P07 có phép thử Node ở human.test.ts.
   skip('E5 bàn phím Human Player', 'đã bỏ KEYMAP (Task 10) — Human Player tự động, xem human.test.ts')
 
-  await test('E6 trận ×40 với 4 agent ⇒ Hết giờ, bảng đội 4 dòng, điểm trận = tổng các mục', async (page) => {
+  await test('E6 trận ×40 với 4 agent ⇒ HẾT GIỜ, bảng đội 4 dòng, màn kết quả: điểm trận = tổng các mục', async (page) => {
     await open(page)
     await seat(page, 0, 'agent-medium')
     await (await bar(page, 'Trận mới')).click()
@@ -337,13 +342,14 @@ async function main() {
     await page.waitForFunction(() => window.__fanroc.match.phase === 'end', null, { timeout: 240000 })
     const wall = (Date.now() - t0) / 1000
     await page.waitForTimeout(500)
-    const phase = await page.locator('.fr-phase').innerText()
-    const rows = await page.locator('.fr-teams .fr-chk').count()
-    const total = Number(/(-?\d+) điểm/.exec(await page.locator('.fr-total').innerText())?.[1])
-    const items = (await page.locator('.fr-bk b').allInnerTexts()).map(Number)
+    const phase = await page.locator('.sb-phase').innerText()
+    const rows = await page.locator('.fr-teams .fr-chk').count() // bảng đội (lỗi nhẹ / thẻ) ở thẻ Sự kiện trận
+    const total = Number(await page.locator('.sb-result .sb-big').innerText())
+    // Bảng mục của màn kết quả: "+15", "−6", "0" (dấu trừ U+2212).
+    const items = (await page.locator('.sb-result [data-side="total"] .sb-row b').allInnerTexts()).map((t) => Number(t.replace('−', '-')))
     const sum = items.reduce((s, v) => s + v, 0)
     const model = await page.evaluate(() => window.__fanroc.match.result().score.total)
-    expect(phase === 'Hết giờ', `pha "${phase}"`)
+    expect(phase === 'HẾT GIỜ', `pha "${phase}"`)
     expect(rows === 4, `bảng đội ${rows} dòng`)
     expect(items.length === 7 && total === sum && total === model, `điểm ${total}, tổng mục ${sum} (${items.join(' ')}), mô hình ${model}`)
     return `190 s trận trong ${wall.toFixed(1)} s · điểm ${total} = ${items.join(' + ')}`
@@ -450,9 +456,9 @@ async function main() {
     await page.waitForTimeout(1700)
     const b = await pose(page)
     const m = await page.evaluate(() => ({ phase: window.__fanroc.match.phase, t: window.__fanroc.match.t }))
-    const clock = await page.locator('.fr-clock').innerText()
+    const clock = `${await page.locator('.sb-phase').innerText()} · ${await page.locator('.sb-clock').innerText()}`
     expect(dist(a, b) > 0.1, `sau 2 s Robot 1 chỉ đi ${dist(a, b).toFixed(3)} m (pha ${m.phase}, t = ${m.t.toFixed(2)} s)`)
-    expect(/^Luyện tập · \d+:\d\d$/.test(clock), `đồng hồ "${clock}"`)
+    expect(/^LUYỆN TẬP · \d+:\d\d$/.test(clock), `đồng hồ "${clock}"`)
     return `đi ${dist(a, b).toFixed(3)} m trong 2 s · pha ${m.phase}, t = ${m.t.toFixed(1)} s · đồng hồ "${clock}"`
   })
 
@@ -595,6 +601,72 @@ async function shellTests() {
     const stepOff = await runBtn(page, 'Chạy từng khối').isDisabled()
     expect(stepOff, 'không có ghế chương trình mà Chạy từng khối vẫn bấm được')
     return `số đỏ ${b1} → ${b2 || 'ẩn'} → ${b3} · Dừng khoá · Robot 2 vẫn ${r2.kind} · Từng khối khoá`
+  })
+
+  await test('N2 trận ×40 4 agent ⇒ đếm ngược 3·2·1·BẮT ĐẦU!, màn kết quả Đỏ | chung | Xanh, tổng = match.result(), Chơi lại', async (page) => {
+    await open(page)
+    // Ghi lại mọi chữ đếm ngược hiện ra (mỗi lần một phần tử mới trong .sb-count).
+    await page.evaluate(() => {
+      window.__counts = []
+      new MutationObserver(() => {
+        const b = document.querySelector('.sb-count b')
+        if (b && window.__counts.at(-1) !== b.textContent) window.__counts.push(b.textContent)
+      }).observe(document.querySelector('.sb-count'), { childList: true })
+    })
+    await seat(page, 0, 'agent-medium')
+    await (await bar(page, 'Trận mới')).click()
+    await page.waitForFunction(() => window.__fanroc.match.t < -9)
+    await page.evaluate(() => window.__fanroc.setSpeed(4)) // ×4: mỗi mốc đếm ngược cách nhau ~15 khung
+    await page.waitForFunction(() => window.__fanroc.match.phase === 'play', null, { timeout: 30000 })
+    const counts = await page.evaluate(() => window.__counts)
+    expect(['3', '2', '1', 'BẮT ĐẦU!'].every((c) => counts.includes(c)), `đếm ngược: ${counts.join(' · ')}`)
+    // Nhãn chương trình: 4 ghế đều Máy Vừa.
+    const progs = await page.locator('.sb .sb-prog').allTextContents()
+    expect(progs.length === 4 && progs.every((t) => t === 'Máy Vừa'), `nhãn: ${progs.join(', ')}`)
+    expect((await page.evaluate(() => window.__fanroc.setSpeed(40))) === 40, 'không lên được ×40')
+    await page.waitForFunction(() => window.__fanroc.match.phase === 'end', null, { timeout: 240000 })
+    await page.locator('.sb-result:not([hidden])').waitFor({ timeout: 5000 })
+    const sides = await page.locator('.sb-result [data-side]').evaluateAll((es) => es.map((e) => e.dataset.side))
+    expect(JSON.stringify(sides) === '["red","total","blue"]', `vùng: ${sides.join(', ')}`)
+    const shown = Number(await page.locator('.sb-result [data-side="total"] .sb-big').innerText())
+    const model = await page.evaluate(() => window.__fanroc.match.result())
+    expect(shown === model.score.total, `màn kết quả ${shown}, mô hình ${model.score.total}`)
+    // Điểm đội trên hai cột = result().teams theo ghế (Đỏ: Robot 1, 3; Xanh: Robot 2, 4).
+    const red = (await page.locator('.sb-result [data-side="red"] .sb-trow b').allInnerTexts()).map(Number)
+    const blue = (await page.locator('.sb-result [data-side="blue"] .sb-trow b').allInnerTexts()).map(Number)
+    const want = model.teams.map((t) => t.score)
+    expect(JSON.stringify(red) === JSON.stringify([want[0], want[2]]) && JSON.stringify(blue) === JSON.stringify([want[1], want[3]]), `đội đỏ ${red} xanh ${blue}, mô hình ${want}`)
+    const acts = await page.locator('.sb-result .sb-acts button').allInnerTexts()
+    expect(acts.includes('Chơi lại') && acts.includes('Về màn chính'), `nút: ${acts.join(', ')}`)
+    if (SHOTS) await page.screenshot({ path: resolve(SHOTS, 't12-result.png') })
+    await page.evaluate(() => (window.__oldMatch = window.__fanroc.match))
+    await page.locator('.sb-result button', { hasText: 'Chơi lại' }).click()
+    await page.waitForFunction(() => window.__fanroc.match !== window.__oldMatch, null, { timeout: 30000 })
+    await page.waitForTimeout(300)
+    expect(await page.locator('.sb-result').isHidden(), 'Chơi lại mà màn kết quả còn hiện')
+    return `đếm ngược ${counts.join(' · ')} · tổng ${shown} · đỏ ${red.join('/')} · xanh ${blue.join('/')}`
+  })
+
+  await test('N2b báo điểm nổi "+10 · Vùng Bảo Vệ" khi robot vào Vùng Bảo Vệ; thanh chạy nằm dưới bảng điểm', async (page) => {
+    await open(page)
+    await quietOthers(page)
+    await page.locator('.fr-bar').evaluate((e) => (e.hidden = true)) // đóng khung ⚙ cho ảnh chụp
+    await skipRelease(page)
+    const s = ZONES.safe.red
+    await page.evaluate((p) => window.__fanroc.robots[0].setPose(p), { x: (s.x0 + s.x1) / 2, z: (s.z0 + s.z1) / 2, yaw: 0 })
+    await page.locator('.sb-pop', { hasText: '+10 · Vùng Bảo Vệ' }).waitFor({ timeout: 3000 })
+    await page.waitForTimeout(250) // qua phần phóng to của chữ nổi
+    const sb = await page.locator('.sb').boundingBox()
+    const run = await page.locator('.sh-run').boundingBox()
+    expect(run.y >= sb.y + sb.height, `thanh chạy y=${run.y} đè bảng điểm (đáy ${sb.y + sb.height})`)
+    const park = await page.locator('.sb [data-side="red"] .sb-hd span').innerText()
+    expect(park === 'Đỗ 10', `ô Đỏ: "${park}"`)
+    if (SHOTS) await page.screenshot({ path: resolve(SHOTS, 't12-match.png') })
+    await page.waitForTimeout(1600)
+    // Chữ nổi tự tắt sau 1,5 s (Human Player tự động có thể ghi thêm "+5 · Chữa Cháy" mới trong lúc chờ).
+    const left = await page.locator('.sb-pop', { hasText: 'Vùng Bảo Vệ' }).count()
+    expect(left === 0, `sau 1,5 s còn ${left} chữ "Vùng Bảo Vệ"`)
+    return `bảng điểm đáy ${Math.round(sb.y + sb.height)} px, thanh chạy ${Math.round(run.y)} px · "${park}"`
   })
 }
 
