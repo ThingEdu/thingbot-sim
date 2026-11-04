@@ -18,8 +18,24 @@ test('đổi ports 3 lần ⇒ 4 đoạn, màu 0,1,2,3; các đoạn nối liề
   assert.equal(tr.segments.length, 4)
   assert.deepEqual(tr.segments.map((s) => s.color), [0, 1, 2, 3])
   assert.ok(tr.segments.every((s) => s.points.length >= 2))
+  for (let i = 0; i + 1 < tr.segments.length; i++) {
+    const prev = tr.segments[i].points
+    assert.deepEqual(tr.segments[i + 1].points[0], prev[prev.length - 1], `đoạn ${i + 1} phải nối liền đoạn ${i}`)
+  }
   assert.equal(TRAIL_COLORS.length, 6)
   assert.equal(new Set(TRAIL_COLORS).size, 6)
+})
+
+test('đổi ports ngay ở bước < 5 mm: vẫn nối liền, đoạn mới có ≥ 2 điểm hoặc trùng điểm cuối', () => {
+  const tr = new Trail()
+  tr.add(0, { x: 0, z: 0, yaw: 0 }, P({ M1: 1 }))
+  tr.add(0.1, { x: 0, z: -0.1, yaw: 0 }, P({ M1: 1 }))
+  tr.add(0.2, { x: 0, z: -0.102, yaw: 0 }, P({ M1: 2 })) // đổi lệnh khi mới nhích 2 mm
+  tr.add(0.3, { x: 0, z: -0.2, yaw: 0 }, P({ M1: 2 }))
+  const [a, b] = tr.segments
+  assert.deepEqual(b.points[0], a.points[a.points.length - 1])
+  assert.ok(b.points.length >= 2)
+  assert.deepEqual(b.points[b.points.length - 1], { x: 0, z: -0.2 })
 })
 
 test('màu xoay vòng sau 6 đoạn', () => {

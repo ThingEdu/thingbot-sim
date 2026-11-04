@@ -6,7 +6,7 @@ import type { PortValues } from './ports.ts'
 /** 6 màu xoay vòng cho các đoạn vệt (mỗi lần bộ động cơ đổi là một đoạn, một màu). */
 export const TRAIL_COLORS: readonly number[] = [0xff7a1a, 0x2463eb, 0x1fa860, 0xf2a516, 0xc04ee0, 0xe2384d]
 
-/** Điểm cách điểm đã lưu trước < 5 mm thì bỏ (giữ vệt gọn). */
+/** Điểm cách điểm đã lưu trước < 5 mm thì bỏ (giữ vệt gọn); riêng điểm đổi đoạn luôn được giữ. */
 export const MIN_STEP = 0.005
 
 export type TrailSegment = { color: number; points: { x: number; z: number }[] }
@@ -57,10 +57,16 @@ export class Trail {
     if (changed) {
       this.key = key
       this.colorIdx = (this.colorIdx + 1) % TRAIL_COLORS.length
-      this.segments.push({ color: this.colorIdx, points: [] })
-    } else if (d < MIN_STEP) return
+      // Đoạn mới mở bằng điểm lưu cuối của đoạn trước để nét vẽ liền, rồi tới điểm hiện tại.
+      const seed = this.lastStored ?? { x: pose.x, z: pose.z }
+      const pts = [{ x: seed.x, z: seed.z }]
+      if (seed.x !== pose.x || seed.z !== pose.z) pts.push({ x: pose.x, z: pose.z })
+      this.segments.push({ color: this.colorIdx, points: pts })
+      this.lastStored = { x: pose.x, z: pose.z }
+      return
+    }
+    if (d < MIN_STEP) return
     this.lastStored = { x: pose.x, z: pose.z }
-    // Đoạn mới bắt đầu tại điểm hiện tại (đoạn cũ kết thúc ở điểm lưu trước đó, vệt hở < 5 mm nếu bước bị bỏ).
     this.segments[this.segments.length - 1].points.push({ x: pose.x, z: pose.z })
   }
 
