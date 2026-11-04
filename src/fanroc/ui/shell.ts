@@ -192,6 +192,12 @@ const INPUT_ICON: Partial<Record<InputKind, IconName>> = { 'Bàn phím': 'keyboa
 /** Mã nguồn của trang (AGPL-3.0: người dùng web phải lấy được mã nguồn). */
 export const SOURCE_URL = 'https://github.com/ThingEdu/thingbot-sim'
 
+/** Nút "Tải ThingBlock đầy đủ" ở thanh trạng thái: chưa có link chính thức (rỗng) ⇒ không có nút (spec §6.7). */
+export function thingblockLink(url: string): { href: string; label: string } | null {
+  const href = url.trim()
+  return href ? { href, label: 'Tải ThingBlock đầy đủ' } : null
+}
+
 const RUN_BUTTONS: { key: keyof RunHandlers; icon: IconName; label: string; cls?: string }[] = [
   { key: 'run', icon: 'play', label: 'Chạy', cls: 'go' },
   { key: 'pause', icon: 'pause', label: 'Tạm dừng' },
@@ -286,7 +292,8 @@ function chevron(): SVGSVGElement {
   return svg
 }
 
-export function createShell(root: HTMLElement): Shell {
+/** `thingblockUrl`: link tải ThingBlock đầy đủ (`scripts/game-config.ts`); rỗng ⇒ không hiện nút. */
+export function createShell(root: HTMLElement, opts: { thingblockUrl?: string } = {}): Shell {
   if (!document.getElementById('sh-css')) {
     const style = el('style')
     style.id = 'sh-css'
@@ -377,7 +384,9 @@ export function createShell(root: HTMLElement): Shell {
   const inputText = el('span')
   st.input.append(inputText)
   const source = Object.assign(el('a', 'sh-opt', 'Mã nguồn (AGPL)'), { href: SOURCE_URL, target: '_blank', rel: 'noopener', title: 'Mã nguồn của trang (AGPL-3.0)' })
-  statusEl.append(st.robot, st.input, st.ports, st.block, el('span', 'sp'), st.fps, source)
+  const tb = thingblockLink(opts.thingblockUrl ?? '')
+  const download = tb && Object.assign(el('a', 'sh-opt', tb.label), { href: tb.href, target: '_blank', rel: 'noopener' })
+  statusEl.append(st.robot, st.input, st.ports, st.block, el('span', 'sp'), st.fps, ...(download ? [download] : []), source)
 
   // Thanh chạy nổi.
   const runEl = el('div', 'sh-run')

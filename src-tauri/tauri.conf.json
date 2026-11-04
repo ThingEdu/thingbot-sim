@@ -1,0 +1,40 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "ThingBot FanRoc Game",
+  "version": "0.1.0",
+  "identifier": "vn.thingedu.fanrocgame",
+  "build": {
+    "frontendDist": "../dist-game",
+    "beforeBuildCommand": "npm run build:game"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "ThingBot FanRoc Game",
+        "width": 1366,
+        "height": 768,
+        "minWidth": 1024,
+        "minHeight": 640,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Education",
+    "copyright": "ThingEdu — AGPL-3.0 (mã nguồn: https://github.com/ThingEdu/thingbot-sim)",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

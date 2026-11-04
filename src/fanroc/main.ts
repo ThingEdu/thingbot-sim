@@ -52,9 +52,10 @@ import {
   createTournamentScreen, matchSeed, newTournament, pendingMachines, played, playersIn, progressText, SAVE_TOUR_FAILED,
   saveTournamentVerified, seatIds, standingRows, type PitView,
 } from './ui/tournament.ts'
+import { THINGBLOCK_URL } from '../../scripts/game-config.ts'
 import { createMissionHud, createMissionList, mergeProgress, missionCards, pendingGoals, renderSideList, saveMissionVerified, totalStars } from './ui/missions.ts'
 
-const shell = createShell(document.querySelector<HTMLElement>('#app')!)
+const shell = createShell(document.querySelector<HTMLElement>('#app')!, { thingblockUrl: THINGBLOCK_URL })
 const stage = shell.stage
 
 /** Tên đội của 4 ghế khi ghế đó là máy (ghế người chơi mang tên bạn đó). */

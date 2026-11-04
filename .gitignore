@@ -1,3 +1,7 @@
 node_modules
 dist
+dist-game
 .vercel
+# Gói desktop Tauri: thư mục build của cargo + lược đồ sinh ra
+src-tauri/target
+src-tauri/gen

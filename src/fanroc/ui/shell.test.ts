@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { clampSide, defaultSide, highlightCpp, runState, serialNews, serialPatch, statusText } from './shell.ts'
+import { clampSide, defaultSide, highlightCpp, runState, serialNews, serialPatch, statusText, thingblockLink } from './shell.ts'
+import { THINGBLOCK_URL } from '../../../scripts/game-config.ts'
 import { ICON_NAMES, ICON_PATHS } from './icons.ts'
 import { NEUTRAL } from '../ports.ts'
 
@@ -72,4 +73,13 @@ test('biểu tượng: đủ 22 tên, mỗi tên có nét vẽ, không tải t�
     assert.ok(ICON_PATHS[n] && ICON_PATHS[n].length > 10, `thiếu nét vẽ cho ${n}`)
     assert.ok(!/https?:|href|url\(/.test(ICON_PATHS[n]), `${n} tải từ ngoài`)
   }
+})
+
+test('thingblockLink: chưa có link chính thức (rỗng / chỉ khoảng trắng) ⇒ không có nút; có link ⇒ nút "Tải ThingBlock đầy đủ"', () => {
+  assert.equal(thingblockLink(''), null)
+  assert.equal(thingblockLink('   '), null)
+  assert.deepEqual(thingblockLink(' https://vi.du/thingblock '), { href: 'https://vi.du/thingblock', label: 'Tải ThingBlock đầy đủ' })
+  // Đợt này chưa có link chính thức (spec §6.7): cấu hình phát hành để rỗng ⇒ nút không hiện.
+  assert.equal(THINGBLOCK_URL, '')
+  assert.equal(thingblockLink(THINGBLOCK_URL), null)
 })

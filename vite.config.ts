@@ -19,8 +19,9 @@ export default defineConfig({
   build: {
     outDir: `dist${BASE}`,
     emptyOutDir: true,
-    // Hai trang: bài học ThingBot (index) và sân FANROC 3D (fanroc).
-    rollupOptions: { input: { main: resolve(__dirname, 'index.html'), fanroc: resolve(__dirname, 'fanroc.html') } },
+    // Chỉ trang bài học ThingBot. ThingBot FanRoc Game là game độc lập, build riêng bằng vite.game.config.ts
+    // (`npm run build:game` ⇒ dist-game/); `vite` dev vẫn mở được /mo-phong/fanroc.html để phát triển / e2e.
+    rollupOptions: { input: { main: resolve(__dirname, 'index.html') } },
   },
   resolve: {
     alias: {

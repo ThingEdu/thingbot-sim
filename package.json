@@ -7,6 +7,8 @@
   "license": "AGPL-3.0-only",
   "scripts": {
     "build": "vite build",
+    "build:game": "vite build -c vite.game.config.ts",
+    "dist:game": "tauri build",
     "dev": "vite",
     "preview": "vite preview",
     "smoke": "node scripts/smoke-lessons.mjs && node scripts/smoke-lessons.mjs --starter",
@@ -20,6 +22,7 @@
     "three": "0.180.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "2.11.4",
     "@types/node": "25.6.0",
     "@types/three": "0.180.0",
     "typescript": "5.9.3",
