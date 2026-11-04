@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Biến trang `fanroc.html` thành **ThingBot FanRoc Game**: màn chính kiểu game, Giải đấu đúng luật cho 1–2 bạn, Trận lẻ / Đấu tập lái bàn phím, Xưởng lập trình (chương trình mặc định theo hướng dẫn), 12 nhiệm vụ con rùa có vệt — trong bố cục kiểu VS Code.
+**Goal:** Biến trang `fanroc.html` thành **ThingBot FanRoc Game** — game mô phỏng độc lập (tải về máy; bản web cho sự kiện trên máy 201): màn chính kiểu game, Giải đấu đúng luật cho 1–2 bạn, Trận lẻ / Đấu tập lái bàn phím, Xưởng lập trình (chương trình mặc định theo hướng dẫn), 12 nhiệm vụ con rùa có vệt — trong bố cục kiểu VS Code.
 
 **Architecture:** Thêm các lõi thuần kiểm bằng `node --test` (bàn phím → PS2 ảo, chia điểm Đỏ/Xanh, giải đấu, trận ngầm, lưu trữ, vệt + số đo, nhiệm vụ + bộ chấm). Tách vòng lặp trận khỏi `main.ts` thành `GameSession` (có tạm dừng / chạy từng khối). Giao diện mới trong `src/fanroc/ui/` thay thanh nút + cột HUD cũ; vật lý, luật, agent giữ nguyên.
 
@@ -404,3 +404,46 @@ export function createShell(root: HTMLElement): Shell
 - [ ] **Step 2:** Chạy toàn bộ: `npm run typecheck && npm run test:unit && npm run smoke && npm run e2e:fanroc && npm run build` ⇒ tất cả PASS (dán số phép thử vào báo cáo).
 - [ ] **Step 3:** Thêm các quyết định R35… của đợt này vào `docs/fanroc/quyet-dinh.md` (bảng mới "Giao diện game").
 - [ ] **Step 4: Commit** — `fanroc: phép thử đầu-cuối giao diện mới, ghi quyết định R35+`
+
+### Task 17: Màn Luật chơi + Robot mẫu
+
+**Files:** Create `src/fanroc/ui/rules.ts`, `src/fanroc/ui/robots-gallery.ts`; Modify `src/fanroc/ui/home.ts`
+
+- **Luật chơi** (spec §6.7): các thẻ ngắn, lời của game (không chép tài liệu luật): sân và các khu, thể thức trận
+  (10 s + 3 phút, 4 đội cùng điểm, Đỏ/Xanh), bảng điểm (lấy số từ `scoring.ts` để không lệch), lỗi thường gặp
+  (các lỗi trọng tài tự động đang bắt trong `match.ts`), cơ cấu giải (mục E). Mỗi thẻ có ảnh chụp từ chính sân 3D
+  (camera đặt sẵn) hoặc minh hoạ SVG.
+- **Robot mẫu**: 4 robot trong `ROBOTS`: xoay 3D (`view/robotModels.ts`), kích thước, cổng dùng làm gì (`portMap`),
+  chương trình TeleOp mẫu (xem khối, chỉ đọc), nút "Mở trong Xưởng".
+- [ ] E-test **N11**: màn chính có "Luật chơi" và "Robot mẫu"; bảng điểm trong Luật chơi có "+15" cho Rãnh 3 (đọc từ
+  `scoring.ts`); Robot mẫu "Mở trong Xưởng" ⇒ Xưởng nạp đúng robot đó.
+- [ ] Commit — `fanroc: màn Luật chơi và Robot mẫu`
+
+### Task 18: Build game độc lập + gói desktop
+
+**Files:** Create `vite.game.config.ts`, `src-tauri/` (theo mẫu `~/Ai-Code/thingblock-desktop/src-tauri`, chỉ phần cửa
+sổ + tệp tĩnh, không sidecar), `scripts/game-config.ts` (hằng `THINGBLOCK_URL = ''`); Modify `package.json` (scripts
+`build:game`, `dist:game`), `vite.config.ts` (bỏ `fanroc.html` khỏi build `/mo-phong/`)
+
+- `build:game` ⇒ `dist-game/` với `base: './'`, chỉ `fanroc.html` (đổi tên đầu ra `index.html`), mở được qua một
+  máy chủ tĩnh bất kỳ ở thư mục con bất kỳ.
+- Không có `THINGBLOCK_URL` ⇒ không hiện nút "Tải ThingBlock đầy đủ".
+- Tauri: `productName` "ThingBot FanRoc Game", `frontendDist: ../dist-game`, bundle id `vn.thingedu.fanrocgame`,
+  biểu tượng tạm từ bộ biểu tượng game. Kiểm Rapier WASM + Worker chạy được trong WebView (macOS WKWebView).
+- Tải lần đầu nhanh hơn: tách `three` + vật lý thành chunk tải sau màn chính (`import()`).
+- [ ] Kiểm: `npm run build:game` rồi mở `dist-game/` bằng `npx vite preview --outDir dist-game` ⇒ `e2e:fanroc`
+  chạy được với `FANROC_URL` trỏ vào đó; `npm run build` (bài học) không còn `fanroc.html`; `npm run dist:game`
+  ra `.app` macOS mở được, chơi được một Trận lẻ.
+- [ ] Commit — `fanroc: build game độc lập và gói desktop Tauri`
+
+### Task 19: Kịch bản phục vụ bản web sự kiện trên máy 201
+
+**Files:** Create `scripts/event-201.sh`, `docs/fanroc/phat-hanh.md`
+
+- `scripts/event-201.sh build|push|start|stop|status`: build game, `rsync` `dist-game/` tới máy 201 (mặc định
+  `HOST=192.168.1.201`, thư mục `~/fanroc-game/`), phục vụ tĩnh bằng `python3 -m http.server` hoặc caddy nếu có
+  (cổng mặc định 8090), tắt khi hết sự kiện. Không lưu mật khẩu; dùng SSH key sẵn có.
+- `docs/fanroc/phat-hanh.md`: cách tải về máy (desktop), cách mở bản web sự kiện, checklist trước khi công khai
+  (lưới núi CAD, tên FANROC, link mã nguồn AGPL, có/không link ThingBlock).
+- **Không chạy `push`/`start` thật trong task** — chỉ kiểm cú pháp (`bash -n`) và chế độ thử `DRY_RUN=1` in ra lệnh.
+- [ ] Commit — `fanroc: kịch bản phục vụ bản web sự kiện trên máy 201`

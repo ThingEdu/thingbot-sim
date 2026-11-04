@@ -237,6 +237,28 @@ Theo luật FANROC 2026 mục E (Cơ cấu giải đấu) và A (thể thức tr
 - **Lưu:** giải đang dở lưu trong `localStorage` (lịch, kết quả, chương trình), tắt trình duyệt mở lại đấu tiếp.
 - Trọng tài, phạt, Human Player tự động: dùng nguyên lõi trận hiện có.
 
+### 6.7 Phát hành: game độc lập — bản tải về máy + bản web cho sự kiện (anh Tuấn chốt 04/11)
+
+**ThingBot FanRoc Game là một game mô phỏng độc lập**, tách khỏi 10 bài học robot.edu.vn/mo-phong. Mục tiêu: học
+sinh **làm quen ThingBlock, đề thi 2026–2027, robot mẫu và luật chơi** để hình dung trước khi làm robot thật.
+`.tb` cùng chuẩn ThingBlock.
+
+- **Bình thường: tải về máy** (không chạy online như 10 bài học, vì tài nguyên nặng — ~1,3 MB nén lần đầu, 3D +
+  vật lý chạy ở PC). Claude quyết: gói **ứng dụng desktop Tauri 2** giống cách `thingblock-desktop` đóng gói
+  (cùng công cụ đã có trên máy), mở trang game từ tệp trong gói — không cần mạng, không cần máy chủ. Bản macOS
+  build trên máy anh; bản Windows / Linux build bằng CI hoặc trên máy 201 (Ubuntu) — chưa phát hành.
+- **Bản web cho sự kiện:** cùng bản build tĩnh, đặt trên **máy 201** (192.168.1.201) phục vụ trong mạng / công khai
+  theo từng sự kiện. Kịch bản đưa lên 201 và bật/tắt phục vụ có trong kho; **chạy thật thì hỏi anh Tuấn mỗi lần**.
+- **Build riêng:** cấu hình Vite riêng cho game (đường dẫn tương đối `./`, chỉ trang game, không kèm bài học),
+  thư mục ra `dist-game/`. Bản `/mo-phong/` của robot.edu.vn không chứa game.
+- **Link "Tải ThingBlock đầy đủ": tạm thời chưa có link chính thức** — để một chỗ cấu hình (`THINGBLOCK_URL`
+  rỗng ⇒ không hiện nút); không đoán link.
+- **Làm quen đề thi:** màn chính thêm hai mục nhỏ: **Luật chơi** (tóm tắt bằng lời của game, hình minh hoạ từ sân
+  3D: sân, thể thức trận, bảng điểm, lỗi thường gặp, cơ cấu giải — không chép tài liệu luật) và **Robot mẫu**
+  (4 robot mẫu xoay 3D: kích thước, cổng M1–M4 / S1–S5 dùng làm gì, chương trình TeleOp mẫu, mở thẳng vào Xưởng).
+- Trước khi công khai bản web sự kiện: hỏi anh Tuấn về lưới núi CAD, tên/biểu trưng FANROC (Ban Tổ chức), và có
+  link mã nguồn AGPL trên trang.
+
 ## 7. Ràng buộc
 
 - Giữ nguyên stack và cấu trúc: TypeScript, Vite (`/mo-phong/`), Three 0.180, Rapier 0.14, scratch-blocks
