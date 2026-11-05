@@ -4,6 +4,7 @@
 import * as THREE from 'three'
 import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js'
 import maker from '../assets/robot-maker.json' with { type: 'json' }
+import parts from '../assets/robot-parts.json' with { type: 'json' }
 
 interface CadGroup {
   pivot: number[]
@@ -50,18 +51,42 @@ export function decodeGroup(g: CadGroup, q: number): THREE.BufferGeometry {
   return out
 }
 
-let cache: Record<string, { geo: THREE.BufferGeometry; pivot: THREE.Vector3 }> | null = null
+type Decoded = Record<string, { geo: THREE.BufferGeometry; pivot: THREE.Vector3 }>
+let cache: Decoded | null = null
+let partCache: Decoded | null = null
 let cadMat: THREE.MeshStandardMaterial | null = null
 
+const decodeFile = (f: CadFile): Decoded => {
+  const out: Decoded = {}
+  for (const [name, g] of Object.entries(f.groups)) out[name] = { geo: decodeGroup(g, f.q), pivot: new THREE.Vector3().fromArray(g.pivot) }
+  return out
+}
+const material = () => (cadMat ??= new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.62, metalness: 0.05 }))
+
 /** Các nhóm của Mẫu Maker CAD (giải mã lần đầu gọi). */
-export function makerCad(): { mat: THREE.Material; groups: Record<string, { geo: THREE.BufferGeometry; pivot: THREE.Vector3 }> } {
-  if (!cache) {
-    const f = maker as CadFile
-    cache = {}
-    for (const [name, g] of Object.entries(f.groups)) cache[name] = { geo: decodeGroup(g, f.q), pivot: new THREE.Vector3().fromArray(g.pivot) }
+export function makerCad(): { mat: THREE.Material; groups: Decoded } {
+  cache ??= decodeFile(maker as CadFile)
+  return { mat: material(), groups: cache }
+}
+
+/** Linh kiện CAD rời (assets/robot-parts.json, cùng bộ "Bộ thingbot mới") để ghép vào các robot tự dựng. */
+export type CadPart = 'wheel' | 'motor' | 'board' | 'servo' | 'battery'
+/**
+ * Một linh kiện CAD (mm), tâm khối bao đặt tại (x, y, z), xoay quanh trục đứng `rotY`. Hướng gốc như trên Mẫu Maker:
+ * bánh (lốp ra phía −x), động cơ dài theo z, bo nằm ngang, servo SG90 đứng (dày theo z), khay pin nằm ngang.
+ */
+export function cadPart(name: CadPart, x: number, y: number, z: number, rotY = 0): THREE.Object3D {
+  partCache ??= decodeFile(parts as CadFile)
+  const o = new THREE.Mesh(partCache[name].geo, material())
+  if (!rotY) {
+    o.position.set(x, y, z)
+    return o
   }
-  cadMat ??= new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.62, metalness: 0.05 })
-  return { mat: cadMat, groups: cache }
+  const g = new THREE.Group()
+  g.position.set(x, y, z)
+  g.rotation.y = rotY
+  g.add(o)
+  return g
 }
 
 /** Tên 4 nhóm bánh trong tệp CAD. */

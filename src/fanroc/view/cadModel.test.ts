@@ -30,3 +30,13 @@ test('Mẫu Maker cắm cờ bằng đuôi: lúc thu giá cờ trên nóc (chưa
   assert.ok(full > 0.17, `lùi hết nhô ${full}`)
   assert.ok(Math.max(def.size.w, def.size.l) + rearExtent(def, def.maxExtend, 0) <= 0.5 + 1e-9)
 })
+
+test('Linh kiện CAD rời: bánh D65, động cơ, bo ThingBot, servo SG90, khay pin — cỡ đúng linh kiện thật', async () => {
+  const { cadPart } = await import('./cadModel.ts')
+  const size = (n: Parameters<typeof cadPart>[0]) => new THREE.Box3().setFromObject(cadPart(n, 0, 0, 0)).getSize(new THREE.Vector3())
+  const w = size('wheel')
+  assert.ok(Math.abs(w.y - 69) < 3 && Math.abs(w.z - 69) < 3 && w.x > 20 && w.x < 35, `bánh ${w.toArray()}`)
+  const b = size('board')
+  assert.ok(b.x > 55 && b.x < 70 && b.z > 55 && b.z < 75, `bo ${b.toArray()}`)
+  for (const n of ['motor', 'servo', 'battery'] as const) assert.ok(size(n).length() > 20, n)
+})

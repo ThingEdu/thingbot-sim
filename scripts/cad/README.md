@@ -8,6 +8,7 @@ Chạy lại (cần `meshoptimizer` và `three`, cài ngoài kho này, ví dụ 
 ```bash
 cd ~/Ai-Workspace/ThingBot-CAD/tools   # có node_modules/meshoptimizer và three
 node build-maker.mjs "../onshape/asm__vào xem cái này.gltf" <kho>/src/fanroc/assets/robot-maker.json
+node build-maker.mjs "../onshape/asm__vào xem cái này.gltf" <kho>/src/fanroc/assets/robot-parts.json parts   # linh kiện rời
 ```
 
 Công cụ gom chi tiết theo nhóm chuyển động (thân, 4 bánh, thanh răng, tay vòng), bỏ dây kéo / bóng mẫu / linh kiện tí

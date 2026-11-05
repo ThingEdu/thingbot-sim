@@ -94,7 +94,7 @@ async function createViewer(host: HTMLElement, cfg: RobotConfig): Promise<Viewer
   const frame3 = () => {
     // Bán kính khối bao (xoay quanh trục đứng nên lấy cả đường chéo đáy) / tan(nửa góc nhìn), thêm lề.
     const rad = Math.hypot(def.size.w, def.size.l + 2 * def.maxExtend, def.size.h) / 2
-    const d = (rad / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) * 1.08
+    const d = (rad / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) * 1.3 // lề: gàu / tay nhô khỏi cỡ xuất phát
     camera.position.set(0.62, 0.5, 0.62).normalize().multiplyScalar(d)
     camera.lookAt(0, def.size.h * 0.45, 0)
   }

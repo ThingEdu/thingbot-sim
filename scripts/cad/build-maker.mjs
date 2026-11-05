@@ -6,7 +6,8 @@ import * as THREE from 'three'
 import { MeshoptSimplifier } from 'meshoptimizer'
 import { load, walk } from './gl.mjs'
 
-const [, , SRC, OUT] = process.argv
+const [, , SRC, OUT, MODE = 'robot'] = process.argv
+// MODE 'parts': bộ linh kiện rời (mỗi linh kiện một nhóm, gốc ở tâm khối bao) để ghép vào các robot tự dựng.
 await MeshoptSimplifier.ready
 const { g, acc } = load(SRC)
 
@@ -18,7 +19,15 @@ const toModel = (v) => v.set(v.x * 1000, v.z * 1000 - FLOOR, -(v.y * 1000 - CY))
 const top = (p) => p[1] ?? ''
 const sub = (p) => p[2] ?? ''
 /** Nhóm của một chi tiết theo đường dẫn tên; null = bỏ (dây kéo, bóng mẫu). */
+const PARTS = {
+  wheel: (p) => top(p) === 'base <1>' && /^Wheel D65x25.*<1>$/.test(sub(p)),
+  motor: (p) => top(p) === 'base <1>' && sub(p) === 'dc motor.stp:1__Body1 <1>',
+  board: (p) => top(p) === 'base <1>' && sub(p) === 'thing board <1>',
+  servo: (p) => top(p) === 'SG90 Servo Assembly <1>',
+  battery: (p) => top(p) === 'base <1>' && (sub(p) === 'Khay pin <1>' || sub(p) === 'Nắp khay pin <1>'),
+}
 function groupOf(p) {
+  if (MODE === 'parts') return Object.keys(PARTS).find((k) => PARTS[k](p)) ?? null
   if (top(p) === 'base <1>' && sub(p).startsWith('Wheel D65x25')) return 'wheel' + sub(p).match(/<(\d+)>/)[1]
   if (['Part 3 <1>', 'SG90 Servo Assembly <1>', 'Part 1 <2>'].includes(top(p))) return 'rack'
   if (top(p) === 'Part 10 <1>' || (top(p) === 'Assembly 2 <1>' && sub(p) === 'Part 2 <1>')) return 'hoop'
@@ -87,7 +96,7 @@ for (const [name, gr] of groups) {
   const box = new THREE.Box3()
   for (let k = 0; k < p.length; k += 3) box.expandByPoint(new THREE.Vector3(p[k], p[k + 1], p[k + 2]))
   const c = box.getCenter(new THREE.Vector3())
-  const pivot = name.startsWith('wheel') ? [c.x, c.y, c.z] : [0, 0, 0]
+  const pivot = name.startsWith('wheel') || MODE === 'parts' ? [c.x, c.y, c.z] : [0, 0, 0]
   const pq = Int16Array.from(p, (x, k) => Math.round((x - pivot[k % 3]) * Q))
   const idx = p.length / 3 > 65535 ? Uint32Array.from(gr.idx) : Uint16Array.from(gr.idx)
   tris += gr.idx.length / 3
