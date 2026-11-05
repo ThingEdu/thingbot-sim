@@ -98,3 +98,8 @@ export const CAD_WHEELS = ['wheel1', 'wheel3', 'wheel4', 'wheel5'] as const
 export const HOOP_PIVOT = new THREE.Vector3(-22, 95, 60)
 /** Góc nhấc tối đa của tay vòng khi thanh răng lùi hết, rad. */
 export const HOOP_LIFT = 1.1
+/**
+ * Lồng chứa bóng (ống nan đứng của thân CAD, vòng miệng ở cao 209–216 mm): tâm (x, z), tâm quả bóng dưới cùng `y0`
+ * (đáy lồng ~41,5 mm + bán kính bóng 20 mm), mỗi quả chồng thêm `step` (mm). 4 quả là đầy miệng lồng (anh Tuấn chốt 06/11).
+ */
+export const BALL_TUBE = { x: 58, z: 42, y0: 62, step: 40.5, top: 209 }
