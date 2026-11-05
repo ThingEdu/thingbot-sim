@@ -44,20 +44,22 @@ interface SkillDef {
   clearFire: boolean
   /** Biết nhận bóng từ Human Player ở Khu Tiếp Tế. */
   load: boolean
+  /** Robot không hút bóng (Mẫu Maker): ủi cả bóng cam vào Khu Chữa Cháy gần nhất khi đường đẩy không vướng bóng xanh. */
+  herdOrange: boolean
 }
 
 const SKILLS: Record<Skill, SkillDef> = {
   easy: {
     speed: 0.6, noise: 0.3, dropPerS: 0.05, forgetPark: 0.35, parkMargin: 6, flagAfter: 60, flagTol: 0.04, flagTries: 1,
-    selective: false, wrongColor: 0.3, grooves: [0, 1], ev: false, clearFire: false, load: false,
+    selective: false, wrongColor: 0.3, grooves: [0, 1], ev: false, clearFire: false, load: false, herdOrange: false,
   },
   medium: {
     speed: 0.75, noise: 0, dropPerS: 0, forgetPark: 0, parkMargin: 6, flagAfter: 30, flagTol: 0.024, flagTries: 2,
-    selective: false, wrongColor: 0, grooves: [0, 1], ev: false, clearFire: false, load: true,
+    selective: false, wrongColor: 0, grooves: [0, 1], ev: false, clearFire: false, load: true, herdOrange: false,
   },
   hard: {
     speed: 1, noise: 0, dropPerS: 0, forgetPark: 0, parkMargin: 3, flagAfter: 0, flagTol: 0.024, flagTries: 6,
-    selective: true, wrongColor: 0, grooves: [0, 1, 2], ev: true, clearFire: true, load: true,
+    selective: true, wrongColor: 0, grooves: [0, 1, 2], ev: true, clearFire: true, load: true, herdOrange: true,
   },
 }
 
@@ -110,6 +112,10 @@ const LOAD_GUARD_S = 5
 const LOAD_PLAN_S = 15
 /** Thời gian đứng chờ Human Player nạp đầy (0.8 s mỗi bóng) cộng dư. */
 const LOAD_WAIT_S = 8
+/** Ủi bóng: mũi xe đứng cách bóng chừng này trước khi đẩy; vòng lại tối đa HERD_TRIES lần; bỏ sau HERD_MAX_S giây. */
+const HERD_BEHIND = 0.09
+const HERD_TRIES = 3
+const HERD_MAX_S = 25
 /** Gom bóng: bỏ bóng sát núi / sát rào hơn chừng này (mũi xe không tới được). */
 const BALL_CLEAR_MTN = 0.06
 const BALL_CLEAR_WALL = 0.025
@@ -139,6 +145,14 @@ export function wheelCmd(v: number): number {
 
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a))
 const dist = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.z - b.z)
+/** Khoảng cách từ p tới đoạn a–b. */
+const segDist = (p: Vec2, a: Vec2, b: Vec2): number => {
+  const dx = b.x - a.x
+  const dz = b.z - a.z
+  const k = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / (dx * dx + dz * dz || 1)))
+  return Math.hypot(p.x - a.x - k * dx, p.z - a.z - k * dz)
+}
+const rectCentre = (r: Rect): Vec2 => ({ x: (r.x0 + r.x1) / 2, z: (r.z0 + r.z1) / 2 })
 const inRect = (r: Rect, p: Vec2, pad = 0) => p.x >= r.x0 - pad && p.x <= r.x1 + pad && p.z >= r.z0 - pad && p.z <= r.z1 + pad
 /** Hướng yaw để mũi xe chỉ từ `from` tới `to` (mũi f = (−sin yaw, −cos yaw)). */
 const yawTo = (from: Vec2, to: Vec2) => Math.atan2(-(to.x - from.x), -(to.z - from.z))
@@ -340,11 +354,13 @@ interface Board {
   flag: Map<number, Agent>
   /** Agent theo thứ tự bắt đầu về đỗ, theo liên minh. */
   park: { red: Agent[]; blue: Agent[] }
+  /** Bóng → agent đang ủi bóng đó về Khu Xuất Phát (hai robot không tranh một bóng). */
+  herd: Map<number, Agent>
 }
 const boards = new WeakMap<Match, Board>()
 function board(m: Match): Board {
   let b = boards.get(m)
-  if (!b) boards.set(m, (b = { flag: new Map(), park: { red: [], blue: [] } }))
+  if (!b) boards.set(m, (b = { flag: new Map(), park: { red: [], blue: [] }, herd: new Map() }))
   return b
 }
 
@@ -355,6 +371,7 @@ type Task =
   | { kind: 'mtn'; m: number; face: Vec2; plan: number[]; phase: 'go' | 'in' | 'drop' | 'back'; t: number; anyColor: boolean }
   | { kind: 'fire'; spot: Vec2; corner: Vec2; phase: 'go' | 'drop'; t: number; anyColor: boolean }
   | { kind: 'load'; spot: Vec2; phase: 'go' | 'wait'; t: number }
+  | { kind: 'herd'; ball: number; goal: Rect; phase: 'go' | 'push'; t: number; tries: number }
   | { kind: 'park'; spot: Vec2; dir: 1 | -1; phase: 'go' | 'dock' | 'done'; t: number }
   | { kind: 'idle'; t: number }
 
@@ -457,10 +474,12 @@ export class Agent {
   private setTask(t: Task | null): void {
     const b = this.boardOf
     if (b && this.task?.kind === 'flag' && b.flag.get(this.task.m) === this) b.flag.delete(this.task.m)
+    if (b && this.task?.kind === 'herd' && b.herd.get(this.task.ball) === this) b.herd.delete(this.task.ball)
     this.task = t
     this.path = []
     this.pathGoal = null
     if (b && t?.kind === 'flag') b.flag.set(t.m, this)
+    if (b && t?.kind === 'herd') b.herd.set(t.ball, this)
   }
 
 
@@ -481,6 +500,12 @@ export class Agent {
     if (n > 0 && (n >= this.capacity || target === null || this.collectT > COLLECT_MAX_S)) return this.deliverTask(view)
     // 3. Nhận bóng ở Khu Tiếp Tế.
     if (n === 0 && this.wantsLoad(view, left)) return { kind: 'load', spot: this.loadSpot(), phase: 'go', t: 0 }
+    // 3b. Không hút bóng trên sân (Mẫu Maker): ủi bóng xanh về Khu Xuất Phát cho Human Player nhặt.
+    if (n === 0 && !this.hasIntake && this.canHerd) {
+      const h = this.herdBall(view)
+      if (h) return { kind: 'herd', ...h, phase: 'go', t: 0, tries: 0 }
+      if (this.hpTray(view) > 0 && this.wantsLoad(view, left, true)) return { kind: 'load', spot: this.loadSpot(), phase: 'go', t: 0 }
+    }
     // 4. Gom bóng.
     if (target) return { kind: 'collect', color: target.color, ball: target.i, t: 0 }
     if (n > 0) return this.deliverTask(view)
@@ -689,13 +714,67 @@ export class Agent {
     return left >= this.deliverTime(from) + LOAD_GUARD_S + 2
   }
 
-  private wantsLoad(view: AgentView, left: number): boolean {
+  private wantsLoad(view: AgentView, left: number, anyTray = false): boolean {
     const hp = view.humans.find((h) => h.alliance === this.robot.alliance)
     if (!hp || this.robot.def.servos.S3 === undefined) return false // R33: không có cửa xả thì Human Player không nạp
     const spot = this.loadSpot()
     if (!this.loadAllowed(left - this.travel(spot) - LOAD_WAIT_S, spot)) return false
-    if (!this.hasIntake) return hp.tray.o + hp.tray.g >= 2
+    // Không hút bóng trên sân (Mẫu Maker): khay đủ một chuyến (4 bóng) mới về nhận; hết bóng để ủi thì nhận luôn.
+    if (!this.hasIntake) return hp.tray.o + hp.tray.g >= (anyTray ? 1 : this.capacity)
     return this.S.load && hp.tray.g >= 4 && hp.tray.g > hp.tray.o
+  }
+
+  /** Robot đẩy được bóng bằng mũi xe (không phải Xe Ủi — Xe Ủi hớt bóng vào gàu). */
+  private get canHerd(): boolean {
+    return this.robot.def.type !== 'ui'
+  }
+
+  private hpTray(view: AgentView): number {
+    const hp = view.humans.find((h) => h.alliance === this.robot.alliance)
+    return hp ? hp.tray.o + hp.tray.g : 0
+  }
+
+  /** Điểm đứng sau bóng q (phía xa đích g) để đẩy thẳng q về đích. */
+  private herdBehind(q: Vec2, g: Vec2): Vec2 {
+    const d = Math.max(1e-6, dist(q, g))
+    const k = this.robot.def.size.l / 2 + HERD_BEHIND
+    return { x: q.x + ((q.x - g.x) / d) * k, z: q.z + ((q.z - g.z) / d) * k }
+  }
+
+  /**
+   * Chọn bóng để ủi: bóng xanh về Khu Xuất Phát của mình (Human Player nhặt rồi nạp lại); mức Khó thêm bóng cam vào Khu
+   * Chữa Cháy gần nhất nếu dọc đường đẩy không có bóng xanh (kẻo dồn cả bóng xanh vào khu, −3 mỗi quả). Chọn tổng quãng
+   * tới chỗ đứng sau bóng + quãng đẩy nhỏ nhất.
+   */
+  private herdBall(view: AgentView): { ball: number; goal: Rect } | null {
+    const r = this.robot
+    const start = ZONES.start[r.alliance]
+    const claimed = new Set(this.boardOf ? [...this.boardOf.herd.entries()].filter(([, a]) => a !== this).map(([i]) => i) : [])
+    const greens = view.world.balls.flatMap((b) => (b.color === 'g' && b.st === 'field' && b.body ? [b.body.translation()] : []))
+    let best: { ball: number; goal: Rect } | null = null
+    let bestC = Infinity
+    view.world.balls.forEach((b, i) => {
+      if (b.st !== 'field' || !b.body || this.avoid.has(i) || claimed.has(i)) return
+      if (b.color === 'o' && !this.S.herdOrange) return
+      const q = b.body.translation()
+      if (q.y > 0.03 || inRect(start, q)) return
+      if (ZONES.fire.some((z) => inRect(z, q, 0.1))) return // góc rào: không lách ra sau bóng được
+      const goal = b.color === 'g' ? start : ZONES.fire[q.x < 0 ? 0 : 1]
+      const g = rectCentre(goal)
+      if (b.color === 'o' && greens.some((p) => segDist(p, q, g) < r.def.size.w / 2 + 0.05)) return
+      if (inRect(ZONES.safe.red, q) || inRect(ZONES.safe.blue, q)) return
+      if (inRect(ZONES.load.red, q, 0.1) || inRect(ZONES.load.blue, q, 0.1)) return
+      const behind = this.herdBehind(q, g)
+      if (mountainClearance(q.x, q.z) < 0.15 || wallClearance(q.x, q.z) < 0.15) return
+      if (mountainClearance(behind.x, behind.z) < TURN_CLEAR || wallClearance(behind.x, behind.z) < TURN_CLEAR) return
+      if (view.robots.some((o) => o !== r && dist(o.pose, q) < 0.3)) return
+      const c = dist(r.pose, behind) + dist(q, g)
+      if (c < bestC) {
+        bestC = c
+        best = { ball: i, goal }
+      }
+    })
+    return best
   }
 
   /** Chọn bóng để gom: gần nhất, ưu tiên xanh (cùng màu với bóng đang chở), khó ưu tiên xanh trong Khu Chữa Cháy. */
@@ -760,12 +839,59 @@ export class Agent {
         const full = this.carried() >= this.capacity
         const noGreen = this.hasIntake && hp !== undefined && (hp.tray.g === 0 || hp.tray.g <= hp.tray.o)
         const empty = hp !== undefined && hp.tray.o + hp.tray.g === 0
-        if (full || noGreen || empty || t.t > 15) this.setTask(null)
+        // Không hút bóng trên sân thì đợi Human Player nhặt thêm cho đầy (khay hết bóng quá 4 s mới đi).
+        const done = this.hasIntake ? empty : empty && t.t > 4
+        if (full || noGreen || done || t.t > 15) this.setTask(null)
         return
       }
       case 'park':
         return this.runPark(view, t)
+      case 'herd':
+        return this.runHerd(view, t)
     }
+  }
+
+  /** Ủi một bóng xanh về Khu Xuất Phát: tới chỗ đứng sau bóng, rồi tiến thẳng qua bóng tới đích. */
+  private runHerd(view: AgentView, t: Extract<Task, { kind: 'herd' }>): void {
+    const b = view.world.balls[t.ball]
+    const r = this.robot
+    const start = t.goal
+    const give = () => {
+      this.avoid.set(t.ball, this.time + 15)
+      this.setTask(null)
+    }
+    if (b.st !== 'field' || !b.body) return this.setTask(null)
+    const q = b.body.translation()
+    if (inRect(start, q, -0.03)) {
+      // Bóng đã vào hẳn khu: lùi ra (Human Player nhặt được / không đẩy bóng khác ra), rồi quyết định lại.
+      this.cmd.fwd = -CMD_SLOW
+      if (this.robot.footprint().every((c) => !inRect(start, c))) this.setTask(null)
+      else if (t.phase === 'push') t.phase = 'go'
+      return
+    }
+    if (t.t > HERD_MAX_S) return give()
+    const g = rectCentre(start)
+    if (t.phase === 'go') {
+      if (this.goTo(view, this.herdBehind(q, g), 0.06, false)) {
+        t.phase = 'push'
+        t.tries++
+      }
+      return
+    }
+    // Bóng phải nằm trước mũi, gần trục xe; lệch ra thì vòng lại phía sau bóng (tối đa HERD_TRIES lần).
+    const f = { x: Math.sin(r.pose.yaw), z: Math.cos(r.pose.yaw) }
+    const dx = q.x - r.pose.x
+    const dz = q.z - r.pose.z
+    const ahead = dx * f.x + dz * f.z
+    const side = Math.abs(dx * f.z - dz * f.x)
+    if (ahead < r.def.size.l / 2 - 0.02 || ahead > r.def.size.l / 2 + 0.25 || side > r.def.size.w / 2 - 0.02) {
+      if (t.tries >= HERD_TRIES) return give()
+      t.phase = 'go'
+      return
+    }
+    // Nhắm điểm trên đường bóng → đích, lấn sang phía bóng lệch để kéo bóng về trục xe.
+    const aimAt = { x: g.x + (q.x - r.pose.x - f.x * ahead) * 2, z: g.z + (q.z - r.pose.z - f.z * ahead) * 2 }
+    this.pushTo(aimAt, CMD_SLOW + 15)
   }
 
   private runCollect(view: AgentView, t: Extract<Task, { kind: 'collect' }>, dt: number): void {

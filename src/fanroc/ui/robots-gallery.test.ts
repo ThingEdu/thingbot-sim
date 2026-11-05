@@ -8,7 +8,6 @@ test('portRows: cổng lấy từ portMap + servo của ROBOTS (đế 2 bánh, �
   assert.deepEqual(portRows({ type: 'maker', drive: 'diff2', actuator: 'tt' }), [
     { port: 'M1', use: 'Bánh trái' },
     { port: 'M2', use: 'Bánh phải' },
-    { port: 'M3', use: 'Tay vòng xúc bóng · động cơ TT' },
     { port: 'M4', use: 'Thanh trượt răng · động cơ TT' },
     { port: 'S1', use: 'Nâng tay' },
     { port: 'S2', use: 'Kẹp cờ' },
@@ -18,9 +17,8 @@ test('portRows: cổng lấy từ portMap + servo của ROBOTS (đế 2 bánh, �
 
 test('portRows: đế 4 bánh chiếm M1–M4, cơ cấu chuyển sang S4 / S5 servo 360', () => {
   const rows = portRows({ type: 'maker', drive: 'omni', actuator: 'tt' })
-  assert.deepEqual(rows.map((r) => r.port), ['M1', 'M2', 'M3', 'M4', 'S1', 'S2', 'S3', 'S4', 'S5'])
+  assert.deepEqual(rows.map((r) => r.port), ['M1', 'M2', 'M3', 'M4', 'S1', 'S2', 'S3', 'S5'])
   assert.equal(rows.find((r) => r.port === 'M3')?.use, 'Bánh sau trái')
-  assert.equal(rows.find((r) => r.port === 'S4')?.use, 'Tay vòng xúc bóng · servo 360')
   assert.equal(rows.find((r) => r.port === 'S5')?.use, 'Thanh trượt răng · servo 360')
 })
 

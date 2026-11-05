@@ -45,9 +45,11 @@ export const ROBOTS: Record<RobotType, RobotDef> = {
     type: 'maker', name: 'Mẫu Maker',
     size: { w: 0.24, l: 0.3, h: 0.216 },
     drives: ['diff2', 'omni', 'mecanum'],
-    mech: { M3: 'Tay vòng xúc bóng', M4: 'Thanh trượt răng' },
+    // Không xúc bóng trên sân (anh Tuấn chốt 06/11): về Khu Tiếp Tế để Human Player bỏ bóng vào tay vòng, 4 bóng là đầy;
+    // thanh răng lùi kéo dây nhấc tay vòng đổ bóng — chỉ tới Rãnh 1 (bậc thấp nhất).
+    mech: { M4: 'Thanh trượt răng' },
     servos: { S1: 'Nâng tay', S2: 'Kẹp cờ', S3: 'Cửa xả' },
-    storage: 6, hpLoad: false, flag: true,
+    storage: 4, hpLoad: false, flag: true,
     // Thanh răng 300 mm, bánh răng giữa xe: lùi được ~200 mm (CAD) — đúng trần mở rộng 500 mm của luật.
     release: { y: 0.2, reach: 0.05 }, maxExtend: 0.2,
     arm: { reach: 0, up: 0.06 },

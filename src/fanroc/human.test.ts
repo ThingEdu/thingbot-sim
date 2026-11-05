@@ -94,11 +94,11 @@ test('load: khay rỗng, màu hết, robot đầy, robot khác liên minh', asyn
   hp.press('green', ctx(w, [r]))
   assert.equal(hp.color, 'g')
   assert.equal(hp.press('load', ctx(w, [r])), 'Khay hết bóng xanh')
-  // Đầy: Mẫu Maker chứa 6.
+  // Đầy: Mẫu Maker chứa 4 (tay vòng, anh Tuấn chốt 06/11).
   const s = mid(ZONES.start.red)
-  for (let k = 0; k < 7; k++) ball(w, 150 + k, s.x + (k - 3) * 0.03, s.z)
-  for (let k = 0; k < 7; k++) hp.press('pick', ctx(w, []))
-  for (let k = 0; k < 6; k++) assert.equal(hp.press('load', ctx(w, [r])), null)
+  for (let k = 0; k < 5; k++) ball(w, 150 + k, s.x + (k - 2) * 0.03, s.z)
+  for (let k = 0; k < 5; k++) hp.press('pick', ctx(w, []))
+  for (let k = 0; k < 4; k++) assert.equal(hp.press('load', ctx(w, [r])), null)
   assert.equal(hp.press('load', ctx(w, [r])), 'Robot đầy bóng')
   assert.deepEqual(hp.tray, { o: 0, g: 1 }) // bóng bị từ chối vẫn còn trong khay
   // Robot liên minh khác không được nạp dù đứng trong khu.
@@ -211,10 +211,10 @@ test('auto: Xe Cắm Cờ (hpLoad) nhận xanh trước, rồi cam', async () =>
 test('auto: robot thường nhận màu khay có nhiều hơn (hoà thì cam); deterministic', async () => {
   const run = async () => {
     const { w, hp, r } = await stocked(MAKER)
-    for (let k = 0; k < 5; k++) hp.auto(ctx(w, [r]), 0.8)
+    for (let k = 0; k < 4; k++) hp.auto(ctx(w, [r]), 0.8)
     return r.stored.map((i) => w.balls[i].color).join('')
   }
-  assert.equal(await run(), 'oogog') // khay 3o2g: o, (2o2g hoà) o, (1o2g) g, (1o1g hoà) o, g
+  assert.equal(await run(), 'oogo') // khay 3o2g: o, (2o2g hoà) o, (1o2g) g, (1o1g hoà) o — Mẫu Maker đầy ở 4
   assert.equal(await run(), await run())
 })
 

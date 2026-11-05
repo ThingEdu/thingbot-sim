@@ -331,13 +331,13 @@ test('dọn Khu Chữa Cháy (nhiệm vụ 9) và trận đầu (nhiệm vụ 12
   assert.equal(grade(m9, record(m9, { tally: dirty })).done, false)
   assert.equal(grade(m9, record(m9, { tally: { ...dirty, fire: { o: 3, g: 28 } }, trail: { distance: 3, turned: 0, time: 40 } })).stars, 3)
   const m12 = byN(12)
-  const end = [{ t: 180, robot: null, text: 'Hết giờ — điểm trận 400' }]
-  const tally = { ...emptyTally(), fire: { o: 80, g: 0 } }
-  assert.equal(scoreTally(tally).total, 400)
+  const end = [{ t: 180, robot: null, text: 'Hết giờ — điểm trận 175' }]
+  const tally = { ...emptyTally(), fire: { o: 35, g: 0 } } // 175: giữa ⭐⭐ 150 và ⭐⭐⭐ 200 (R140)
+  assert.equal(scoreTally(tally).total, 175)
   assert.equal(grade(m12, record(m12, { tally })).done, false, 'chưa hết giờ')
   const r = grade(m12, record(m12, { tally, events: end }))
   assert.deepEqual([r.done, r.stars], [true, 2])
-  assert.match(r.hint ?? '', /400 điểm/)
+  assert.match(r.hint ?? '', /175 điểm/)
 })
 
 // ---------- Giải được trên sân thật ----------

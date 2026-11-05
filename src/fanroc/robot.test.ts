@@ -57,13 +57,14 @@ test('Mecanum FL +60, FR −60, RL −60, RR +60: đi ngang sang phải, |Δz| <
   assert.ok(r.pose.x - -0.5 > 0.3, `Δx ${r.pose.x + 0.5}`)
 })
 
-/** Đặt bóng nằm giữa miệng hút (trước mũi xe ở z = 0.9 − l/2). */
+/** Đặt bóng nằm giữa miệng hút của Xe Phân Loại (trước mũi xe ở z = 0.9 − l/2). Mẫu Maker không hút bóng. */
 const ballAtMouth = (w: FanrocWorld, i: number) => {
-  w.placeBall(i, { x: 0, y: BALL_R, z: 0.9 - ROBOTS.maker.size.l / 2 - 0.025 })
+  w.placeBall(i, { x: 0, y: BALL_R, z: 0.9 - ROBOTS.sort.size.l / 2 - 0.025 })
 }
+const SORT: RobotConfig = { type: 'sort', drive: 'diff2', actuator: 'tt' }
 
 test('Hút: bóng trước mũi + M3 = 0 trong 1 s ⇒ không hút; M3 = 80 ⇒ stored.length === 1', async () => {
-  const { w, r } = await corridor()
+  const { w, r } = await corridor(SORT)
   ballAtMouth(w, 150)
   drive(w, r, {}, 1)
   assert.equal(r.stored.length, 0)
@@ -74,24 +75,24 @@ test('Hút: bóng trước mũi + M3 = 0 trong 1 s ⇒ không hút; M3 = 80 ⇒ 
 })
 
 test('Hút M3 = 15 (vùng chết) ⇒ không hút', async () => {
-  const { w, r } = await corridor()
+  const { w, r } = await corridor(SORT)
   ballAtMouth(w, 150)
   drive(w, r, { M3: 15 }, 0.5)
   assert.equal(r.stored.length, 0)
 })
 
-test('Maker 6 bóng + S3 = 150 ⇒ sau 2 s hết bóng, 6 bóng về sân', async () => {
+test('Maker 4 bóng + S3 = 150 ⇒ sau 2 s hết bóng, 4 bóng về sân', async () => {
   const { w, r } = await corridor()
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 4; i++) {
     w.placeBall(i, { x: 1, y: BALL_R, z: 0.1 * i })
     assert.ok(r.take(i))
   }
   w.placeBall(6, { x: 1, y: BALL_R, z: 0.7 })
-  assert.equal(r.take(6), false, 'đầy 6 bóng thì không nhận thêm')
-  assert.equal(r.stored.length, 6)
+  assert.equal(r.take(6), false, 'đầy 4 bóng thì không nhận thêm')
+  assert.equal(r.stored.length, 4)
   drive(w, r, { S3: 150 }, 2)
   assert.equal(r.stored.length, 0)
-  for (let i = 0; i < 6; i++) assert.equal(w.balls[i].st, 'field')
+  for (let i = 0; i < 4; i++) assert.equal(w.balls[i].st, 'field')
 })
 
 test('Xe Ủi không có cửa xả S3 (R33): lệnh S3 = 150 không xả bóng đang giữ', async () => {

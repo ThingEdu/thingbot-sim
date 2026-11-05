@@ -164,20 +164,24 @@ test('TeleOp xe tăng: cần giữa (và trong vùng 120…136) đứng yên, k�
   assert.ok(Math.abs(half.M1 - 50) <= 1 && half.M2 === 0, `nửa cần ${half.M1}, ${half.M2}`)
 })
 
-test('TeleOp Mẫu Maker: R1 hút (M3), △ / ✕ vươn / thu (M4), ○ mở cửa xả S3, □ mở kẹp S2', () => {
+test('TeleOp Mẫu Maker: △ / ✕ vươn / thu (M4), ○ mở cửa xả S3, □ mở kẹp S2; không hút bóng (R1 không dùng M3)', () => {
   const sim = code(SAMPLES.maker.teleop)
   const idle = runFor(sim, pad(), 200)
   assert.deepEqual([idle.M3, idle.M4, idle.S2, idle.S3], [0, 0, 180, 0])
   const p = runFor(sim, pad({ ps2_PSB_R1: 1, ps2_PSB_TRIANGLE: 1, ps2_PSB_CIRCLE: 1, ps2_PSB_SQUARE: 1 }), 200)
-  assert.deepEqual([p.M3, p.M4, p.S2, p.S3], [100, 100, 0, 180])
+  assert.deepEqual([p.M3, p.M4, p.S2, p.S3], [0, 100, 0, 180])
   assert.equal(runFor(sim, pad({ ps2_PSB_CROSS: 1 }), 200).M4, -100)
 })
 
-test('TeleOp servo 360: R1 hút bằng S4 = 180°, △ nâng bằng S5 = 180°, thả nút là 90° (dừng)', () => {
+test('TeleOp servo 360: R1 hút bằng S4 = 180° (Xe Phân Loại), △ nâng bằng S5 = 180° (Mẫu Maker), thả nút là 90° (dừng)', () => {
+  const sort = code(sample({ type: 'sort', drive: 'diff2', actuator: 's360' }, 'teleop'))
+  assert.equal(runFor(sort, pad(), 200).S4, 90)
+  const ps = runFor(sort, pad({ ps2_PSB_R1: 1 }), 200)
+  assert.deepEqual([ps.S4, ps.M3], [180, 0])
   const sim = code(sample({ type: 'maker', drive: 'diff2', actuator: 's360' }, 'teleop'))
-  assert.deepEqual([runFor(sim, pad(), 200).S4, runFor(sim, pad(), 200).S5], [90, 90])
-  const p = runFor(sim, pad({ ps2_PSB_R1: 1, ps2_PSB_TRIANGLE: 1 }), 200)
-  assert.deepEqual([p.S4, p.S5, p.M3, p.M4], [180, 180, 0, 0])
+  assert.equal(runFor(sim, pad(), 200).S5, 90)
+  const p = runFor(sim, pad({ ps2_PSB_TRIANGLE: 1 }), 200)
+  assert.deepEqual([p.S5, p.M4], [180, 0])
 })
 
 test('TeleOp Xe Phân Loại: L2 gạt S2 sang ngăn xanh, L1 về ngăn cam, ○ mở cửa S3', () => {

@@ -7,7 +7,7 @@
 //   dừng, ngoài vùng đó «set motor … go forward/backward at (|v − 128| × 100 / 128)» (đẩy cần lên = số nhỏ = tiến).
 //   Đế 4 bánh (omni / mecanum): cần trái LY tiến/lùi, LX sang ngang, cần phải RX xoay; M1–M4 = trước trái, trước phải,
 //   sau trái, sau phải, mỗi bánh = tiến ± ngang ± xoay (công thức ở `mix`).
-// - R1 giữ: cơ cấu hút (M3, hoặc servo 360 ở S4). △ / ✕ giữ: nâng / hạ (M4, hoặc S5); Xe Ủi: △ / ✕ nâng / hạ gàu S1.
+// - R1 giữ: cơ cấu hút (M3, hoặc servo 360 ở S4) — robot có hút (Mẫu Maker không hút: Human Player nạp bóng). △ / ✕ giữ: nâng / hạ (M4, hoặc S5); Xe Ủi: △ / ✕ nâng / hạ gàu S1.
 // - ○ giữ: mở cửa xả S3. □ giữ: mở kẹp cờ S2 (nhả ra là kẹp lại). L1 / L2: nâng / hạ tay S1 (Mẫu Maker, Xe Cắm Cờ).
 // - Xe Phân Loại (chưa có khối cảm biến màu, người lái tự phân loại): L1 = gạt S2 sang ngăn cam (0°), L2 = sang ngăn
 //   xanh (180°); servo giữ nguyên chỗ cho tới lần bấm sau. ○ mở cửa S3 của ngăn đang chọn.

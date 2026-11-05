@@ -348,12 +348,13 @@ export const MISSIONS: Mission[] = [
     guide: [
       '10 giây đầu bóng được xả xuống sân, robot chưa chạy. Sau đó có 180 giây thi đấu.',
       'Bóng cam vào Khu Chữa Cháy, bóng xanh lên rãnh núi, cắm cờ lên đỉnh núi đều được điểm.',
+      'Robot không tự xúc bóng: dùng thân xe ủi bóng xanh về Khu Xuất Phát cho Human Player nhặt, rồi vào Khu Tiếp Tế nhận bóng (4 quả là đầy) và đổ vào Rãnh 1 — bậc thấp nhất của núi.',
       '30 giây cuối là End Game: nhớ đưa robot về Vùng Bảo Vệ.',
     ],
     goals: [{ type: 'matchEnd' }],
-    // 4 robot máy mức Dễ được trung bình 417 điểm (docs/fanroc/quyet-dinh.md); em thay một robot máy, nên 350 / 450 điểm
-    // nghĩa là em góp được bằng / hơn hẳn một robot máy.
-    stars: { two: [{ type: 'score', min: 350 }], three: [{ type: 'score', min: 450 }] },
+    // 4 robot máy mức Dễ được trung bình 176 điểm (R140, docs/fanroc/quyet-dinh.md); em thay một robot máy, nên 150 / 200
+    // điểm nghĩa là em góp được bằng / hơn hẳn một robot máy.
+    stars: { two: [{ type: 'score', min: 150 }], three: [{ type: 'score', min: 200 }] },
     hints: [
       { when: 'matchEnd', text: 'Chơi tới hết giờ để được chấm nhé.' },
       { when: 'score', text: 'Trận được {d} điểm. Muốn nhiều sao hơn: chở bóng nhiều chuyến hơn và nhớ đỗ xe cuối trận.' },
