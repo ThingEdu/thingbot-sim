@@ -183,6 +183,8 @@ export class RobotBody {
 
   /** Điểm xả bóng: mũi + reach (+ vươn), cao release.y (+ nâng). */
   releasePoint(): { x: number; y: number; z: number } {
+    const c = this.def.chute
+    if (c) return this.ahead(c.reach, c.y)
     return this.ahead(this.def.release.reach + this.forwardExtend, this.def.release.y + this.liftUp)
   }
 

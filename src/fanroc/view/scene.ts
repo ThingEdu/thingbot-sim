@@ -9,7 +9,7 @@ import type { RobotBody } from '../robot.ts'
 import type { Match } from '../match.ts'
 import { servo360, type PortValues } from '../ports.ts'
 import { FLAG_LEN, buildRobotModel, makeFlag, type RobotModel } from './robotModels.ts'
-import { BALL_TUBE } from './cadModel.ts'
+import { chuteSlot } from './cadModel.ts'
 import { TRAIL_COLORS, type Trail } from '../trail.ts'
 import mesh from '../assets/mountain-mesh.json' with { type: 'json' }
 
@@ -586,9 +586,9 @@ export function createScene(el: HTMLElement): FanrocScene {
         const o = owner.get(i)
         if (!o) return put(i, null)
         const r = robots[o.r]
-        // Mẫu Maker: bóng chồng trong lồng chứa bóng (ống đứng của CAD). Robot khác: chồng trên thân, 3 quả một hàng.
+        // Mẫu Maker: bóng nối nhau theo lồng ống cong, quả ra trước nằm ở vòng cửa ra. Robot khác: chồng trên thân, 3 quả một hàng.
         const lift = r.def.type === 'co' ? r.extend : 0
-        if (r.def.type === 'maker') tmp.set(BALL_TUBE.x, BALL_TUBE.y0 + o.n * BALL_TUBE.step, BALL_TUBE.z).multiplyScalar(0.001)
+        if (r.def.type === 'maker') chuteSlot(o.n, tmp).multiplyScalar(0.001)
         else tmp.set(((o.n % 3) - 1) * 0.042, r.def.size.h + BALL_R + 0.004 + lift + Math.floor(o.n / 3) * 0.042, -0.02)
         put(i, robotViews[o.r].model.group.localToWorld(tmp))
       } else if (b.st === 'tray') {

@@ -38,6 +38,11 @@ export interface RobotDef {
    * ngắn lại tối đa chừng này). CAD Mẫu Maker: cả cụm dài 302 mm (đuôi khung −116 … mũi thanh răng +186 mm quanh tâm khung).
    */
   rearGrip?: { rest: number; half: number; front: number }
+  /**
+   * Bóng ra ở cửa máng thay cho `release` (Mẫu Maker: lồng ống cong xuống vòng cửa ra trước thân, servo S3 chặn cửa; không
+   * có cơ cấu nâng hạ nên chỉ tới Rãnh 1). `reach` tính từ mũi khung (âm = lùi vào trong thân), `y` là tâm bóng so với sàn.
+   */
+  chute?: { reach: number; y: number }
 }
 
 export const ROBOTS: Record<RobotType, RobotDef> = {
@@ -54,6 +59,8 @@ export const ROBOTS: Record<RobotType, RobotDef> = {
     release: { y: 0.2, reach: 0.05 }, maxExtend: 0.2,
     arm: { reach: 0, up: 0.06 },
     rearGrip: { rest: 0.1265, half: 0.0235, front: 0.039 },
+    // Vòng cửa ra của lồng (CAD: tâm 68 mm trước tâm khung, cao 93 mm); bóng qua vòng rơi ra ở ~100 mm trước tâm.
+    chute: { reach: -0.05, y: 0.093 },
   },
   ui: {
     type: 'ui', name: 'Xe Ủi',

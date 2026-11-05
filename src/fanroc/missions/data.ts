@@ -352,9 +352,9 @@ export const MISSIONS: Mission[] = [
       '30 giây cuối là End Game: nhớ đưa robot về Vùng Bảo Vệ.',
     ],
     goals: [{ type: 'matchEnd' }],
-    // 4 robot máy mức Dễ được trung bình 176 điểm (R140, docs/fanroc/quyet-dinh.md); em thay một robot máy, nên 150 / 200
+    // 4 robot máy mức Dễ được trung bình 211 điểm (R141, docs/fanroc/quyet-dinh.md); em thay một robot máy, nên 180 / 230
     // điểm nghĩa là em góp được bằng / hơn hẳn một robot máy.
-    stars: { two: [{ type: 'score', min: 150 }], three: [{ type: 'score', min: 200 }] },
+    stars: { two: [{ type: 'score', min: 180 }], three: [{ type: 'score', min: 230 }] },
     hints: [
       { when: 'matchEnd', text: 'Chơi tới hết giờ để được chấm nhé.' },
       { when: 'score', text: 'Trận được {d} điểm. Muốn nhiều sao hơn: chở bóng nhiều chuyến hơn và nhớ đỗ xe cuối trận.' },

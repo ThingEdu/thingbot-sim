@@ -99,7 +99,31 @@ export const HOOP_PIVOT = new THREE.Vector3(-22, 95, 60)
 /** Góc nhấc tối đa của tay vòng khi thanh răng lùi hết, rad. */
 export const HOOP_LIFT = 1.1
 /**
- * Lồng chứa bóng (ống nan đứng của thân CAD, vòng miệng ở cao 209–216 mm): tâm (x, z), tâm quả bóng dưới cùng `y0`
- * (đáy lồng ~41,5 mm + bán kính bóng 20 mm), mỗi quả chồng thêm `step` (mm). 4 quả là đầy miệng lồng (anh Tuấn chốt 06/11).
+ * Lồng chứa bóng (anh Tuấn chốt 06/11): ống nan đứng của thân CAD (tâm x 58, z 43, vòng miệng cao 209–216 mm) cong xuống
+ * phía trước bên trái, tới vòng cửa ra (nhóm `hoop`, tâm ~(−21, 93, 68)) có servo S3 chặn. Bóng xếp nối nhau theo đường
+ * giữa ống (mm, hệ toạ độ hình), quả 0 ở cửa ra — quả ra trước — mỗi quả cách nhau BALL_STEP.
  */
-export const BALL_TUBE = { x: 58, z: 42, y0: 62, step: 40.5, top: 209 }
+export const BALL_CHUTE: readonly (readonly [number, number, number])[] = [
+  [-14, 93, 68],
+  [18, 100, 60],
+  [48, 118, 50],
+  [58, 140, 43],
+  [58, 195, 43],
+]
+export const BALL_STEP = 40.5
+
+/** Tâm quả bóng thứ n trong lồng (mm, hệ toạ độ hình), đi theo BALL_CHUTE từ cửa ra. */
+export function chuteSlot(n: number, out = new THREE.Vector3()): THREE.Vector3 {
+  let s = n * BALL_STEP
+  for (let i = 0; i < BALL_CHUTE.length - 1; i++) {
+    const a = BALL_CHUTE[i]
+    const b = BALL_CHUTE[i + 1]
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2])
+    if (s <= len || i === BALL_CHUTE.length - 2) {
+      const k = s / len
+      return out.set(a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k)
+    }
+    s -= len
+  }
+  return out.set(...BALL_CHUTE[0])
+}

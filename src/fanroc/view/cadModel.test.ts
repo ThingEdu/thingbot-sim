@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import * as THREE from 'three'
-import { BALL_TUBE, CAD_WHEELS, makerCad } from './cadModel.ts'
+import { BALL_STEP, CAD_WHEELS, chuteSlot, makerCad } from './cadModel.ts'
 import { ROBOTS, localGripPoint, rearExtent, rearOverhang } from '../robots.ts'
 
 test('Mẫu Maker CAD: đủ nhóm thân / thanh răng / tay vòng / 4 bánh; cỡ khớp hộp va chạm 240 × 300 mm', () => {
@@ -22,22 +22,26 @@ test('Mẫu Maker CAD: đủ nhóm thân / thanh răng / tay vòng / 4 bánh; c�
   for (const k of CAD_WHEELS) assert.ok(Math.abs(groups[k].pivot.y - 35) < 3, `${k} tâm cao ${groups[k].pivot.y}`)
 })
 
-test('Lồng chứa bóng: 4 bóng (đầy theo ROBOTS.maker.storage) chồng vừa trong ống, miệng ống là vòng CAD ở cao 209 mm', () => {
+test('Lồng chứa bóng: 4 bóng nối nhau theo ống cong, quả đầu ở vòng cửa ra, quả cuối trong ống đứng dưới miệng ống', () => {
   const { groups } = makerCad()
-  const pos = groups.body.geo.getAttribute('position')
   const R = 20 // bán kính bóng, mm
-  let ring = 0
-  let floor = Infinity
-  for (let i = 0; i < pos.count; i++) {
-    const r = Math.hypot(pos.getX(i) - BALL_TUBE.x, pos.getZ(i) - BALL_TUBE.z)
-    const y = pos.getY(i)
-    if (y >= BALL_TUBE.top && r > R && r < 35) ring++ // vòng miệng ống bao quanh tâm, rộng hơn quả bóng
-    if (r < R && y > 40) floor = Math.min(floor, y) // đáy lồng ngay dưới tâm ống
+  // Vòng cửa ra: tâm khối các đỉnh nhóm hoop (hệ hình = đỉnh + pivot).
+  const hp = groups.hoop.geo.getAttribute('position')
+  const ring = new THREE.Vector3()
+  for (let i = 0; i < hp.count; i++) ring.add(new THREE.Vector3(hp.getX(i), hp.getY(i), hp.getZ(i)))
+  ring.divideScalar(hp.count).add(groups.hoop.pivot)
+  const s = [0, 1, 2, 3].map((n) => chuteSlot(n))
+  assert.ok(s[0].distanceTo(ring) < 15, `quả ra trước cách tâm vòng cửa ra ${s[0].distanceTo(ring).toFixed(0)} mm`)
+  for (let n = 1; n < 4; n++) {
+    const d = s[n].distanceTo(s[n - 1])
+    assert.ok(d >= 2 * R - 1 && d <= BALL_STEP + 0.5, `bóng ${n - 1}–${n} cách ${d.toFixed(1)} mm (chồng nhau / hở)`)
   }
-  assert.ok(ring > 10, `không thấy vòng miệng ống quanh tâm (${ring} đỉnh)`)
-  assert.ok(Math.abs(BALL_TUBE.y0 - R - floor) < 2, `quả dưới cùng không nằm trên đáy lồng (${floor.toFixed(1)} mm)`)
-  const topBall = BALL_TUBE.y0 + (ROBOTS.maker.storage - 1) * BALL_TUBE.step + R
-  assert.ok(topBall <= BALL_TUBE.top && topBall > BALL_TUBE.top - BALL_TUBE.step, `4 bóng cao ${topBall} mm — phải vừa đầy miệng ống`)
+  // Quả cuối trong ống đứng: ngay dưới tâm vòng miệng ống (các đỉnh thân cao ≥ 209 mm quanh x 58, z 43), không trồi khỏi miệng.
+  const bp = groups.body.geo.getAttribute('position')
+  let top = 0
+  for (let i = 0; i < bp.count; i++) if (Math.hypot(bp.getX(i) - 58, bp.getZ(i) - 43) < 35 && bp.getY(i) > top) top = bp.getY(i)
+  const last = s[ROBOTS.maker.storage - 1]
+  assert.ok(Math.hypot(last.x - 58, last.z - 43) < 5 && last.y + R < top, `quả cuối ở ${last.toArray().map((v) => v.toFixed(0))} — phải trong ống đứng`)
 })
 
 test('Mẫu Maker cắm cờ bằng đuôi: lúc thu giá cờ trên nóc (chưa nhô), lùi hết vẫn trong trần mở rộng 500 mm', () => {
