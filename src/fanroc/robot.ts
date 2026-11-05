@@ -10,7 +10,7 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import type { FanrocWorld } from './world.ts'
 import { HOLE, PEAK_Y, START_POSES, type Alliance, type Pose } from './layout.ts'
 import { servo360, type PortValues } from './ports.ts'
-import { LIFT_AXIS, localGripPoint, rearExtent, rearOverhang, ROBOTS, portMap, type PortMap, type RobotConfig, type RobotDef } from './robots.ts'
+import { chuteExit, LIFT_AXIS, localGripPoint, rearExtent, rearOverhang, ROBOTS, portMap, type PortMap, type RobotConfig, type RobotDef } from './robots.ts'
 
 export type Vec2 = { x: number; z: number }
 
@@ -150,9 +150,9 @@ export class RobotBody {
     return this.armFrac * (this.def.arm?.reach ?? 0)
   }
 
-  /** Phần nhô ra trước mũi xe (vươn + tay kẹp), m. */
+  /** Phần nhô ra trước mũi xe (vươn + tay kẹp, hoặc cửa lồng nâng bằng servo vượt mũi khung), m. */
   get forwardExtension(): number {
-    return this.forwardExtend + (this.flagBehind ? 0 : this.armReach)
+    return this.forwardExtend + (this.flagBehind ? 0 : this.armReach) + Math.max(0, chuteExit(this.def, this.armFrac)?.reach ?? 0)
   }
 
   /** Phần nhô ra sau đuôi xe (giá cờ trên thanh răng vượt mép sau), m. */
@@ -183,7 +183,7 @@ export class RobotBody {
 
   /** Điểm xả bóng: mũi + reach (+ vươn), cao release.y (+ nâng). */
   releasePoint(): { x: number; y: number; z: number } {
-    const c = this.def.chute
+    const c = chuteExit(this.def, this.armFrac)
     if (c) return this.ahead(c.reach, c.y)
     return this.ahead(this.def.release.reach + this.forwardExtend, this.def.release.y + this.liftUp)
   }

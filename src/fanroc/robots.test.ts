@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { portMap, ROBOTS, ruleChecks } from './robots.ts'
+import { chuteExit, portMap, ROBOTS, ruleChecks } from './robots.ts'
 import { ZONES } from './layout.ts'
 
 test('portMap Maker diff2 + TT: L=M1, R=M2, nâng=M4, không hút (Human Player nạp bóng)', () => {
@@ -96,4 +96,37 @@ test('localGripPoint: Mẫu Maker kẹp cờ ở đuôi, thanh răng lùi ra sau
   const c0 = localGripPoint(ROBOTS.co, 0, 0)
   const c1 = localGripPoint(ROBOTS.co, 0.05, 0)
   assert.ok(Math.abs(c1.y - c0.y - 0.05) < 1e-9 && c1.z === c0.z)
+})
+
+test('mẫu cải tiến Maker (R142): đủ cổng ThingBot, đúng luật lúc xuất phát; Pro 4 bánh dùng hết 4 động cơ + 5 servo', () => {
+  for (const type of ['makerLift', 'makerIntake', 'makerPro'] as const) {
+    for (const drive of ROBOTS[type].drives) {
+      const r = ruleChecks({ type, drive, actuator: 'tt' }, 0)
+      assert.ok(r.every((c) => c.ok === true), `${type}/${drive}: ${JSON.stringify(r)}`)
+    }
+  }
+  assert.equal(ROBOTS.makerPro.drives[0], 'omni')
+  const pro = ruleChecks({ type: 'makerPro', drive: 'omni', actuator: 'tt' }, 0)
+  assert.ok(pro.some((c) => c.text === 'Động cơ TT: 4 / 4') && pro.some((c) => c.text === 'Servo: 5 / 5'), JSON.stringify(pro))
+  assert.equal(portMap({ type: 'makerIntake', drive: 'diff2', actuator: 'tt' }).intake, 'M3')
+  assert.deepEqual([ROBOTS.maker.storage, ROBOTS.makerLift.storage, ROBOTS.makerIntake.storage, ROBOTS.makerPro.storage], [4, 4, 8, 8])
+  assert.ok(ROBOTS.makerPro.size.h <= 0.85, 'lồng nối dài vẫn dưới trần cao 850 mm')
+})
+
+test('chuteExit: Mẫu Maker cửa ra đứng yên; Maker Nâng đi thẳng từ cửa CAD tới chuteLift theo S1 / 180', () => {
+  assert.deepEqual(chuteExit(ROBOTS.maker, 1), ROBOTS.maker.chute)
+  assert.deepEqual(chuteExit(ROBOTS.makerLift, 0), ROBOTS.makerLift.chute)
+  assert.deepEqual(chuteExit(ROBOTS.makerLift, 1), ROBOTS.makerLift.chuteLift)
+  const mid = chuteExit(ROBOTS.makerLift, 0.5)!
+  assert.ok(Math.abs(mid.reach - 0.04) < 1e-9 && Math.abs(mid.y - 0.1515) < 1e-9, JSON.stringify(mid))
+  assert.equal(chuteExit(ROBOTS.co, 1), null)
+})
+
+test('Maker Nâng: cửa lồng nâng hết vượt mũi 130 mm, tính vào mở rộng; cùng thanh răng lùi hết thì quá 500 mm', () => {
+  const cfg = { type: 'makerLift', drive: 'diff2', actuator: 'tt' } as const
+  const up = ruleChecks(cfg, 0, 1).find((c) => /Mở rộng/.test(c.text))!
+  assert.equal(up.ok, true)
+  assert.match(up.text, /430 mm/)
+  const both = ruleChecks(cfg, 0.2, 1).find((c) => /Mở rộng/.test(c.text))!
+  assert.equal(both.ok, false, both.text)
 })

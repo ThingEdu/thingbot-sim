@@ -3,7 +3,7 @@
 import type { PortValues } from './ports.ts'
 import { ZONES } from './layout.ts'
 
-export type RobotType = 'maker' | 'ui' | 'co' | 'sort'
+export type RobotType = 'maker' | 'makerLift' | 'makerIntake' | 'makerPro' | 'ui' | 'co' | 'sort'
 export type Drive = 'diff2' | 'omni' | 'mecanum'
 export type Actuator = 'tt' | 's360'
 
@@ -43,24 +43,62 @@ export interface RobotDef {
    * có cơ cấu nâng hạ nên chỉ tới Rãnh 1). `reach` tính từ mũi khung (âm = lùi vào trong thân), `y` là tâm bóng so với sàn.
    */
   chute?: { reach: number; y: number }
+  /**
+   * Cửa ra của lồng ở S1 = 180° khi có servo MG996R nâng cửa lồng (mẫu Maker Nâng / Maker Pro): cửa ra đi thẳng từ `chute`
+   * (S1 = 0°) tới đây theo S1 / 180 — với tới Rãnh 2–3. Phần vượt mũi khung tính vào mức mở rộng.
+   */
+  chuteLift?: { reach: number; y: number }
+  /** Dựng hình từ CAD Mẫu Maker (thân, lồng ống, thanh răng, bánh) và các phần cải tiến của nó. */
+  cad?: 'maker'
 }
 
+const MAKER: RobotDef = {
+  type: 'maker', name: 'Mẫu Maker',
+  size: { w: 0.24, l: 0.3, h: 0.216 },
+  drives: ['diff2', 'omni', 'mecanum'],
+  // Không xúc bóng trên sân (anh Tuấn chốt 06/11): về Khu Tiếp Tế để Human Player bỏ bóng vào lồng ống, 4 bóng là đầy;
+  // servo S3 mở cửa ra cuối lồng; robot mẫu không có cơ cấu nâng hạ lồng nên chỉ tới Rãnh 1 (bậc thấp nhất).
+  mech: { M4: 'Thanh trượt răng' },
+  servos: { S1: 'Nâng tay', S2: 'Kẹp cờ', S3: 'Cửa xả' },
+  storage: 4, hpLoad: false, flag: true,
+  // Thanh răng 300 mm, bánh răng giữa xe: lùi được ~200 mm (CAD) — đúng trần mở rộng 500 mm của luật.
+  release: { y: 0.2, reach: 0.05 }, maxExtend: 0.2,
+  arm: { reach: 0, up: 0.06 },
+  rearGrip: { rest: 0.1265, half: 0.0235, front: 0.039 },
+  // Vòng cửa ra của lồng (CAD: tâm 68 mm trước tâm khung, cao 93 mm); bóng qua vòng rơi ra ở ~100 mm trước tâm.
+  chute: { reach: -0.05, y: 0.093 },
+  cad: 'maker',
+}
+
+/** Cửa ra lồng nâng bằng servo MG996R ở S1 (thay "nâng tay"): S1 = 180° ⇒ cửa ra cao 210 mm, vượt mũi khung 130 mm. */
+const CHUTE_LIFT = { reach: 0.13, y: 0.21 }
+/** Ống lồng nối dài (in 3D / ống nhựa cùng cỡ) cho 8 bóng: miệng ống cao 350 mm (luật cho tới 850 mm). */
+const TALL_H = 0.35
+
 export const ROBOTS: Record<RobotType, RobotDef> = {
-  maker: {
-    type: 'maker', name: 'Mẫu Maker',
-    size: { w: 0.24, l: 0.3, h: 0.216 },
-    drives: ['diff2', 'omni', 'mecanum'],
-    // Không xúc bóng trên sân (anh Tuấn chốt 06/11): về Khu Tiếp Tế để Human Player bỏ bóng vào tay vòng, 4 bóng là đầy;
-    // thanh răng lùi kéo dây nhấc tay vòng đổ bóng — chỉ tới Rãnh 1 (bậc thấp nhất).
-    mech: { M4: 'Thanh trượt răng' },
-    servos: { S1: 'Nâng tay', S2: 'Kẹp cờ', S3: 'Cửa xả' },
-    storage: 4, hpLoad: false, flag: true,
-    // Thanh răng 300 mm, bánh răng giữa xe: lùi được ~200 mm (CAD) — đúng trần mở rộng 500 mm của luật.
-    release: { y: 0.2, reach: 0.05 }, maxExtend: 0.2,
-    arm: { reach: 0, up: 0.06 },
-    rearGrip: { rest: 0.1265, half: 0.0235, front: 0.039 },
-    // Vòng cửa ra của lồng (CAD: tâm 68 mm trước tâm khung, cao 93 mm); bóng qua vòng rơi ra ở ~100 mm trước tâm.
-    chute: { reach: -0.05, y: 0.093 },
+  maker: MAKER,
+  // Ba mẫu cải tiến chỉ dùng linh kiện có trong CAD "Bộ thingbot mới" (servo MG996R, động cơ TT, bánh D65, thanh răng).
+  makerLift: {
+    ...MAKER, type: 'makerLift', name: 'Maker Nâng',
+    servos: { S1: 'Nâng cửa lồng (MG996R)', S2: 'Kẹp cờ', S3: 'Cửa xả' },
+    arm: undefined,
+    chuteLift: CHUTE_LIFT,
+  },
+  makerIntake: {
+    ...MAKER, type: 'makerIntake', name: 'Maker Hút',
+    size: { ...MAKER.size, h: TALL_H },
+    mech: { M3: 'Con lăn hút', M4: 'Thanh trượt răng' },
+    storage: 8,
+  },
+  makerPro: {
+    ...MAKER, type: 'makerPro', name: 'Maker Pro',
+    size: { ...MAKER.size, h: TALL_H },
+    drives: ['omni', 'mecanum', 'diff2'],
+    mech: { M3: 'Con lăn hút', M4: 'Thanh trượt răng' },
+    servos: { S1: 'Nâng cửa lồng (MG996R)', S2: 'Kẹp cờ', S3: 'Cửa xả' },
+    storage: 8,
+    arm: undefined,
+    chuteLift: CHUTE_LIFT,
   },
   ui: {
     type: 'ui', name: 'Xe Ủi',
@@ -136,7 +174,7 @@ export function ruleChecks(cfg: RobotConfig, extendNow: number, armFrac = 0): { 
   const servos = Object.keys(def.servos).length + (s360 ? mechCount : 0)
   const { w, l, h } = def.size
   const startOk = Math.max(w, l) <= 0.3 + 1e-9 && h <= 0.85 + 1e-9
-  const extent = Math.max(w, l) + extendNow + armFrac * (def.arm?.reach ?? 0)
+  const extent = Math.max(w, l) + extendNow + armFrac * (def.arm?.reach ?? 0) + Math.max(0, chuteExit(def, armFrac)?.reach ?? 0)
   const out: { ok: boolean | 'note'; text: string }[] = [
     { ok: startOk, text: `R01 kích thước xuất phát: ${mm(w)} × ${mm(l)} × ${mm(h)} mm (giới hạn 300 × 300 × 850 mm)` },
     { ok: extent <= 0.5 + 1e-9, text: `Mở rộng một chiều: ${mm(extent)} mm / 500 mm` },
@@ -154,7 +192,19 @@ export function ruleChecks(cfg: RobotConfig, extendNow: number, armFrac = 0): { 
  * Cơ cấu M4 đẩy điểm kẹp cờ theo hướng nào. Mẫu Maker (CAD Onshape "Bộ thingbot mới"): thanh răng trên nóc lùi ra
  * ĐUÔI xe, mang servo + giá giữ cờ ở đuôi thanh — cắm cờ bằng đuôi xe (anh Tuấn chốt 05/11). Xe Cắm Cờ: nâng thùng lên.
  */
-export const LIFT_AXIS: Partial<Record<RobotType, 'forward' | 'back' | 'up'>> = { maker: 'back', co: 'up' }
+export const LIFT_AXIS: Partial<Record<RobotType, 'forward' | 'back' | 'up'>> = {
+  maker: 'back', makerLift: 'back', makerIntake: 'back', makerPro: 'back', co: 'up',
+}
+
+/** Cửa ra của lồng ở S1 = `frac` × 180° (m, `reach` tính từ mũi khung), hoặc null nếu robot xả bóng theo `release`. */
+export function chuteExit(def: RobotDef, frac: number): { reach: number; y: number } | null {
+  const c = def.chute
+  if (!c) return null
+  const t = def.chuteLift
+  if (!t) return c
+  const f = Math.max(0, Math.min(1, frac))
+  return { reach: c.reach + (t.reach - c.reach) * f, y: c.y + (t.y - c.y) * f }
+}
 
 /** Điểm kẹp cờ trong hệ toạ độ của hình robot (gốc tâm xe trên sàn, mũi +z), m — như RobotBody.gripPoint. */
 export function localGripPoint(def: RobotDef, extend: number, armFrac: number): { x: number; y: number; z: number } {

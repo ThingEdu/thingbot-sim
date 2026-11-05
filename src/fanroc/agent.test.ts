@@ -120,3 +120,25 @@ test('cùng seed ⇒ cùng trận (PRNG theo seed, không Math.random)', async (
   assert.deepEqual(again, first)
   console.log(`Tổng thời gian chạy phép thử agent: ${((performance.now() - t0) / 1000).toFixed(1)} s`)
 })
+
+test('mẫu cải tiến (R142, 1 trận Khó, 4 robot cùng mẫu): Maker Nâng đổ được Rãnh 2–3; Maker Hút và Pro hút bóng trên sân; cả ba hơn Mẫu Maker', async () => {
+  const play1 = async (type: RobotConfig['type'], drive: RobotConfig['drive'] = 'diff2') => {
+    const cfg: RobotConfig = { type, drive, actuator: 'tt' }
+    const r = await playAgents({ cfgs: [cfg, cfg, cfg, cfg], skills: ['hard', 'hard', 'hard', 'hard'], teams: TEAMS, seed: 1, order: ORDER })
+    return r
+  }
+  const base = (await level('hard'))[0].score
+  const lift = await play1('makerLift')
+  const high = lift.tally.mtn.reduce((s, tiers) => s + tiers[1].g + tiers[2].g, 0)
+  assert.ok(high >= 4, `Maker Nâng: ${high} bóng xanh ở Rãnh 2–3`)
+  const intake = await play1('makerIntake')
+  const pro = await play1('makerPro', 'omni')
+  for (const [name, r] of [['Maker Nâng', lift], ['Maker Hút', intake], ['Maker Pro', pro]] as const) {
+    console.log(`${name}: ${r.match} (Mẫu Maker cùng seed: ${base})`)
+    assert.ok(r.match > base, `${name} ${r.match} ≤ Mẫu Maker ${base}`)
+  }
+  // Hút trên sân: số bóng xanh lên núi nhiều hơn số Human Player nạp.
+  const loaded = intake.matchObj.events.filter((e) => e.text.includes('nhận bóng')).length
+  const onMtn = intake.tally.mtn.reduce((s, tiers) => s + tiers[0].g + tiers[1].g + tiers[2].g, 0)
+  assert.ok(onMtn > loaded, `Maker Hút: ${onMtn} bóng trên núi, Human Player nạp ${loaded}`)
+})

@@ -100,6 +100,8 @@ const APPROACH_MIN = 0.4
 const TURN_CLEAR = 0.2
 /** Mức vươn của thanh trượt để bóng rơi vào Rãnh 1 / 2 / 3 khi mũi xe chạm gờ (đo trên sân CAD với Mẫu Maker). */
 const DROP_EXTEND = [0, 0.02, 0.08]
+/** Servo nâng cửa lồng (S1 / 180) để bóng rơi vào Rãnh 1 / 2 / 3 khi mũi xe chạm gờ (đo trên sân với Maker Nâng). */
+const CHUTE_FRAC = [0, 0.67, 1]
 /** Cắm cờ: tiến vào mặt 0 của núi (lỗ cờ lệch về phía này) theo đường thẳng qua lỗ; thử lại với các góc lệch (rad). */
 const FLAG_OFFSETS = [0, 0.07, -0.07, 0.14]
 const POINTS = [5, 10, 15]
@@ -375,7 +377,7 @@ type Task =
   | { kind: 'park'; spot: Vec2; dir: 1 | -1; phase: 'go' | 'dock' | 'done'; t: number }
   | { kind: 'idle'; t: number }
 
-type Cmd = { fwd: number; turn: number; intake: boolean; lift: -1 | 0 | 1; s1: boolean; plant: boolean; release: boolean; sel: 'o' | 'g' }
+type Cmd = { fwd: number; turn: number; intake: boolean; lift: -1 | 0 | 1; s1: boolean; chute: number; plant: boolean; release: boolean; sel: 'o' | 'g' }
 
 /** Ô đỗ trong Vùng Bảo Vệ: người tới trước lấy chỗ sâu (đỗ toàn phần), người sau đỗ một phần ngay phía trước. */
 const PARK_SPOTS = (a: 'red' | 'blue'): Vec2[] => {
@@ -433,7 +435,7 @@ export class Agent {
   }
 
   private static idleCmd(): Cmd {
-    return { fwd: 0, turn: 0, intake: false, lift: -1, s1: false, plant: false, release: false, sel: 'o' }
+    return { fwd: 0, turn: 0, intake: false, lift: -1, s1: false, chute: 0, plant: false, release: false, sel: 'o' }
   }
 
   /** Nhiệm vụ hiện tại (để hiển thị / gỡ lỗi). */
@@ -636,9 +638,10 @@ export class Agent {
   private mountainTask(view: AgentView, anyColor: boolean): Task | null {
     const tally = view.match.tally()
     const nGreen = this.robot.stored.filter((i) => view.world.balls[i].color === 'g').length || 1
-    // Rãnh với tới được: chỉ robot có thanh trượt vươn tới trước mới đẩy bóng ra Rãnh 2 / 3 (DROP_EXTEND);
-    // còn lại (vd. Mẫu Maker CAD: thanh răng lùi ra sau) thả ở rãnh mũi xe chạm — Rãnh 1.
-    const reach = LIFT_AXIS[this.robot.def.type] === 'forward' ? [0, 1, 2] : [0]
+    // Rãnh với tới được: robot có thanh trượt vươn tới trước (DROP_EXTEND) hoặc servo nâng cửa lồng (CHUTE_FRAC) mới đổ
+    // được Rãnh 2 / 3; còn lại (vd. Mẫu Maker: lồng không nâng hạ) thả ở rãnh mũi xe chạm — Rãnh 1.
+    const def = this.robot.def
+    const reach = LIFT_AXIS[def.type] === 'forward' || def.chuteLift ? [0, 1, 2] : [0]
     let best: Task | null = null
     let bestV = -Infinity
     for (let m = 0; m < MOUNTAINS.length; m++) {
@@ -982,7 +985,7 @@ export class Agent {
     }
     // Tiến thẳng vào lỗ, vươn hết, nâng tay; mở kẹp đúng một bước khi điểm kẹp trên lỗ.
     this.cmd.lift = 1
-    this.cmd.s1 = true
+    this.cmd.s1 = true // robot nâng cửa lồng bằng S1: toPorts giữ cửa hạ (cmd.chute) — thanh răng + cửa lồng cùng vươn sẽ quá 500 mm
     const g = r.gripPoint()
     const d = Math.hypot(g.x - h.x, g.z - h.z)
     const ready = r.extend >= r.def.maxExtend - 1e-6 && (r.def.arm?.reach ? r.armFrac > 0.99 : true)
@@ -1045,6 +1048,7 @@ export class Agent {
       const k = t.plan[0] ?? t.plan[t.plan.length - 1] ?? 1
       // Chỉ robot có thanh trượt vươn tới trước mới đẩy điểm xả ra các rãnh xa; còn lại thả ở rãnh mũi xe chạm.
       const want = LIFT_AXIS[r.def.type] === 'forward' ? DROP_EXTEND[k] : 0
+      if (r.def.chuteLift) this.cmd.chute = CHUTE_FRAC[k]
       const err = want - r.extend
       this.cmd.lift = this.ports.lift ? (err > 0.004 ? 1 : err < -0.004 ? -1 : 0) : 0
       const okColor = out === 'g' || (t.anyColor && this.carried() > 0)
@@ -1261,7 +1265,8 @@ export class Agent {
       if (p.liftKind === 's360') out[p.lift] = c.lift > 0 ? 180 : c.lift < 0 ? 0 : 90
       else out[p.lift] = c.lift * 100
     }
-    if (r.def.servos.S1) out.S1 = c.s1 ? 180 : 0
+    if (r.def.chuteLift) out.S1 = Math.round(c.chute * 180)
+    else if (r.def.servos.S1) out.S1 = c.s1 ? 180 : 0
     if (r.def.flag) out.S2 = c.plant ? 30 : 150
     else if (r.compartments) out.S2 = c.sel === 'g' ? 150 : 30
     out.S3 = c.release ? 150 : 30

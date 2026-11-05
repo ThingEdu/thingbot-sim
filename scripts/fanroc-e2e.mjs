@@ -729,7 +729,7 @@ async function gameTests() {
     await page.locator('.hm[data-screen="pick"]').waitFor()
     const cardsN = await page.locator('.pk-card').count()
     const prog = await page.locator('.pk-card[aria-pressed="true"] .prog').innerText()
-    expect(cardsN === 4 && prog === 'Mặc định', `thẻ robot ${cardsN}, nhãn "${prog}"`)
+    expect(cardsN === 7 && prog === 'Mặc định', `thẻ robot ${cardsN} (4 robot mẫu + 3 mẫu Maker cải tiến), nhãn "${prog}"`)
     const bars = await page.locator('.pk-card[aria-pressed="true"] .pk-bar').allInnerTexts()
     expect(bars.length === 3 && /Tốc độ/.test(bars[0]) && /Chứa bóng/.test(bars[1]) && /Cắm cờ/.test(bars[2]), `thanh: ${bars.join(' | ')}`)
     await shot(page, 't13-pick.png')

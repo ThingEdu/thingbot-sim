@@ -250,3 +250,27 @@ test('Khoá lật: đâm chéo vào cạnh núi, thân không nghiêng (quaterni
   }
   assert.ok(tilt < 1e-3, `nghiêng ${tilt}`)
 })
+
+test('Maker Nâng: S1 = 180° ⇒ bóng ra ở cửa lồng nâng (130 mm trước mũi, cao 210 mm), mũi xe dài thêm 130 mm', async () => {
+  const { w, r } = await corridor({ type: 'makerLift', drive: 'diff2', actuator: 'tt' })
+  const low = r.releasePoint()
+  drive(w, r, { S1: 180 }, 0.1)
+  const hi = r.releasePoint()
+  const t = r.body.translation()
+  const ahead = (p: { x: number; z: number }) => Math.hypot(p.x - t.x, p.z - t.z)
+  assert.ok(Math.abs(ahead(hi) - (0.15 + 0.13)) < 0.005, `cửa nâng cách tâm ${ahead(hi)} (${JSON.stringify(hi)}, tâm ${JSON.stringify(t)})`)
+  assert.ok(Math.abs(hi.y - 0.21) < 0.003 && Math.abs(low.y - 0.093) < 0.003, `${hi.y} ${low.y}`) // gốc thân sát sàn (lúc đặt cao 2 mm rồi lắng xuống)
+  assert.ok(Math.abs(r.forwardExtension - 0.13) < 1e-6)
+})
+
+test('Maker Hút: con lăn M3 hút bóng trước mũi vào lồng, 8 bóng là đầy', async () => {
+  const { w, r } = await corridor({ type: 'makerIntake', drive: 'diff2', actuator: 'tt' })
+  w.placeBall(150, { x: 0, y: BALL_R, z: 0.9 - ROBOTS.makerIntake.size.l / 2 - 0.025 })
+  drive(w, r, { M3: 80 }, 0.2)
+  assert.deepEqual(r.stored, [150])
+  for (let i = 0; i < 8; i++) {
+    w.placeBall(i, { x: 1, y: BALL_R, z: 0.1 * i })
+    r.take(i)
+  }
+  assert.equal(r.stored.length, 8)
+})

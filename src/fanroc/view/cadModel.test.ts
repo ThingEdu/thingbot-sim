@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import * as THREE from 'three'
-import { BALL_STEP, CAD_WHEELS, chuteSlot, makerCad } from './cadModel.ts'
+import { BALL_CHUTE, BALL_STEP, CAD_WHEELS, chuteExitModel, chuteSlot, makerCad, TALL_TOP } from './cadModel.ts'
 import { ROBOTS, localGripPoint, rearExtent, rearOverhang } from '../robots.ts'
 
 test('Mẫu Maker CAD: đủ nhóm thân / thanh răng / tay vòng / 4 bánh; cỡ khớp hộp va chạm 240 × 300 mm', () => {
@@ -61,4 +61,21 @@ test('Linh kiện CAD rời: bánh D65, động cơ, bo ThingBot, servo SG90, kh
   const b = size('board')
   assert.ok(b.x > 55 && b.x < 70 && b.z > 55 && b.z < 75, `bo ${b.toArray()}`)
   for (const n of ['motor', 'servo', 'battery'] as const) assert.ok(size(n).length() > 20, n)
+})
+
+test('Lồng 8 bóng (Maker Hút / Pro): quả cuối vẫn trong ống nối dài, dưới miệng TALL_TOP', () => {
+  const last = chuteSlot(ROBOTS.makerIntake.storage - 1)
+  assert.ok(Math.hypot(last.x - 58, last.z - 43) < 5, `quả cuối lệch khỏi ống: ${last.toArray()}`)
+  assert.ok(last.y + 20 <= TALL_TOP && last.y + 20 > 209, `quả cuối cao ${last.y}`)
+  assert.ok(TALL_TOP <= ROBOTS.makerIntake.size.h * 1000 + 1)
+})
+
+test('Cửa lồng nâng (Maker Nâng): vòng cửa ra theo chuteExit — cùng số với điểm xả của vật lý; quả đầu đi theo cửa ra', () => {
+  const def = ROBOTS.makerLift
+  const lo = chuteExitModel(def, 0)
+  const hi = chuteExitModel(def, 1)
+  assert.deepEqual(lo.toArray(), [...BALL_CHUTE[0]])
+  assert.ok(Math.abs(hi.z - lo.z - 180) < 1e-6 && Math.abs(hi.y - lo.y - 117) < 1e-6, hi.toArray().join())
+  assert.ok(chuteSlot(0, undefined, hi).distanceTo(hi) < 1e-9)
+  assert.deepEqual(chuteExitModel(ROBOTS.maker, 1).toArray(), [...BALL_CHUTE[0]])
 })

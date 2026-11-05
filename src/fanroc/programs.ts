@@ -8,7 +8,7 @@
 //   Đế 4 bánh (omni / mecanum): cần trái LY tiến/lùi, LX sang ngang, cần phải RX xoay; M1–M4 = trước trái, trước phải,
 //   sau trái, sau phải, mỗi bánh = tiến ± ngang ± xoay (công thức ở `mix`).
 // - R1 giữ: cơ cấu hút (M3, hoặc servo 360 ở S4) — robot có hút (Mẫu Maker không hút: Human Player nạp bóng). △ / ✕ giữ: nâng / hạ (M4, hoặc S5); Xe Ủi: △ / ✕ nâng / hạ gàu S1.
-// - ○ giữ: mở cửa xả S3. □ giữ: mở kẹp cờ S2 (nhả ra là kẹp lại). L1 / L2: nâng / hạ tay S1 (Mẫu Maker, Xe Cắm Cờ).
+// - ○ giữ: mở cửa xả S3. □ giữ: mở kẹp cờ S2 (nhả ra là kẹp lại). L1 / L2: nâng / hạ tay S1 (Mẫu Maker, Xe Cắm Cờ); Maker Nâng / Pro: L2 / R2 / L1 đưa cửa lồng (S1) tới Rãnh 1 / 2 / 3.
 // - Xe Phân Loại (chưa có khối cảm biến màu, người lái tự phân loại): L1 = gạt S2 sang ngăn cam (0°), L2 = sang ngăn
 //   xanh (180°); servo giữ nguyên chỗ cho tới lần bấm sau. ○ mở cửa S3 của ngăn đang chọn.
 //
@@ -169,6 +169,9 @@ function teleop(cfg: RobotConfig): object {
     mech.push(ifElse(btn('PSB_TRIANGLE'), actuate(ports.lift, 1), ifElse(btn('PSB_CROSS'), actuate(ports.lift, -1), actuate(ports.lift, 0))))
   if (cfg.type === 'ui') mech.push(ifThen(btn('PSB_TRIANGLE'), servo(1, 180)), ifThen(btn('PSB_CROSS'), servo(1, 0)))
   if (def.arm) mech.push(ifThen(btn('PSB_L1'), servo(1, 180)), ifThen(btn('PSB_L2'), servo(1, 0)))
+  // Servo MG996R nâng cửa lồng: L2 Rãnh 1 (0°), R2 Rãnh 2 (120°), L1 Rãnh 3 (180°).
+  if (def.chuteLift)
+    mech.push(ifThen(btn('PSB_L1'), servo(1, 180)), ifThen(btn('PSB_R2'), servo(1, CHUTE_MID)), ifThen(btn('PSB_L2'), servo(1, 0)))
   if (def.flag) mech.push(ifElse(btn('PSB_SQUARE'), servo(2, 0), servo(2, 180)))
   if (cfg.type === 'sort') mech.push(ifThen(btn('PSB_L1'), servo(2, 0)), ifThen(btn('PSB_L2'), servo(2, 180)))
   if (def.servos.S3) mech.push(ifElse(btn('PSB_CIRCLE'), servo(3, 180), servo(3, 0)))
@@ -204,6 +207,11 @@ export function teleopButtons(cfg: RobotConfig): Partial<Record<Ps2Button, strin
     out.L1 = cfg.type === 'co' ? 'Vươn tay cờ' : 'Nâng tay'
     out.L2 = cfg.type === 'co' ? 'Thu tay cờ' : 'Hạ tay'
   }
+  if (def.chuteLift) {
+    out.L1 = 'Nâng cửa lồng: Rãnh 3'
+    out.R2 = 'Cửa lồng giữa: Rãnh 2'
+    out.L2 = 'Hạ cửa lồng: Rãnh 1'
+  }
   if (def.flag) out.SQUARE = 'Giữ: mở kẹp cờ'
   if (cfg.type === 'sort') {
     out.L1 = 'Chọn ngăn cam'
@@ -212,6 +220,9 @@ export function teleopButtons(cfg: RobotConfig): Partial<Record<Ps2Button, strin
   if (def.servos.S3) out.CIRCLE = cfg.type === 'sort' ? 'Giữ: mở cửa ngăn đang chọn' : 'Giữ: mở cửa xả'
   return out
 }
+
+/** Góc S1 đưa cửa lồng tới Rãnh 2 (S1 / 180 = 0,67 như CHUTE_FRAC của robot máy). */
+const CHUTE_MID = 120
 
 // ---------- Auto: chuỗi «set motor» + «đợi» ----------
 /** Tốc độ của Auto (TT có vùng chết 20 %: 60 % ⇒ ≈ 0,28 m/s). */

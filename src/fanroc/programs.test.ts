@@ -288,3 +288,11 @@ for (const cfg of [...TYPES.map(defaultConfig), { type: 'maker', drive: 'mecanum
     const corners = robot.footprint()
     assert.ok(corners.every((p) => inside(ZONES.safe.red, p)), `chưa vào hẳn Vùng Bảo Vệ: ${JSON.stringify(robot.pose)}`)
   })
+
+test('TeleOp Maker Nâng: L2 / R2 / L1 đưa cửa lồng S1 tới 0° / 120° / 180° (Rãnh 1 / 2 / 3)', () => {
+  const sim = code(SAMPLES.makerLift.teleop)
+  assert.equal(runFor(sim, pad(), 200).S1, 0)
+  assert.ok(Math.abs(runFor(sim, pad({ ps2_PSB_R2: 1 }), 200).S1! - 120) < 1) // PWM làm tròn ~0,15°
+  assert.equal(runFor(sim, pad({ ps2_PSB_L1: 1 }), 200).S1, 180)
+  assert.equal(runFor(sim, pad({ ps2_PSB_L1: 1, ps2_PSB_L2: 1 }), 200).S1, 0)
+})

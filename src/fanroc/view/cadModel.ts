@@ -5,6 +5,7 @@ import * as THREE from 'three'
 import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js'
 import maker from '../assets/robot-maker.json' with { type: 'json' }
 import parts from '../assets/robot-parts.json' with { type: 'json' }
+import { chuteExit, type RobotDef } from '../robots.ts'
 
 interface CadGroup {
   pivot: number[]
@@ -92,13 +93,6 @@ export function cadPart(name: CadPart, x: number, y: number, z: number, rotY = 0
 /** Tên 4 nhóm bánh trong tệp CAD. */
 export const CAD_WHEELS = ['wheel1', 'wheel3', 'wheel4', 'wheel5'] as const
 /**
- * Khớp quay của tay vòng xúc bóng (mm, hệ toạ độ hình): ước theo hình CAD — cần tay vòng bắt vào giá bên lồng ống.
- * Thanh răng lùi ra sau kéo dây buộc đầu cần ⇒ tay vòng nhấc lên đổ bóng vào lồng (anh Tuấn chốt 05/11).
- */
-export const HOOP_PIVOT = new THREE.Vector3(-22, 95, 60)
-/** Góc nhấc tối đa của tay vòng khi thanh răng lùi hết, rad. */
-export const HOOP_LIFT = 1.1
-/**
  * Lồng chứa bóng (anh Tuấn chốt 06/11): ống nan đứng của thân CAD (tâm x 58, z 43, vòng miệng cao 209–216 mm) cong xuống
  * phía trước bên trái, tới vòng cửa ra (nhóm `hoop`, tâm ~(−21, 93, 68)) có servo S3 chặn. Bóng xếp nối nhau theo đường
  * giữa ống (mm, hệ toạ độ hình), quả 0 ở cửa ra — quả ra trước — mỗi quả cách nhau BALL_STEP.
@@ -108,15 +102,31 @@ export const BALL_CHUTE: readonly (readonly [number, number, number])[] = [
   [18, 100, 60],
   [48, 118, 50],
   [58, 140, 43],
-  [58, 195, 43],
+  // Ống đứng lên tới miệng (209 mm; mẫu lồng 8 bóng nối dài tới TALL_TOP) — đường đi thừa ra trên cao không sao.
+  [58, 400, 43],
 ]
 export const BALL_STEP = 40.5
 
-/** Tâm quả bóng thứ n trong lồng (mm, hệ toạ độ hình), đi theo BALL_CHUTE từ cửa ra. */
-export function chuteSlot(n: number, out = new THREE.Vector3()): THREE.Vector3 {
+/** Miệng ống lồng nối dài của mẫu 8 bóng (mm). */
+export const TALL_TOP = 350
+
+/**
+ * Vòng cửa ra của lồng ở S1 = `frac` × 180° (mm, hệ toạ độ hình): cửa nâng bằng servo (RobotDef.chuteLift) đi theo
+ * chuteExit — cùng số với điểm xả của vật lý; robot không nâng cửa thì cửa ra đứng yên ở BALL_CHUTE[0].
+ */
+export function chuteExitModel(def: RobotDef, frac: number, out = new THREE.Vector3()): THREE.Vector3 {
+  out.set(...BALL_CHUTE[0])
+  const c0 = chuteExit(def, 0)
+  const c = chuteExit(def, frac)
+  if (c0 && c) out.add(new THREE.Vector3(0, (c.y - c0.y) * 1000, (c.reach - c0.reach) * 1000))
+  return out
+}
+
+/** Tâm quả bóng thứ n trong lồng (mm, hệ toạ độ hình), đi theo BALL_CHUTE từ cửa ra (`exit`: cửa ra đã nâng). */
+export function chuteSlot(n: number, out = new THREE.Vector3(), exit?: THREE.Vector3): THREE.Vector3 {
   let s = n * BALL_STEP
   for (let i = 0; i < BALL_CHUTE.length - 1; i++) {
-    const a = BALL_CHUTE[i]
+    const a = i === 0 && exit ? (exit.toArray() as [number, number, number]) : BALL_CHUTE[i]
     const b = BALL_CHUTE[i + 1]
     const len = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2])
     if (s <= len || i === BALL_CHUTE.length - 2) {

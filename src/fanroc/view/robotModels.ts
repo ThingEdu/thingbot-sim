@@ -7,7 +7,7 @@
 import * as THREE from 'three'
 import type { Alliance } from '../layout.ts'
 import { ROBOTS, type RobotConfig } from '../robots.ts'
-import { CAD_WHEELS, cadPart, HOOP_LIFT, HOOP_PIVOT, makerCad } from './cadModel.ts'
+import { BALL_CHUTE, CAD_WHEELS, cadPart, chuteExitModel, makerCad, TALL_TOP } from './cadModel.ts'
 
 const mat = (color: number, o: THREE.MeshStandardMaterialParameters = {}) =>
   new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0.05, ...o })
@@ -141,15 +141,14 @@ interface Parts {
 }
 
 type Base = { track: number; z: [number, number]; passive?: 'omni' }
-const BASES: Record<RobotConfig['type'], Base> = {
-  maker: { track: 107, z: [80, -80], passive: 'omni' },
+const BASES: Partial<Record<RobotConfig['type'], Base>> = {
   ui: { track: 77, z: [50, -60] },
   co: { track: 80, z: [90, -70] },
   sort: { track: 107, z: [70, -60] },
 }
 
 function buildDrive(cfg: RobotConfig, g: THREE.Group): Wheel[] {
-  const { track, z, passive } = BASES[cfg.type]
+  const { track, z, passive } = BASES[cfg.type]!
   const ws: Wheel[] = []
   if (cfg.drive === 'diff2') {
     // Bánh động cơ M1 (trái, +x) và M2 (phải) ở phía sau; phía trước là 2 bánh omni bị động hoặc bi đỡ.
@@ -288,7 +287,29 @@ const BUILD = { ui: buildUi, co: buildCo, sort: buildSort }
  * `extend` mang servo + giá cờ; tay vòng nhấc theo thanh răng (dây kéo). Đế 4 bánh omni / mecanum: bánh CAD thay bằng
  * bánh đa hướng tự dựng ở đúng chỗ bánh CAD.
  */
+/** Thanh tròn nối hai điểm (mm), cập nhật được mỗi khung bằng `set`. */
+function rod(r: number, m: THREE.Material, g: THREE.Group): { set: (a: THREE.Vector3, b: THREE.Vector3) => void } {
+  const o = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 1, 8), m)
+  g.add(o)
+  const up = new THREE.Vector3(0, 1, 0)
+  const d = new THREE.Vector3()
+  return {
+    set: (a, b) => {
+      d.subVectors(b, a)
+      o.position.addVectors(a, b).multiplyScalar(0.5)
+      o.scale.set(1, Math.max(1e-3, d.length()), 1)
+      o.quaternion.setFromUnitVectors(up, d.normalize())
+    },
+  }
+}
+
+/**
+ * Mẫu Maker và ba mẫu cải tiến dựng trên CAD "Bộ thingbot mới" (R142): ống lồng nối dài (8 bóng), con lăn hút trước mũi
+ * (động cơ TT, M3), servo MG996R ở S1 nâng vòng cửa ra theo RobotDef.chuteLift (máng hai thanh nối cửa ra với chỗ uốn
+ * của ống). Mẫu gốc không nâng hạ gì: vòng cửa ra đứng yên.
+ */
 function buildMakerCad(cfg: RobotConfig, g: THREE.Group): Parts {
+  const def = ROBOTS[cfg.type]
   const { mat, groups } = makerCad()
   const mesh = (name: string) => {
     const o = new THREE.Mesh(groups[name].geo, mat)
@@ -300,11 +321,49 @@ function buildMakerCad(cfg: RobotConfig, g: THREE.Group): Parts {
   rack.add(mesh('rack'))
   g.add(rack)
   const hoop = new THREE.Group()
-  hoop.position.copy(HOOP_PIVOT)
-  const hm = mesh('hoop')
-  hm.position.sub(HOOP_PIVOT)
-  hoop.add(hm)
+  hoop.add(mesh('hoop'))
   g.add(hoop)
+  const tube = new THREE.Vector3(58, 0, 43)
+  if (def.storage > 4) {
+    // Ống lồng nối dài từ miệng ống CAD (209 mm) lên TALL_TOP: 6 nan + vòng miệng.
+    const len = TALL_TOP - 209
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2
+      g.add(box(4, len, 8, M.plate, tube.x + Math.cos(a) * 27, 209 + len / 2, tube.z + Math.sin(a) * 27))
+    }
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(28, 3, 8, 24), M.plate)
+    ring.rotation.x = Math.PI / 2
+    ring.position.set(tube.x, TALL_TOP, tube.z)
+    g.add(ring)
+  }
+  let roller: THREE.Mesh | null = null
+  if (def.mech.M3) {
+    // Con lăn hút ngang trước mũi, hai má đỡ, động cơ M3 (hoặc servo 360) bên trái.
+    roller = cyl(17, 150, M.fin, 16)
+    roller.rotation.z = Math.PI / 2
+    roller.position.set(0, 24, 168)
+    g.add(roller, box(4, 40, 70, M.plate, 79, 30, 140), box(4, 40, 70, M.plate, -79, 30, 140), actBox(cfg, 98, 30, 150))
+  }
+  let lift: ((frac: number) => void) | null = null
+  if (def.chuteLift) {
+    // MG996R (40 × 20 × 37 mm) bên ống, cần nâng tới vòng cửa ra; máng hai thanh từ chỗ uốn của ống tới cửa ra.
+    g.add(box(20, 37, 40, M.dark, -45, 135, 40))
+    const horn = new THREE.Vector3(-45, 150, 55)
+    const arm = rod(3, M.alu, g)
+    const rails = [rod(2.5, M.plate, g), rod(2.5, M.plate, g)]
+    const bend = new THREE.Vector3(...BALL_CHUTE[2])
+    const base = new THREE.Vector3(...BALL_CHUTE[0])
+    const exit = new THREE.Vector3()
+    const a = new THREE.Vector3()
+    const b = new THREE.Vector3()
+    lift = (frac) => {
+      chuteExitModel(def, frac, exit)
+      hoop.position.subVectors(exit, base)
+      arm.set(horn, exit)
+      rails.forEach((r, k) => r.set(a.copy(bend).setX(bend.x + (k ? 14 : -14)).setY(bend.y - 20), b.copy(exit).setX(exit.x + (k ? 14 : -14)).setY(exit.y - 20)))
+    }
+    lift(0)
+  }
   const wheels: Wheel[] = CAD_WHEELS.map((name) => {
     const p = groups[name].pivot
     if (cfg.drive !== 'diff2') return wheel(32.5, 25, p.x, p.z, g, cfg.drive)
@@ -320,12 +379,12 @@ function buildMakerCad(cfg: RobotConfig, g: THREE.Group): Parts {
   const flag = makeFlag()
   flag.scale.setScalar(1000)
   g.add(flag)
-  const max = ROBOTS.maker.maxExtend
   return {
     wheels,
-    update: (p) => {
+    update: (p, dt) => {
       rack.position.z = -p.extend * 1000
-      hoop.rotation.x = -(Math.min(1, p.extend / max) * HOOP_LIFT)
+      lift?.(p.armFrac)
+      if (roller) roller.rotation.x -= p.intake * dt * 14
       flag.position.copy(p.grip3).multiplyScalar(1000)
       flag.position.y -= 22.5
       flag.visible = p.hasFlag
@@ -339,8 +398,8 @@ export function buildRobotModel(cfg: RobotConfig, alliance: Alliance): RobotMode
   const body = new THREE.Group()
   body.scale.setScalar(0.001)
   group.add(body)
-  const cad = cfg.type === 'maker' ? buildMakerCad(cfg, body) : null
-  const mech = cad ?? BUILD[cfg.type as Exclude<RobotConfig['type'], 'maker'>](cfg, body)
+  const cad = def.cad === 'maker' ? buildMakerCad(cfg, body) : null
+  const mech = cad ?? BUILD[cfg.type as keyof typeof BUILD](cfg, body)
   const wheels = cad ? cad.wheels : buildDrive(cfg, body)
   // Dải màu liên minh quanh thân.
   const bandMat = mat(BAND[alliance], { transparent: true, opacity: 0.85 })
