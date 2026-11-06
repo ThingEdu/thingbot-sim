@@ -75,4 +75,5 @@ jobs:
             - Windows: tải `.msi` hoặc `-setup.exe`. Ứng dụng chưa ký: nếu SmartScreen chặn, bấm "More info" › "Run anyway".
           releaseDraft: false
           prerelease: false
+          tauriScript: npx tauri
           args: ${{ matrix.args }}
