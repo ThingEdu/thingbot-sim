@@ -2,7 +2,7 @@
 
 Tài liệu cho người vận hành (anh Tuấn và đội sự kiện). Hai đường phát hành: **bản máy tính (desktop)** và **bản web sự kiện** chạy tĩnh trên máy 201.
 
-> Hiện **chưa có bản Windows / Linux**. Chỉ có bản macOS (`npm run dist:game`).
+> Bộ cài **macOS** (universal) và **Windows** (.msi, -setup.exe) dựng trên GitHub Actions (`.github/workflows/fanroc-desktop.yml`) mỗi khi đẩy tag `fanroc-v*`, rồi gắn vào bản phát hành cùng tên ở https://github.com/ThingEdu/thingbot-sim/releases. Chưa có bản Linux. Trên máy Mac vẫn dựng tay được bằng `npm run dist:game`.
 
 ## 1. Bản desktop (macOS)
 
@@ -44,6 +44,8 @@ Mỗi lần chạy thật là quyết định của người vận hành; nên t
 
 ## 3. Checklist trước khi công khai
 
+> 06/11/2026: anh Tuấn đồng ý công khai lưới núi CAD, hình robot CAD và tên FANROC trong app khi phát hành `fanroc-v0.1.0` trên kho công khai.
+
 - [ ] **Lưới núi CAD** (`src/fanroc/assets/mountain-mesh.json`) là của anh Tuấn: cần anh đồng ý rõ trước bất kỳ sự kiện công khai nào. Không đăng / push tệp này.
 - [ ] **Hình robot CAD** (`src/fanroc/assets/robot-maker.json`, dựng từ mẫu Onshape "Bộ thingbot mới") là của anh Tuấn: cần anh đồng ý rõ trước khi đăng công khai.
 - [ ] **Tên và logo FANROC**: đã được ban tổ chức cho phép dùng.
@@ -51,4 +53,4 @@ Mỗi lần chạy thật là quyết định của người vận hành; nên t
 - [ ] **Link ThingBlock**: hiện **chưa có** (`THINGBLOCK_URL` đang để `''`). Xác nhận đúng ý định, hoặc điền link khi sẵn sàng.
 - [ ] **Câu chữ luật thi** đã được anh Tuấn rà.
 - [ ] **Nhiệm vụ 9** đã chơi thử từ đầu đến cuối.
-- [ ] Bản Windows / Linux chưa phát hành: thông báo rõ cho người tham dự nếu họ hỏi.
+- [ ] Bản Linux chưa phát hành: thông báo rõ cho người tham dự nếu họ hỏi.

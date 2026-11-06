@@ -1,0 +1,78 @@
+# Bộ cài ThingBot FanRoc Game (Tauri 2) cho macOS (universal: Apple Silicon + Intel) và Windows (.msi + .exe).
+# Chạy khi đẩy tag `fanroc-v*`: dựng trên máy chủ GitHub rồi gắn bộ cài vào bản phát hành cùng tên tag.
+# Trang game cần mã ThingBlock (vite.config.ts, public/media) ở thư mục anh em ../thingblock-editor-sim — tải đúng
+# commit đang dùng khi dựng bản này (THINGBLOCK_REF).
+name: FanRoc desktop
+
+on:
+  push:
+    tags: ['fanroc-v*']
+
+permissions:
+  contents: write
+
+env:
+  THINGBLOCK_REPO: https://github.com/ThingEdu/thingblock-editor.git
+  THINGBLOCK_REF: 866ff1cc8
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            args: --target universal-apple-darwin
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+          - os: windows-latest
+            args: ''
+            rust_targets: ''
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Tải mã ThingBlock (thư mục anh em)
+        shell: bash
+        run: |
+          cd ..
+          git clone --filter=blob:none "$THINGBLOCK_REPO" thingblock-editor-sim
+          cd thingblock-editor-sim
+          git checkout "$THINGBLOCK_REF"
+          npm ci --ignore-scripts --no-audit --no-fund
+
+      # Git trên Windows checkout liên kết tượng trưng thành tệp chữ: chép thật thư mục media của scratch-blocks vào.
+      - name: public/media (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          rm -f public/media
+          cp -r ../thingblock-editor-sim/packages/scratch-blocks/media public/media
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci --no-audit --no-fund
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: ThingBot FanRoc Game ${{ github.ref_name }}
+          releaseBody: |
+            Bộ cài game mô phỏng ThingBot FanRoc (mã nguồn AGPL-3.0: nhánh feat/fanroc của kho này).
+
+            - macOS: tải `.dmg`, kéo ThingBot FanRoc Game vào Applications. Ứng dụng chưa ký với Apple: lần đầu bấm chuột phải › Mở (Open) › Mở.
+            - Windows: tải `.msi` hoặc `-setup.exe`. Ứng dụng chưa ký: nếu SmartScreen chặn, bấm "More info" › "Run anyway".
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
