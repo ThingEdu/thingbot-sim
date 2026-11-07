@@ -13,6 +13,7 @@ import { SPEED_NOTE } from '../pace.ts'
 import type { Screen } from './router.ts'
 import { robotName } from './home.ts'
 import { SOURCE_URL } from './external.ts'
+import { CREDITS } from '../credits.ts'
 
 // ---------- Ghế ----------
 /**
@@ -155,6 +156,7 @@ html[data-chrome="game"] .st-pop { left: auto; right: 12px; top: 62px; bottom: a
 .st-note { font: 600 12px var(--font); color: var(--muted); }
 .st-note[hidden] { display: none; }
 .st-url { font: 12px var(--mono, monospace); color: var(--muted); user-select: all; -webkit-user-select: all; cursor: text; word-break: break-all; }
+.st-credit { font-size: 12px; color: var(--muted); margin: 2px 0; user-select: text; -webkit-user-select: text; word-break: break-word; }
 .st-keys { border-collapse: collapse; font-size: 12.5px; width: 100%; }
 .st-keys td { padding: 2px 8px 2px 0; vertical-align: top; }
 .st-keys td:first-child { white-space: nowrap; font-family: var(--mono); font-weight: 700; }
@@ -290,6 +292,12 @@ export function createSettings(): SettingsPopover {
     const src = el('span', 'st-url', SOURCE_URL)
     src.dataset.role = 'source'
     parts.push(row('Mã nguồn (AGPL-3.0)', src))
+    // Nguồn của mọi thứ game dùng lại (credits.ts, NGUON.md): thu gọn, chữ chọn / chép được.
+    const credits = el('details')
+    credits.dataset.role = 'credits'
+    credits.append(el('summary', undefined, 'Nguồn (mã, khối, CAD, luật)'))
+    for (const c of CREDITS) credits.append(el('div', 'st-credit', `${c.name} — ${c.from} — ${c.license}`))
+    parts.push(credits)
     pop.replaceChildren(...parts)
     api.update()
   }
