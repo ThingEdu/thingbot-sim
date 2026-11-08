@@ -6,7 +6,7 @@ Tài liệu cho người vận hành (anh Tuấn và đội sự kiện). Hai đ
 
 ## 1. Bản desktop (macOS)
 
-Dựng: `npm run dist:game` (Tauri) — ra `src-tauri/target/release/bundle/macos/ThingBot FanRoc Game.app` (không dựng `.dmg`).
+Dựng: `npm run dist:game` (Tauri) — ra `.app` + `.dmg` trong `src-tauri/target/release/bundle/`. Bản universal (Apple Silicon + Intel): `npx tauri build --target universal-apple-darwin --bundles dmg` (cần `rustup target add x86_64-apple-darwin`). Bản mới: tăng `version` ở `src-tauri/tauri.conf.json` và `src-tauri/Cargo.toml` (tên bộ cài lấy số này, không lấy tag; `.msi` không cập nhật đè nếu trùng số) rồi đẩy tag `fanroc-v<số đó>`.
 
 Cài và mở:
 
@@ -46,9 +46,10 @@ Mỗi lần chạy thật là quyết định của người vận hành; nên t
 
 > 06/11/2026: anh Tuấn đồng ý công khai lưới núi CAD, hình robot CAD và tên FANROC trong app khi phát hành `fanroc-v0.1.0` trên kho công khai.
 
-- [ ] **Lưới núi CAD** (`src/fanroc/assets/mountain-mesh.json`) là của anh Tuấn: cần anh đồng ý rõ trước bất kỳ sự kiện công khai nào. Không đăng / push tệp này.
-- [ ] **Hình robot CAD** (`src/fanroc/assets/robot-maker.json`, dựng từ mẫu Onshape "Bộ thingbot mới") là của anh Tuấn: cần anh đồng ý rõ trước khi đăng công khai.
-- [ ] **Tên và logo FANROC**: đã được ban tổ chức cho phép dùng.
+- [x] **Lưới núi CAD** (`src/fanroc/assets/mountain-mesh.json`) là của anh Tuấn: đã đồng ý công khai 06/11/2026.
+- [x] **Hình robot CAD** (`src/fanroc/assets/robot-maker.json`, dựng từ mẫu Onshape "Bộ thingbot mới") là của anh Tuấn: đã đồng ý công khai 06/11/2026.
+- [x] **Tên FANROC**: anh Tuấn xác nhận được dùng (06/11/2026).
+- [ ] **Nguồn** (⚙ › Nguồn, `NGUON.md`): mọi phần dùng lại có link / commit / giấy phép; thêm phần mới thì thêm vào `src/fanroc/credits.ts`.
 - [ ] **Link mã nguồn AGPL** hiện rõ trong trang và bấm vào mở đúng kho mã.
 - [ ] **Link ThingBlock**: hiện **chưa có** (`THINGBLOCK_URL` đang để `''`). Xác nhận đúng ý định, hoặc điền link khi sẵn sàng.
 - [ ] **Câu chữ luật thi** đã được anh Tuấn rà.

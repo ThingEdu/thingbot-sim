@@ -15,7 +15,7 @@
 // Mẫu Auto chạy một lần trong «khi Arduino khởi động» (FANROC không có giai đoạn tự động riêng, RE04): đi thẳng tới
 // Ngọn Núi A gần nhất, mở cửa xả 2 giây, lùi lại, sang rào trái, xuôi theo rào rồi vào Vùng Bảo Vệ đỏ.
 // Thời gian tính cho Robot 1 (đỏ, ô xuất phát trái); robot ở ô khác phải sửa số giây.
-import { portMap, ROBOTS, type RobotConfig, type RobotType } from './robots.ts'
+import { LIFT_AXIS, portMap, ROBOTS, type RobotConfig, type RobotType } from './robots.ts'
 import { MY_BLOCKS_CATEGORY } from './procedures.ts'
 
 type B = Record<string, unknown>
@@ -196,8 +196,10 @@ export function teleopButtons(cfg: RobotConfig): Partial<Record<Ps2Button, strin
   if (ports.intake) out.R1 = `Giữ: ${def.mech.M3!.toLowerCase()}`
   if (ports.lift) {
     const what = def.mech.M4!.toLowerCase()
-    out.TRIANGLE = `Giữ: ${what} lên`
-    out.CROSS = `Giữ: ${what} xuống`
+    // Mẫu Maker: thanh răng lùi ra đuôi xe mang giá cờ (LIFT_AXIS 'back'), không lên xuống.
+    const back = LIFT_AXIS[cfg.type] === 'back'
+    out.TRIANGLE = back ? `Giữ: ${what} lùi ra đuôi` : `Giữ: ${what} lên`
+    out.CROSS = back ? `Giữ: ${what} thu về` : `Giữ: ${what} xuống`
   }
   if (cfg.type === 'ui') {
     out.TRIANGLE = 'Nâng gàu hớt'

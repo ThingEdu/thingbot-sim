@@ -12,6 +12,7 @@ import type { Ps2State } from './gamepad.ts'
 import { ROBOTS, type Actuator, type Drive, type RobotConfig, type RobotType } from './robots.ts'
 import { sample, TOOLBOX } from './programs.ts'
 import { tbFileName, toTb } from './tb.ts'
+import { tauriInvoke } from './ui/external.ts'
 import { hasParamProcedures, installMakeBlockDialog, openMakeBlockDialog, registerParamProcedures, TB_PARAM_WARNING } from './procedures.ts'
 
 export interface Editors {
@@ -115,14 +116,25 @@ const select = (options: [string, string][], value: string, onChange: (v: string
   return s
 }
 
-/** Tải chương trình của thẻ về dạng .tb để mở bằng ThingBlock desktop và nạp lên ThingBot thật. */
-async function download(robot: RobotType, program: object): Promise<void> {
-  const url = URL.createObjectURL(await toTb(program))
+/**
+ * Tải chương trình của thẻ về dạng .tb để mở bằng ThingBlock desktop và nạp lên ThingBot thật. Trình duyệt: link
+ * `download` như thường (trả null). App desktop: WKWebView bỏ qua link tải tệp ⇒ nhờ lệnh `save_tb` của app ghi vào
+ * thư mục Downloads, trả về đường tệp đã lưu.
+ */
+async function download(robot: RobotType, program: object): Promise<string | null> {
+  const blob = await toTb(program)
+  const invoke = tauriInvoke()
+  if (invoke) {
+    const data = Array.from(new Uint8Array(await blob.arrayBuffer()))
+    return String(await invoke('save_tb', { name: tbFileName(robot), data }))
+  }
+  const url = URL.createObjectURL(blob)
   const a = Object.assign(document.createElement('a'), { href: url, download: tbFileName(robot) })
   document.body.append(a)
   a.click()
   a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
+  return null
 }
 
 let liveWorkers = 0
@@ -364,9 +376,18 @@ export function createEditors(container: HTMLElement, robots: { label: string; c
       const t = tabs[i]
       const program = api.program(i)
       // Khối của em có ô số chưa nạp được ThingBot thật (R37): báo rõ nhưng vẫn cho tải.
-      t.warn.hidden = !hasParamProcedures(program)
-      t.warn.textContent = t.warn.hidden ? '' : TB_PARAM_WARNING
-      void download(t.cfg.type, program)
+      const warning = hasParamProcedures(program) ? TB_PARAM_WARNING : ''
+      t.warn.hidden = !warning
+      t.warn.textContent = warning
+      // App desktop: báo tệp đã lưu ở đâu (hoặc vì sao không lưu được) ngay trên thẻ.
+      const say = (text: string) => {
+        t.warn.textContent = warning ? `${warning} ${text}` : text
+        t.warn.hidden = false
+      }
+      download(t.cfg.type, program).then(
+        (path) => path && say(`Đã lưu: ${path}`),
+        (err) => say(`Không lưu được tệp .tb: ${err}`),
+      )
     },
     arduino(i) {
       const t = tabs[i]
