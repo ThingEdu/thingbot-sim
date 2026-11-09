@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { padState, PadFeed, PadSeats, PS2_NEUTRAL } from './gamepad.ts'
+import { hatPad, padState, PadFeed, PadSeats, PS2_NEUTRAL } from './gamepad.ts'
 
 /** Tay giả theo bố cục chuẩn: `axes` −1…1, `pressed` là số nút đang giữ. */
 const fake = (axes = [0, 0, 0, 0], pressed: number[] = [], over: object = {}) => ({
@@ -71,4 +71,47 @@ test('PadFeed: lần đầu gửi đủ mọi khoá, sau đó chỉ khoá đổi
   assert.deepEqual(feed.next(null), {})
   feed.reset()
   assert.deepEqual(feed.next(null), PS2_NEUTRAL)
+})
+
+/** Tay giả PS2 cắm USB như Chrome macOS báo (đo trên tay thật): 12 nút, 10 trục, mũ ở trục 9 đứng yên 3,29. */
+const ps2usb = (axes: Record<number, number> = {}, pressed: number[] = []) => ({
+  connected: true,
+  mapping: '' as GamepadMappingType,
+  id: ' USB Gamepad           (Vendor: 0810 Product: 0001)',
+  axes: Array.from({ length: 10 }, (_, i) => axes[i] ?? (i === 9 ? 3.29 : 0)),
+  buttons: Array.from({ length: 12 }, (_, i) => ({ pressed: pressed.includes(i), touched: false, value: pressed.includes(i) ? 1 : 0 })),
+})
+
+test('padState: tay giả PS2 USB 0810:0001 — △ ○ ✕ □ = 0 1 2 3, cần phải ở trục 5 / 2, mũi tên là trục mũ 9', () => {
+  const s = padState(ps2usb({ 0: 1, 5: -1, 2: 1, 9: -1 }, [0, 2, 6]))!
+  assert.ok(s)
+  assert.equal(s.ps2_PSB_TRIANGLE, 1)
+  assert.equal(s.ps2_PSB_CROSS, 1)
+  assert.equal(s.ps2_PSB_L2, 1)
+  assert.equal(s.ps2_PSB_CIRCLE, 0)
+  assert.equal(s.ps2_PSS_LX, 255)
+  assert.equal(s.ps2_PSS_RX, 0)
+  assert.equal(s.ps2_PSS_RY, 255)
+  assert.equal(s.ps2_PSB_PAD_UP, 1)
+  assert.equal(s.ps2_PSB_PAD_DOWN, 0)
+  const idle = padState(ps2usb())!
+  assert.equal(idle.ps2_PSS_LX, 128)
+  assert.deepEqual([idle.ps2_PSB_PAD_UP, idle.ps2_PSB_PAD_RIGHT, idle.ps2_PSB_PAD_DOWN, idle.ps2_PSB_PAD_LEFT], [0, 0, 0, 0])
+  // Mọi khoá của bố cục chuẩn đều có (bo ảo không thiếu khoá nào).
+  assert.deepEqual(Object.keys(s).sort(), Object.keys(PS2_NEUTRAL).sort())
+})
+
+test('hatPad: 8 hướng đo trên tay thật, chéo bấm cả hai, đứng yên không bấm gì', () => {
+  const d = (v: number) => Object.entries(hatPad(v)).filter(([, on]) => on).map(([k]) => k).join('+')
+  assert.equal(d(3.29), '')
+  assert.equal(d(-1), 'up')
+  assert.equal(d(-0.43), 'right')
+  assert.equal(d(0.14), 'down')
+  assert.equal(d(0.71), 'left')
+  assert.equal(d(-0.71), 'up+right')
+  assert.equal(d(1), 'up+left')
+})
+
+test('padState: tay lạ không chuẩn khác vẫn null', () => {
+  assert.equal(padState({ ...ps2usb(), id: 'Generic (Vendor: 1234 Product: 5678)' }), null)
 })
