@@ -115,3 +115,20 @@ test('hatPad: 8 hướng đo trên tay thật, chéo bấm cả hai, đứng yê
 test('padState: tay lạ không chuẩn khác vẫn null', () => {
   assert.equal(padState({ ...ps2usb(), id: 'Generic (Vendor: 1234 Product: 5678)' }), null)
 })
+
+test('padState: tay RF "Twin USB Joystick" 20bc:5500 — ✕ = 0, △ = 4, L1 = 6, L3 = 13, cần phải trục 2 / 5 (đo trên tay thật)', () => {
+  const twin = (axes: Record<number, number> = {}, pressed: number[] = []) => ({
+    ...ps2usb(axes, []),
+    id: 'Twin USB Joystick (Vendor: 20bc Product: 5500)',
+    buttons: Array.from({ length: 15 }, (_, i) => ({ pressed: pressed.includes(i), touched: false, value: pressed.includes(i) ? 1 : 0 })),
+  })
+  const s = padState(twin({ 2: 1, 5: 1, 9: 0.71 }, [0, 4, 6, 13]))!
+  assert.ok(s)
+  assert.deepEqual([s.ps2_PSB_CROSS, s.ps2_PSB_TRIANGLE, s.ps2_PSB_L1, s.ps2_PSB_L3, s.ps2_PSB_CIRCLE, s.ps2_PSB_SQUARE], [1, 1, 1, 1, 0, 0])
+  assert.equal(s.ps2_PSS_RX, 255)
+  assert.equal(s.ps2_PSS_RY, 255)
+  assert.equal(s.ps2_PSB_PAD_LEFT, 1)
+  assert.deepEqual(Object.keys(s).sort(), Object.keys(PS2_NEUTRAL).sort())
+  // Safari / app desktop đặt tên kiểu "20bc-5500-Twin USB Joystick".
+  assert.ok(padState({ ...twin(), id: '20bc-5500-Twin USB Joystick' }))
+})
