@@ -12,7 +12,7 @@ import * as THREE from 'three'
 
 export type TraceName = 'io3' | 'sda' | 'scl' | 'ch15' | 'ch13'
 export type PartName = 'sw' | 'esp' | 'pca' | 'l1' | 'l2'
-export type PropName = 'oled' | 'servo' | 'motor' | 'sonar'
+export type PropName = 'oled' | 'servo' | 'motor' | 'sonar' | 'ir'
 /** Chỗ đặt số thứ tự trên mạch: bộ phận trên bo, cổng I2C, hoặc linh kiện gắn ngoài. */
 export type BadgeName = PartName | 'i2c' | 'sonar' | 'oled' | 'servo' | 'wheel'
 
@@ -40,6 +40,8 @@ export interface SceneApi {
   setWheel(speed: number): void
   /** Khoảng cách tới vật cản trước cảm biến siêu âm, cm. */
   setObstacle(cm: number): void
+  /** Quả bóng trước mắt hồng ngoại (màu CSS), hoặc null = không có bóng. */
+  setBall(color: string | null): void
   /** Hiện/ẩn lớp dây dữ liệu (bài khám phá không cần). */
   showWires(on: boolean): void
   /** Vòng chú ý ở một điểm (px ảnh), hoặc tắt. */
@@ -601,6 +603,35 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
   placeObstacle(40)
   cable(sonarGroup, [855, 990], [860, 1165])
 
+  // Mắt hồng ngoại (module phản xạ, như mắt dưới gầm Cobot) cắm cổng cảm biến, tín hiệu IO4; quả bóng
+  // đặt trước mắt.
+  const irGroup = prop('ir')
+  boxAt(irGroup, 26, 2, 34, 0x1d1f24, ux, 8, uz)
+  for (const [dx, color] of [[-6, 0x2b2b33], [6, 0xd8d8e0]] as const) {
+    const eye = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, 6, 16), mat(color))
+    eye.rotation.x = Math.PI / 2
+    eye.position.set(ux + dx, 10, uz + 17)
+    irGroup.add(eye)
+  }
+  const irBeam = new THREE.Mesh(
+    new THREE.ConeGeometry(9, 22, 20, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xff5a4a, transparent: true, opacity: 0.16, depthWrite: false }),
+  )
+  irBeam.rotation.x = -Math.PI / 2
+  irBeam.position.set(ux, 10, uz + 31)
+  irGroup.add(irBeam)
+  const ballMat = new THREE.MeshLambertMaterial({ color: 0xffffff })
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(14, 32, 16), ballMat)
+  ball.position.set(ux, 15, uz + 56)
+  irGroup.add(ball)
+  cable(irGroup, [855, 990], [860, 1165], [0x222222, 0xd23c3c, 0xe8c547])
+  const placeBall = (color: string | null) => {
+    ball.visible = color !== null
+    irBeam.visible = color !== null
+    if (color) ballMat.color.set(color)
+  }
+  placeBall(null)
+
   // --- tương tác ---------------------------------------------------------------------------
   const pointer = new THREE.Vector2()
   const raycaster = new THREE.Raycaster()
@@ -830,6 +861,9 @@ export function createScene(container: HTMLElement, badgeLayer: HTMLElement): Sc
     },
     setObstacle(cm) {
       placeObstacle(cm)
+    },
+    setBall(color) {
+      placeBall(color)
     },
     showWires(on) {
       wireLayer.visible = on

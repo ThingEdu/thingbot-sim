@@ -7,6 +7,7 @@ import * as ScratchBlocks from '@scratch/scratch-blocks'
 import type { Snapshot } from '@thingblock/thingblock-sim'
 import type { RuleResult } from '@thingblock/thingblock-sim/checker'
 import { createArena, type CarState } from './arena'
+import { BALLS, ballById, createBelt, IR_DARK, IR_PIN, GATE_DEG, type BeltState } from './belt'
 import { createBlocks } from './blocks'
 import { LESSONS, type Lesson } from './lessons'
 import { motorSpeed, pct, servoAngle } from './lessons/grader'
@@ -36,6 +37,8 @@ interface LessonSave {
   card?: number
   /** Bài khám phá: bộ phận đã tìm thấy. */
   found?: string[]
+  /** Phiên bản nội dung bài lúc lưu (`Lesson.rev`). */
+  rev?: number
 }
 interface Saved {
   done: string[]
@@ -76,6 +79,7 @@ showProgress()
 const scene = createScene($('#stage'), $('#badges'))
 const blocks = createBlocks($('#blocks'), LESSONS[0].toolbox)
 const arena = createArena($('#stage'))
+const belt = createBelt($('#stage'))
 
 let lesson: Lesson = LESSONS[0]
 let grader: Grader
@@ -114,6 +118,8 @@ const FLOWS: Record<FlowKind, string[]> = {
   car: ['Não', 'Bánh trái M1', 'Bánh phải M2', 'Xe'],
   ps2: ['Tay cầm', 'Não', 'Hai bánh', 'Xe'],
   avoid: ['Cảm biến', 'Não', 'Hai bánh', 'Xe'],
+  ir: ['Mắt hồng ngoại', 'Não', 'Mạch công suất', 'Đèn L1'],
+  sort: ['Mắt hồng ngoại', 'Não', 'Băng chuyền M1', 'Cần gạt S1'],
 }
 const flowEl = $('#flow')
 const buildFlow = (kind: FlowKind) => {
@@ -249,7 +255,12 @@ const start = () => {
     arena.reset()
     car = arena.state()
   }
+  if (lesson.belt) {
+    belt.reset()
+    beltState = belt.state()
+  }
   carT = -1
+  beltT = -1
   runId++
   send({ type: 'load', code, rules: lesson.rules, run: runId })
   send({ type: 'input', key: `gpio${SW_GPIO}`, value: pressed ? 0 : 1 })
@@ -341,6 +352,7 @@ worker.onmessage = ({ data }: MessageEvent<Message>) => {
   }
   blocks.highlight(snapshot.block)
   if (lesson.arena) stepCar(snapshot)
+  if (lesson.belt) stepBelt(snapshot)
   render(snapshot, bus)
 }
 
@@ -372,6 +384,7 @@ function render(snap: Snapshot | null, bus: Bus) {
       renderDevice(snap, on, pwm, bus)
   }
   if (lesson.arena) arena.draw()
+  if (lesson.belt) belt.draw()
   grader.observe({
     running: on,
     pressed,
@@ -389,6 +402,9 @@ function render(snap: Snapshot | null, bus: Bus) {
     oledOn: on && snap.oled !== null,
     power,
     sonar: sonarCm(),
+    ir: irValue(),
+    ball: ballId,
+    belt: lesson.belt ? beltState : null,
     pad: { ...pad },
     car: lesson.arena ? car : null,
   })
@@ -564,6 +580,10 @@ const pad: Record<string, boolean> = {}
 let car: CarState = arena.state()
 let carT = -1
 let lastSonarSent = -1
+let ballId = 'trang'
+let beltState: BeltState = belt.state()
+let beltT = -1
+let lastIrSent = -1
 let lastOled: string | null = null
 /** Lần cuối chương trình đọc từng loại cảm biến (ms thực): chương trình đọc mỗi vài chục ms, còn mỗi gói
  *  từ worker chỉ dài một khung hình, nên "đang đọc" được giữ thêm một lúc cho khỏi nhấp nháy. */
@@ -581,9 +601,19 @@ const sendSonar = () => {
   lastSonarSent = cm
   send({ type: 'input', key: `adc${SONAR_KEY}`, value: cm })
 }
+/** Số mắt hồng ngoại IO4: quả bóng đang đặt (bài 6) hoặc thứ đang chạy qua trên băng chuyền (bài 10). */
+const irValue = () => (lesson.belt ? beltState.ir : ballById(ballId).ir)
+const sendIr = () => {
+  const v = irValue()
+  if (v === lastIrSent) return
+  lastIrSent = v
+  send({ type: 'input', key: `adc${IR_PIN}`, value: v })
+}
 function sendInputs() {
   lastSonarSent = -1
   sendSonar()
+  lastIrSent = -1
+  sendIr()
   for (const b of PS2_BUTTONS) send({ type: 'input', key: `adc${ps2Key(b)}`, value: pad[b] ? 1 : 0 })
 }
 
@@ -594,6 +624,14 @@ function stepCar(snap: Snapshot) {
   const on = power ? 1 : 0
   car = arena.step(motorSpeed(snap.pwm, 1) * on, motorSpeed(snap.pwm, 2) * on, dt)
   sendSonar()
+}
+
+/** Băng chuyền chạy theo thời gian ảo, như xe. Động cơ và servo chỉ chạy khi bật công tắc nguồn. */
+function stepBelt(snap: Snapshot) {
+  const dt = beltT < 0 ? 0 : Math.min(0.1, (snap.t - beltT) / 1e6)
+  beltT = snap.t
+  beltState = belt.step(power ? motorSpeed(snap.pwm, 1) : 0, power ? servoAngle(snap.pwm[12]) : null, dt)
+  sendIr()
 }
 
 const vn = (n: number, digits = 1) => n.toFixed(digits).replace('.', ',')
@@ -617,7 +655,7 @@ function renderDevice(snap: Snapshot | null, on: boolean, pwm: number[], bus: Bu
   const brain = () => setFlow(lesson.flow === 'car' ? 'f1' : 'f2', on ? 'Đang chạy' : 'Chưa chạy', on ? doing(snap) : 'ESP32-C3', on ? 'active' : 'idle')
   scene.setTrace('io3', null)
   scene.setTrace('ch13', null)
-  scene.setTrace('ch15', on && lesson.flow === 'sonar' ? (pwm[CH.L1] > 0 ? HI : LO) : null)
+  scene.setTrace('ch15', on && (lesson.flow === 'sonar' || lesson.flow === 'ir') ? (pwm[CH.L1] > 0 ? HI : LO) : null)
   scene.setTrace('sda', busy ? BUS : null)
   scene.setTrace('scl', busy ? BUS : null)
   if (writes && now - lastPulse.i2c > 160) {
@@ -661,6 +699,27 @@ function renderDevice(snap: Snapshot | null, on: boolean, pwm: number[], bus: Bu
       const p = pctOf(pwm[CH.L1])
       setFlow('f3', on ? `Lệnh: ${p} %` : '—', on ? `I2C kênh 15 = ${Math.min(pwm[CH.L1], 4095)}` : 'Mạch công suất · I2C', busy ? 'bus' : on ? '' : 'idle')
       setFlow('f4', p > 0 ? `SÁNG ${p} %` : 'TẮT', `PWM ${p} %`, p > 0 ? 'lit' : '')
+      break
+    }
+    case 'ir': {
+      const b = ballById(ballId)
+      const reads = on && readsRecently(bus, String(IR_PIN))
+      setFlow('f1', b.color ? `Bóng ${b.name.toLowerCase()}` : b.name, `IO4 = ${b.ir}`, on && reads ? 'lo' : '')
+      if (!on) setFlow('f2', 'Chưa chạy', 'ESP32-C3', 'idle')
+      else setFlow('f2', reads ? 'Đang nhìn' : 'Không hỏi mắt', reads ? doing(snap) : 'thiếu «read IR sensor»', reads ? 'active' : 'idle')
+      const p = pctOf(pwm[CH.L1])
+      setFlow('f3', on ? `Lệnh: ${p} %` : '—', on ? `I2C kênh 15 = ${Math.min(pwm[CH.L1], 4095)}` : 'Mạch công suất · I2C', busy ? 'bus' : on ? '' : 'idle')
+      setFlow('f4', p > 0 ? `SÁNG ${p} %` : 'TẮT', `PWM ${p} %`, p > 0 ? 'lit' : '')
+      break
+    }
+    case 'sort': {
+      const reads = on && readsRecently(bus, String(IR_PIN))
+      const ir = beltState.ir
+      setFlow('f1', `IO4 = ${ir}`, ir < IR_DARK ? 'tối: trứng hỏng?' : 'sáng', on && reads ? 'lo' : '')
+      brain()
+      setFlow('f3', power ? wheelText(l) : 'Không có điện', noPower || `băng đã chạy ${vn(beltState.moved / 10, 0)} cm`, power && l ? 'active' : '')
+      const down = beltState.gate >= GATE_DEG
+      setFlow('f4', `S1 ${Math.round(beltState.gate)}°`, down ? 'gạt xuống thùng loại' : 'cho trứng đi qua', down ? 'lit' : '')
       break
     }
     case 'motor': {
@@ -747,12 +806,43 @@ slider.addEventListener('input', () => {
 scene.setObstacle(sliderCm)
 
 $('#reset-car').addEventListener('click', () => {
+  grader.restart()
+  if (lesson.belt) {
+    belt.reset()
+    beltState = belt.state()
+    beltT = -1
+    belt.draw()
+    return
+  }
   arena.reset()
   car = arena.state()
   carT = -1
-  grader.restart()
   arena.draw()
 })
+
+// Bài 6: chọn quả bóng đặt trước mắt hồng ngoại.
+const ballWrap = $('#ball-wrap')
+const showBall = () => {
+  for (const b of ballWrap.querySelectorAll<HTMLButtonElement>('[data-ball]')) b.setAttribute('aria-pressed', String(b.dataset.ball === ballId))
+  scene.setBall(ballById(ballId).color || null)
+}
+for (const b of BALLS) {
+  const btn = document.createElement('button')
+  btn.type = 'button'
+  btn.className = `ball${b.color ? '' : ' none'}`
+  btn.dataset.ball = b.id
+  btn.title = b.name
+  btn.setAttribute('aria-label', b.name)
+  if (b.color) btn.style.setProperty('--ball', b.color)
+  btn.addEventListener('click', () => {
+    ballId = b.id
+    showBall()
+    sendIr()
+    if (!running) render(null, IDLE_BUS)
+  })
+  ballWrap.appendChild(btn)
+}
+showBall()
 
 // --- bài 1: khám phá mạch -------------------------------------------------------------------
 let selected: Part | null = null
@@ -853,6 +943,15 @@ function openLesson(next: Lesson) {
   answered = {}
   scene.mark(null)
   scene.showWires(!explore)
+  // Bài đã viết lại (rev tăng): khối cũ không còn trong hộp công cụ, nên mở lại từ đầu và bỏ ✓ cũ.
+  if ((mine().rev ?? 0) !== (next.rev ?? 0)) {
+    mine().workspace = undefined
+    mine().card = 0
+    mine().rev = next.rev ?? 0
+    saved.done = saved.done.filter((id) => id !== next.id)
+    store.set(saved)
+    showProgress()
+  }
   if (!explore) {
     blocks.setToolbox(next.toolbox)
     try {
@@ -873,11 +972,18 @@ function openLesson(next: Lesson) {
   $('#power').hidden = !controls.includes('power')
   $('#sonar-wrap').hidden = !controls.includes('sonar')
   $('#pad').hidden = !controls.includes('pad')
-  $('#reset-car').hidden = !next.arena
-  $('#see').hidden = !!next.arena
+  $('#ball-wrap').hidden = !controls.includes('ball')
+  $('#reset-car').hidden = !next.arena && !next.belt
+  $('#reset-car').textContent = next.belt ? '↺ Đặt lại băng chuyền' : '↺ Đặt lại xe'
+  $('#see').hidden = !!next.arena || !!next.belt
   $('#rhythm').hidden = next.flow !== 'blink'
   scene.setProps(next.props ?? [])
   document.body.classList.toggle('mode-arena', !!next.arena)
+  document.body.classList.toggle('mode-belt', !!next.belt)
+  if (next.belt) {
+    belt.reset()
+    beltState = belt.state()
+  }
   if (next.arena) {
     arena.setLayout(next.arena)
     car = arena.state()
@@ -897,6 +1003,7 @@ function openLesson(next: Lesson) {
     renderExplore()
   } else render(null, IDLE_BUS)
   if (next.arena) requestAnimationFrame(() => arena.draw())
+  if (next.belt) requestAnimationFrame(() => belt.draw())
 }
 // Link từ trang khóa học (?bai=6) mở thẳng bài đó; không có thì mở bài đang làm dở.
 const asked = Number(new URLSearchParams(location.search).get('bai'))

@@ -99,6 +99,7 @@ export const S = {
   }),
   plain: (type: string, next?: BlockState): BlockState => ({ type, ...chain(next) }),
   sonar: (): BlockState => ({ type: 'ultrasonic_readDistance', fields: { TRIG: 0, ECHO: 4, UNIT: 'CM' } }),
+  ir: (): BlockState => ({ type: 'cobot_readIr', fields: { PIN: '4' } }),
   lessThan: (a: BlockState, b: number): BlockState => ({
     type: 'operator_lt',
     inputs: { OPERAND1: { ...text(''), block: a }, OPERAND2: text(String(b)) },
@@ -138,6 +139,7 @@ export const B = {
   oledClear: block('oled_clear'),
   oledRefresh: block('oled_refresh'),
   sonar: block('ultrasonic_readDistance', { fields: { TRIG: 0, ECHO: 4, UNIT: 'CM' } }),
+  ir: block('cobot_readIr', { fields: { PIN: '4' } }),
   ps2Read: block('ps2_readData'),
   button: (name: string) => block('ps2_getButton', { fields: { BUTTON: name } }),
   forever: block('control_forever'),
@@ -157,6 +159,7 @@ export const CAT = {
   operators: (contents: object[]) => category('Toán tử', '#59C059', '#389438', contents),
   oled: (contents: object[]) => category('OLED', '#C0C0C0', '#A9A9A9', contents),
   sensor: (contents: object[]) => category('Cảm biến', '#D39DDB', '#BA55D3', contents),
+  cobot: (contents: object[]) => category('Mắt Cobot', '#4CAF8F', '#3A8C72', contents),
   ps2: (contents: object[]) => category('Tay cầm PS2', '#FF3399', '#C71585', contents),
 }
 export const op = (t: string) => `<span class="chip op">${t}</span>`

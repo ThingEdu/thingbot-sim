@@ -4,6 +4,7 @@
  */
 import type { RuleResult } from '@thingblock/thingblock-sim/checker'
 import type { ArenaLayout, CarState } from '../arena'
+import type { BeltState } from '../belt'
 import type { BadgeName, PartName, PropName } from '../scene'
 
 export interface Card {
@@ -44,6 +45,11 @@ export interface Observation {
   power: boolean
   /** Khoảng cách vật cản trước cảm biến siêu âm, cm. */
   sonar: number
+  /** Số mắt hồng ngoại IO4 đang đọc (0…4095) và quả bóng đang đặt trước mắt (bài 6). */
+  ir: number
+  ball: string
+  /** Dây chuyền phân loại (bài 10). */
+  belt: BeltState | null
   /** Nút tay cầm PS2 đang giữ. */
   pad: Record<string, boolean>
   /** Xe trên sàn (bài 8–10). */
@@ -62,15 +68,17 @@ export interface Grader {
   event?(type: 'pick' | 'answer', value: string): void
 }
 
-export type FlowKind = 'button' | 'blink' | 'explore' | 'oled' | 'servo' | 'sonar' | 'motor' | 'car' | 'ps2' | 'avoid'
+export type FlowKind = 'button' | 'blink' | 'explore' | 'oled' | 'servo' | 'sonar' | 'ir' | 'motor' | 'car' | 'ps2' | 'avoid' | 'sort'
 
-/** Nút điều khiển trên thanh mạch: giữ SW, công tắc nguồn, thanh kéo vật cản, tay cầm PS2. */
-export type Control = 'hold' | 'power' | 'sonar' | 'pad'
+/** Nút điều khiển trên thanh mạch: giữ SW, công tắc nguồn, thanh kéo vật cản, chọn bóng, tay cầm PS2. */
+export type Control = 'hold' | 'power' | 'sonar' | 'ball' | 'pad'
 
 export interface Lesson {
   id: string
   no: number
   title: string
+  /** Tăng khi viết lại bài: bài lưu với rev cũ được mở lại từ đầu. */
+  rev?: number
   toolbox: object
   starter: object
   example: object
@@ -88,6 +96,8 @@ export interface Lesson {
   props?: PropName[]
   /** Có thì sân khấu là sàn chạy xe thay cho mạch 3D. */
   arena?: ArenaLayout
+  /** Có thì sân khấu là dây chuyền phân loại (bài 10). */
+  belt?: boolean
   /** Bài coi là xong khi đạt các việc này. */
   done: string[]
   createGrader(onChange: GraderChange): Grader

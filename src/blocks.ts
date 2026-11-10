@@ -13,6 +13,9 @@ import { registerBlocks as registerSonarBlocks } from '@thingblock/resource/exte
 import { registerGenerators as registerSonarGenerators } from '@thingblock/resource/extensions/peripheral/ultrasonic/generator'
 import { registerBlocks as registerPs2Blocks } from '@thingblock/resource/extensions/peripheral/ps2/blocks'
 import { registerGenerators as registerPs2Generators } from '@thingblock/resource/extensions/peripheral/ps2/generator'
+import { registerBlocks as registerCobotBlocks } from '@thingblock/resource/extensions/peripheral/cobot/blocks'
+import { registerGenerators as registerCobotGenerators } from '@thingblock/resource/extensions/peripheral/cobot/generator'
+import { registerSimGenerators as registerCobotSim } from '@thingblock/resource/extensions/peripheral/cobot/sim'
 import { registerExtraSimGenerators } from './sim-extra'
 import type { WorkspaceSvg } from '@scratch/scratch-blocks'
 import { blockColors } from '@thingblock/block-colors'
@@ -38,12 +41,13 @@ let registered = false
 export function createBlocks(container: HTMLElement, toolbox: object): BlocksApi {
   ScratchBlocks.ScratchMsgs.setLocale('vi')
   if (!registered) {
-    // Khối ThingBot và ba ngoại vi các bài dùng: màn OLED, cảm biến siêu âm, tay cầm PS2.
-    for (const register of [registerBlocks, registerOledBlocks, registerSonarBlocks, registerPs2Blocks]) register(ScratchBlocks)
-    for (const register of [registerGenerators, registerOledGenerators, registerSonarGenerators, registerPs2Generators])
+    // Khối ThingBot và các ngoại vi bài dùng: màn OLED, cảm biến siêu âm, tay cầm PS2, mắt hồng ngoại Cobot.
+    for (const register of [registerBlocks, registerOledBlocks, registerSonarBlocks, registerPs2Blocks, registerCobotBlocks]) register(ScratchBlocks)
+    for (const register of [registerGenerators, registerOledGenerators, registerSonarGenerators, registerPs2Generators, registerCobotGenerators])
       register(ScratchBlocks.arduinoGenerator, ScratchBlocks.ArduinoOrder)
     registerSimGenerators(ScratchBlocks.simGenerator, ScratchBlocks.ArduinoOrder)
     registerOledSim(ScratchBlocks.simGenerator, ScratchBlocks.ArduinoOrder)
+    registerCobotSim(ScratchBlocks.simGenerator, ScratchBlocks.ArduinoOrder)
     registerExtraSimGenerators(ScratchBlocks.simGenerator, ScratchBlocks.ArduinoOrder)
     registered = true
   }

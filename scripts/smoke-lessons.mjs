@@ -5,6 +5,7 @@
  *   npm run dev            # cổng 5190
  *   node scripts/smoke-lessons.mjs [bai-4 bai-6 …]          # lời giải mẫu: bước đang mở phải ✓
  *   node scripts/smoke-lessons.mjs --starter [bai-4 …]       # khung trống: không bước nào được ✓
+ *   node scripts/smoke-lessons.mjs kid                      # chỉ chạy các chương trình sai cố ý
  *
  * Playwright lấy từ checkout ThingBlock (biến THINGBLOCK_EDITOR, mặc định ../thingblock-editor-sim).
  */
@@ -30,11 +31,7 @@ const hold = async (page, button, ms) => {
   await page.waitForTimeout(ms)
   await page.mouse.up()
 }
-const slide = (page, cm) =>
-  page.$eval('#sonar', (s, v) => {
-    s.value = String(v)
-    s.dispatchEvent(new Event('input'))
-  }, cm)
+const ball = (page, id) => page.click(`[data-ball="${id}"]`)
 
 /** [bài, bước mở sẵn (0 = đầu), kịch bản] — kịch bản trả về các dòng để in. */
 const CASES = {
@@ -56,13 +53,13 @@ const CASES = {
   'bai-6': [
     1,
     async (p) => {
-      await slide(p, 10)
+      await ball(p, 'den')
       await p.waitForTimeout(1500)
-      const near = `gần: ${(await state(p)).status} | ${await flow(p)}`
+      const dark = `bóng đen: ${(await state(p)).status} | ${await flow(p)}`
       await p.click('#next')
-      await slide(p, 60)
+      await ball(p, 'vang')
       await p.waitForTimeout(1500)
-      return [near, `xa: ${(await state(p)).status} | ${await flow(p)}`]
+      return [dark, `bóng vàng: ${(await state(p)).status} | ${await flow(p)}`]
     },
   ],
   'bai-7': [2, async (p) => [await p.waitForTimeout(6500), await flow(p)]],
@@ -80,7 +77,7 @@ const CASES = {
       return [up, rel, `▼: ${(await state(p)).status}`]
     },
   ],
-  'bai-10': [1, async (p) => [await p.waitForTimeout(15000), await flow(p)]],
+  'bai-10': [1, async (p) => [await p.waitForTimeout(20000), await flow(p)]],
 }
 
 // Chương trình "của trẻ" (đúng và sai cố ý) cho các bước dễ chấm nhầm: [bài, bước, khối, phải ✓?, giây chờ]
@@ -88,7 +85,8 @@ const num = (v) => ({ shadow: { type: 'math_number', fields: { NUM: v } } })
 const chain = (...bs) => bs.reduceRight((next, b) => ({ ...b, ...(next ? { next: { block: next } } : {}) }), undefined)
 const motor = (m, dir, v) => ({ type: 'thingBotC3_setMotor', fields: { MOTOR: String(m), DIRECTION: dir }, inputs: { SPEED: num(v) } })
 const wait = (s) => ({ type: 'control_wait', inputs: { DURATION: { shadow: { type: 'math_positive_number', fields: { NUM: s } } } } })
-const sonar = { type: 'ultrasonic_readDistance', fields: { TRIG: 0, ECHO: 4, UNIT: 'CM' } }
+const ir = { type: 'cobot_readIr', fields: { PIN: '4' } }
+const servo = (deg) => ({ type: 'thingBotC3_setServoAngle', fields: { SERVO: '1' }, inputs: { ANGLE: num(deg) } })
 const lt = (a, b) => ({ type: 'operator_lt', inputs: { OPERAND1: { shadow: { type: 'text', fields: { TEXT: '' } }, block: a }, OPERAND2: { shadow: { type: 'text', fields: { TEXT: String(b) } } } } })
 const prog = (setup, loop) => ({
   blocks: {
@@ -103,10 +101,19 @@ const spin = (t) => prog([motor(1, 'forward', 0), motor(1, 'forward', 50), motor
 const KID = {
   'bai-8 xoay 0,35 s': ['bai-8', 2, spin(0.35), true, 3000],
   'bai-8 xoay 1 s (quá)': ['bai-8', 2, spin(1), false, 5000],
-  'bai-10 chạy vòng tròn': [
+  // Quên nhấc cần gạt: trứng tốt cũng bị gạt.
+  'bai-10 quên nhấc cần gạt': [
     'bai-10',
     1,
-    prog([], chain({ type: 'control_if_else', inputs: { CONDITION: { block: lt(sonar, 25) }, SUBSTACK: { block: chain(motor(1, 'forward', 50), motor(2, 'backward', 50)) }, SUBSTACK2: { block: chain(motor(1, 'forward', 50), motor(2, 'forward', 30)) } } }, wait(0.05))),
+    prog([motor(1, 'forward', 40), servo(0)], chain({ type: 'control_if', inputs: { CONDITION: { block: lt(ir, 1500) }, SUBSTACK: { block: servo(90) } } }, wait(0.05))),
+    false,
+    16000,
+  ],
+  // Vòng lặp đợi 1 giây: não nhìn quá thưa, trứng hỏng lọt.
+  'bai-10 đợi 1 giây': [
+    'bai-10',
+    1,
+    prog([motor(1, 'forward', 100), servo(0)], chain({ type: 'control_if_else', inputs: { CONDITION: { block: lt(ir, 1500) }, SUBSTACK: { block: servo(90) }, SUBSTACK2: { block: servo(0) } } }, wait(1))),
     false,
     16000,
   ],
@@ -141,7 +148,7 @@ for (const [id, [card, script]] of Object.entries(CASES)) {
   console.log(ok ? '    ĐẠT' : '    KHÔNG ĐẠT')
   await page.close()
 }
-if (!starter && !only.length)
+if (!starter && (!only.length || only.includes('kid')))
   for (const [name, [id, card, workspace, pass, ms]] of Object.entries(KID)) {
     const page = await browser.newPage({ viewport: { width: 1280, height: 640 } })
     const errors = []

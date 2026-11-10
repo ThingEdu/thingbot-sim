@@ -1,143 +1,119 @@
 /**
- * Bài 10 — Dự án: xe tự tránh vật cản. Ghép bài 6 (siêu âm) với bài 8 (hai bánh): vật gần thì xoay, không
- * thì đi thẳng — chương trình "tự lái" của bài R4U trên robot.edu.vn (≈ FanRoc mini).
- * Chấm: xe tự đi được 3 m mà không đâm lần nào, có ít nhất 2 lần xoay né (hai bánh ngược chiều), và đã
- * ra xa chỗ xuất phát ít nhất 1 m — chạy vòng tròn quanh chỗ xuất phát (bán kính ~26 cm) không tính.
- *
- * Ngưỡng 25 cm (bài R4U dùng 15–20 cm cho xe thật): thử 300 lần với hướng xuất phát và nhịp vòng lặp
- * lệch ngẫu nhiên, ngưỡng 25 ở tốc độ 50 không trượt lần nào, còn 20 cm trượt ~2 % vì xe cần chỗ để
- * xoay chứ không chỉ để phanh.
+ * Bài 10 — Dự án: dây chuyền phân loại trứng. Ghép bài 6 (mắt hồng ngoại IO4), bài 5 (servo S1) và bài 7
+ * (động cơ M1): băng chuyền chở trứng qua mắt, trứng tối (hỏng) thì cần gạt hạ 90 độ gạt xuống thùng
+ * loại, còn lại nâng 0 độ cho đi tiếp. Mô hình băng chuyền ở `../belt.ts`.
+ * Chấm: 6 quả liền vào đúng thùng, trong đó ít nhất 2 quả hỏng bị gạt; thử thách: còi kêu khi gạt.
  */
-import { OBSTACLE_COURSE } from '../arena'
-import { SONAR_KEY } from '../sim-extra'
+import { GATE_DEG, IR_DARK, IR_PIN } from '../belt'
 import { makeGrader, motorSpeed } from './grader'
-import { ask, B, bang, CAT, ctrl, ev, hat, hieu, op, per, program, RA, S, STARTER, tb, toolbox, VAO, wait } from './state'
+import { ask, B, bang, CAT, ctrl, ev, giong, hat, hieu, op, per, program, S, STARTER, tb, toolbox, wait } from './state'
 import type { Card, Lesson } from './types'
 
 const BUZZER = 14
-const GOAL_CM = 300
-const NEAR = 25
-/** Phải ra xa chỗ xuất phát ít nhất chừng này (cm). */
-const FAR_CM = 100
-const MIN_DODGES = 2
-const lessThan25 = { ...B.lessThan, inputs: { OPERAND1: { shadow: { type: 'text', fields: { TEXT: '' } } }, OPERAND2: { shadow: { type: 'text', fields: { TEXT: String(NEAR) } } } } }
+const STREAK = 6
+const MIN_BAD = 2
+const lessThanDark = {
+  ...B.lessThan,
+  inputs: { OPERAND1: { shadow: { type: 'text', fields: { TEXT: '' } } }, OPERAND2: { shadow: { type: 'text', fields: { TEXT: String(IR_DARK) } } } },
+}
 
 const CARDS: Card[] = [
   {
-    title: 'Dự án: robot hút bụi',
-    body: `<p><b>Robot hút bụi</b> tự đi khắp phòng mà không đâm vào tủ. Bí mật của nó là lặp mãi ba việc: <b>nhìn → nghĩ → làm</b>.</p>
-      ${hieu('Ba việc của mọi robot tự động', bang(['Việc', 'Bài', 'Trên xe của em'], [['Nhìn', '6', `${VAO} cảm biến siêu âm ở mũi, TRIG IO0, ECHO IO4`], ['Nghĩ', '3, 6', 'nếu khoảng cách &lt; 25 cm thì xoay, không thì đi thẳng'], ['Làm', '7, 8', `${RA} hai bánh: M1 trái, M2 phải`]]))}
-      <p>Trên sàn có mấy hộp gỗ. Nhiệm vụ: xe <b>tự chạy 3 mét</b> mà <b>không đâm</b> vào đâu. Em đã có đủ mảnh ghép!</p>`,
-  },
-  {
-    title: 'Lắp bộ não tự lái',
-    body: `<p>Trong ${ev('vòng lặp Arduino')}:</p>
-      <ol class="todo">
-        <li>${ctrl('nếu … thì … nếu không thì')} với ${op('… < 25')} và ${per('ultrasonic … read distance cm')}.</li>
-        <li><b>thì</b> (vật gần): M1 «forward at 50», M2 «backward at 50» — xoay tránh.</li>
-        <li><b>nếu không thì</b>: M1 và M2 «forward at 50» — đi thẳng.</li>
-        <li>Cuối vòng: ${ctrl('đợi 0.05 giây')}.</li>
-      </ol>
-      <p>Bật 🔋 Nguồn, bấm <b>▶ Chạy</b>. Đường đỏ chấm là tia siêu âm.</p>`,
-    check: 'avoid',
-  },
-  {
-    title: 'Nhanh hơn thì sao?',
-    body: `${ask('Xe chạy nhanh hơn thì ngưỡng nên…', [
-        ['To hơn (thấy vật từ xa hơn)', true, 'Xe nhanh thì trong lúc não "nghĩ" và xe kịp xoay, nó đã lao thêm một đoạn. Thấy vật sớm hơn mới kịp né, giống ô tô chạy nhanh phải giữ khoảng cách xa hơn.'],
-        ['Nhỏ hơn', false, 'Ngưỡng nhỏ là đợi vật thật sát mới né. Chạy nhanh mà né muộn thì dễ đâm.'],
-        ['Không cần đổi', false, 'Thử thật sẽ thấy: tốc độ 80 với ngưỡng 25 hay đâm hơn tốc độ 50.'],
+    title: 'Dự án: máy soi trứng',
+    body: `<p>Trại gà mỗi ngày nhặt hàng chục nghìn quả trứng. Người ta <b>soi trứng</b>: rọi đèn qua vỏ, quả tốt sáng trong, quả hỏng <b>tối đục</b>. Máy phân loại làm việc này nhanh hơn người: <b>nhìn</b> từng quả trên băng chuyền rồi <b>gạt</b> quả hỏng sang thùng riêng. Nhà máy cà phê, gạo, hay robot FanRoc chọn bóng cũng lựa theo cách đó.</p>
+      ${giong('dây chuyền giống em <b>nhặt hạt đậu đen lẫn trong rổ đậu xanh</b>: mắt nhìn từng hạt, não quyết định, tay gạt hạt lạ ra. Ở đây mắt hồng ngoại là mắt, ESP32-C3 là não, servo S1 là bàn tay.')}
+      ${hieu('Em đã có đủ mảnh ghép', bang(['Việc', 'Bài', 'Trên dây chuyền'], [['Nhìn sáng, tối', '6', 'mắt hồng ngoại IO4, gắn ngay trên cần gạt'], ['Quyết định', '3, 6', 'số đọc &lt; 1500 là trứng hỏng'], ['Chạy băng chuyền', '7', 'động cơ M1'], ['Gạt', '5', 'servo S1: 90 độ gạt, 0 độ cho qua']]))}
+      ${ask('Quả trứng hỏng đang nằm dưới mắt. Cần gạt nên ở góc nào?', [
+        ['90 độ: hạ xuống, gạt trứng vào thùng loại', true, 'Cần gạt hạ xuống chắn đường, quả trứng lăn vào thùng loại.'],
+        ['0 độ', false, '0 độ là cần gạt nhấc lên, trứng đi qua. Góc này dành cho trứng tốt.'],
       ])}
-      <p>Giờ thử: đổi tốc độ đi thẳng lên <b>80</b>, bấm Chạy vài lần, rồi chỉnh ngưỡng ${op('… < 25')}. <b>Ghi lại</b> mỗi lần thử: tốc độ, ngưỡng, có đâm không. Kỹ sư thật cũng làm vậy.</p>
-      <p class="muted">Cảm biến chỉ nhìn thẳng phía trước, nên lách qua góc hộp dễ đâm hông.</p>`,
+      <p>Bấm <b>🔋 Nguồn</b> trước: băng chuyền và servo cần điện từ pin.</p>`,
   },
   {
-    title: 'Thử thách: còi báo',
-    body: `<p>Cho xe <b>kêu</b> mỗi lần tránh vật: thêm ${tb('play note C octave 5 for 0.25 beats')} vào chỗ <b>thì</b>. Còi là một ${RA} nữa, nằm ở kênh 14 của mạch công suất.</p>`,
+    title: 'Lắp máy phân loại',
+    body: `<ol class="todo">
+        <li>Trong ${ev('khi Arduino khởi động')}: ${tb('set motor M1 go forward at 40')} cho băng chuyền chạy, và ${tb('set servo S1 to angle 0 degrees')} để cần gạt nhấc lên.</li>
+        <li>Trong ${ev('vòng lặp Arduino')}: ${ctrl('nếu … thì … nếu không thì')} với ${op('… < 1500')}, ô bên trái là ${per('read IR sensor 1 · IO4')}.</li>
+        <li>Chỗ <b>thì</b>: ${tb('set servo S1 to angle 90 degrees')}. Chỗ <b>nếu không thì</b>: ${tb('set servo S1 to angle 0 degrees')}.</li>
+        <li>Dưới cùng: ${ctrl('đợi 0.05 giây')}.</li>
+      </ol>
+      <p>Bấm <b>▶ Chạy</b>. <b>${STREAK} quả liền</b> phải vào đúng thùng, trong đó có trứng hỏng bị gạt.</p>`,
+    check: 'sort',
+  },
+  {
+    title: 'Thử thách: còi báo trứng hỏng',
+    body: `<p>Máy soi trứng thật kêu lên cho người trông máy biết. Thêm ${tb('play note C octave 5 for 0.25 beats')} vào chỗ <b>thì</b>, ngay sau khối servo 90 độ.</p>
+      ${hieu('Băng chạy nhanh thì sao?', `<p>Mắt chỉ nhìn thấy mỗi quả trong một khoảnh khắc ngắn. Băng chạy càng nhanh, khoảnh khắc đó càng ngắn. Nếu não bận việc khác quá lâu (một khối đợi dài, một nốt nhạc dài) thì trứng hỏng đã lọt qua trước khi não kịp nhìn.</p>
+      <p>Thử đổi tốc độ M1 thành <b>100</b>, hoặc khối đợi thành <b>1 giây</b>, rồi xem số "nhầm" trên băng chuyền. Kỹ sư nhà máy phải cân giữa <b>nhanh</b> và <b>không sót</b>.</p>`)}`,
     check: 'beep',
     optional: true,
   },
   {
     title: 'Hoàn thành 10 bài! 🏆',
-    body: `<p>Em đã đi hết đường: <b>đèn → nút → màn hình → servo → cảm biến → động cơ → xe → tay cầm → xe tự lái</b>. Và em đã biết ba điều mà mọi kỹ sư robot dùng hằng ngày: <b>đầu vào / đầu ra</b>, <b>0 và 1</b>, và <b>đọc sơ đồ để biết chân nào nối với gì</b>.</p>
-      <p>Mang chương trình sang ThingBlock, chọn bo ThingBot, bấm <b>Nạp</b> và cho xe thật chạy thử nhé!</p>`,
+    body: `<p>Em vừa làm một <b>máy phân loại</b>: <b>nhìn → nghĩ → làm</b>, lặp mãi. Dây chuyền lựa trứng, máy lựa cà phê, robot FanRoc chọn bóng đều làm việc theo đúng ba bước này.</p>
+      <p>Em cũng đã biết ba điều kỹ sư robot dùng hằng ngày: <b>đầu vào / đầu ra</b>, <b>0 và 1</b>, và <b>đọc sơ đồ để biết chân nào nối với gì</b>.</p>
+      <p>Bước tiếp: dùng <b>cảm biến màu</b> của Cobot để lựa đúng theo màu đỏ, lục, lam; hoặc mở ThingBlock, chọn bo ThingBot, bấm <b>Nạp</b> để chạy trên robot thật.</p>`,
   },
 ]
 
 export const BAI_10: Lesson = {
   id: 'bai-10',
   no: 10,
-  title: 'Dự án: xe tránh vật cản',
+  rev: 2,
+  title: 'Dự án: dây chuyền phân loại',
   toolbox: toolbox(
     [B.ifElse, B.if, B.waitFor(0.05)],
-    [B.init, B.motor(1, 'forward', 50), B.motor(2, 'forward', 50), B.motor(1, 'backward', 50), B.motor(2, 'backward', 50), B.motor(1, 'forward', 0), B.motor(2, 'forward', 0), B.playNote],
-    [CAT.operators([lessThan25, B.greaterThan, B.and]), CAT.sensor([B.sonar])],
+    [B.init, B.motor(1, 'forward', 40), B.setServo(0), B.setServo(90), B.playNote],
+    [CAT.operators([lessThanDark, B.greaterThan]), CAT.cobot([B.ir])],
   ),
   starter: STARTER,
   example: program(
-    hat('event_whenarduinobegin', 30, 30, S.plain('thingBotC3_init')),
-    hat(
-      'event_whenarduinoloop',
-      30,
-      150,
-      S.ifElse(
-        S.lessThan(S.sonar(), NEAR),
-        S.motor(1, 'forward', 50, S.motor(2, 'backward', 50)),
-        S.motor(1, 'forward', 50, S.motor(2, 'forward', 50)),
-        wait(0.05),
-      ),
-    ),
+    hat('event_whenarduinobegin', 30, 30, S.plain('thingBotC3_init', S.motor(1, 'forward', 40, S.setServo(0)))),
+    hat('event_whenarduinoloop', 30, 270, S.ifElse(S.lessThan(S.ir(), IR_DARK), S.setServo(90), S.setServo(0), wait(0.05))),
   ),
   cards: CARDS,
-  flow: 'avoid',
+  flow: 'sort',
   controls: ['power'],
-  arena: OBSTACLE_COURSE,
+  belt: true,
   badges: [],
-  done: ['avoid'],
+  done: ['sort'],
   createGrader: makeGrader({
     track(o, run) {
-      if (o.sensors[SONAR_KEY]) run.seen.read = true
-      if (o.car && o.car.sonar < NEAR + 5 && o.pwm[BUZZER] > 0) run.seen.beep = true
-      if (o.car) {
-        const d = Math.hypot(o.car.x - OBSTACLE_COURSE.start.x, o.car.y - OBSTACLE_COURSE.start.y)
-        if (d >= FAR_CM) run.seen.far = true
-        // một lần né = một lần chuyển sang xoay tại chỗ (hai bánh ngược chiều)
-        const spinning = motorSpeed(o.pwm, 1) * motorSpeed(o.pwm, 2) < 0
-        if (spinning && !run.seen.spinning) run.seen.dodges = Number(run.seen.dodges ?? 0) + 1
-        run.seen.spinning = spinning
-      }
+      if (o.sensors[String(IR_PIN)]) run.seen.read = true
+      const b = o.belt
+      if (!b) return
+      if (o.pwm[BUZZER] > 0 && b.gate >= GATE_DEG) run.seen.beep = true
+      // Lỗi gần nhất: gạt nhầm trứng tốt hay để lọt trứng hỏng, để gợi ý đúng chỗ cần sửa.
+      if (b.rejectedGood > Number(run.seen.rejectedGood ?? 0)) run.seen.mistake = 'good'
+      if (b.passedBad > Number(run.seen.passedBad ?? 0)) run.seen.mistake = 'bad'
+      run.seen.rejectedGood = b.rejectedGood
+      run.seen.passedBad = b.passedBad
     },
     checks: {
-      avoid: {
-        when: (o, run) =>
-          run.seen.read === true &&
-          run.seen.far === true &&
-          Number(run.seen.dodges ?? 0) >= MIN_DODGES &&
-          !!o.car &&
-          o.car.travelled >= GOAL_CM &&
-          o.car.bumps === 0,
+      sort: {
+        when: (o, run) => {
+          const b = o.belt
+          if (!b || run.seen.read !== true || b.rejectedBad < MIN_BAD) return false
+          const last = b.recent.slice(-STREAK)
+          return last.length === STREAK && last.every(Boolean)
+        },
         hold: 0,
       },
-      beep: { when: (_o, run) => run.passed.has('avoid') && run.seen.beep === true, hold: 0 },
+      beep: { when: (_o, run) => run.passed.has('sort') && run.seen.beep === true, hold: 0 },
     },
     hint(o, run) {
-      const car = o.car
-      if (!car || run.elapsed < 1_500_000) return null
-      const l = motorSpeed(o.pwm, 1)
-      const r = motorSpeed(o.pwm, 2)
-      if ((l !== 0 || r !== 0) && !o.power) return 'Có lệnh mà xe đứng yên: bấm 🔋 Nguồn để bật công tắc nguồn.'
-      if (Object.keys(o.sensors).some((k) => k.startsWith('sonar_') && k !== SONAR_KEY))
-        return 'Cảm biến cắm ở TRIG IO0, ECHO IO4: sửa hai ô số trong khối ultrasonic thành 0 và 4.'
-      if (!run.seen.read) return 'Xe chưa "nhìn": đặt khối «ultrasonic … read distance cm» vào ô so sánh của «nếu».'
-      if (car.bumps > 0)
-        return 'Xe đâm vào vật! Tăng ngưỡng (ví dụ 30 cm) hoặc giảm tốc độ, rồi bấm Chạy lại — xe sẽ về chỗ xuất phát.'
-      if (car.travelled < 30 && car.turned > 540) return 'Xe cứ xoay tại chỗ: chỗ «nếu không thì» cần cho cả M1 và M2 «forward».'
-      if (o.card.check === 'avoid' && car.travelled >= GOAL_CM && !run.seen.far)
-        return 'Xe cứ đi vòng quanh chỗ xuất phát: cho hai bánh cùng tốc độ để xe đi thẳng qua sàn, chỉ xoay khi gặp vật.'
-      if (o.card.check === 'avoid' && car.travelled >= GOAL_CM && Number(run.seen.dodges ?? 0) < MIN_DODGES)
-        return 'Xe chưa né vật nào: chỗ «thì» cho M1 «forward», M2 «backward» để xe xoay tại chỗ khi gặp vật.'
-      if (o.card.check === 'beep' && run.elapsed > 5_000_000 && !run.seen.beep)
-        return 'Xe tránh mà chưa kêu: thêm «play note C octave 5 for 0.25 beats» vào chỗ «thì».'
+      const b = o.belt
+      if (!b || run.elapsed < 1_500_000) return null
+      const m = motorSpeed(o.pwm, 1)
+      if (m !== 0 && !o.power) return 'Có lệnh mà băng chuyền đứng yên: bấm 🔋 Nguồn để bật công tắc nguồn.'
+      if (m <= 0 && b.moved === 0) return 'Băng chuyền chưa chạy: thêm «set motor M1 go forward at 40» vào khi Arduino khởi động.'
+      if (!run.seen.read) return 'Não chưa nhìn trứng: đặt «read IR sensor 1 · IO4» vào ô bên trái dấu < trong «nếu».'
+      if (run.seen.mistake === 'good')
+        return 'Trứng tốt cũng bị gạt: chỗ «nếu không thì» cần «set servo S1 to angle 0 degrees» để nhấc cần gạt lên.'
+      if (run.seen.mistake === 'bad')
+        return 'Trứng hỏng lọt vào thùng trứng tốt: kiểm tra ngưỡng < 1500, chỗ «thì» là servo 90 độ, và khối «đợi» thật ngắn (0.05 giây) để não kịp nhìn.'
+      if (o.card.check === 'beep' && run.passed.has('sort') && !run.seen.beep && b.rejectedBad >= 2)
+        return 'Đã gạt trứng hỏng mà còi chưa kêu: thêm «play note C octave 5 for 0.25 beats» vào chỗ «thì».'
       return null
     },
   }),
