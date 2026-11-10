@@ -108,14 +108,14 @@
         <thead><tr><th>Linh kiện</th><th>Nối vào</th></tr></thead>
         <tbody>
           <tr><td>Nút SW</td><td>GPIO3 của ESP32-C3 (nhả = HIGH, bấm = LOW)</td></tr>
-          <tr><td>I2C</td><td>GPIO8 = SDA, GPIO9 = SCL → chip PCA9685</td></tr>
+          <tr><td>I2C</td><td>GPIO8 = SDA, GPIO9 = SCL → mạch công suất (chip PCA9685)</td></tr>
           <tr><td>Đèn L1 / L2</td><td>PCA9685 kênh 15 / 13</td></tr>
           <tr><td>Còi</td><td>PCA9685 kênh 14</td></tr>
           <tr><td>Motor M1…M4</td><td>PCA9685 kênh (2,3) (4,5) (7,6) (1,0)</td></tr>
           <tr><td>Servo S1…S5</td><td>PCA9685 kênh 12 … 8</td></tr>
         </tbody>
       </table>
-      <p class="muted">Mạch dựng từ ảnh chụp mạch ThingBot thật (bản 2024). ESP32-C3 nằm ở mặt dưới Core; PCA9685, còi, đèn L1/L2 nằm trên Shield bên dưới Core. Đường dây trắng là để em nhìn dữ liệu đi, không phải đường mạch thật.</p>
+      <p class="muted">Mạch dựng từ ảnh chụp mạch ThingBot thật (bản 2024). ESP32-C3 nằm ở mặt dưới Core; mạch công suất, còi, đèn L1/L2 nằm trên Shield bên dưới Core. Đường dây trắng là để em nhìn dữ liệu đi, không phải đường mạch thật.</p>
     </dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>

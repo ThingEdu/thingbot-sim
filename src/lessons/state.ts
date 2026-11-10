@@ -185,3 +185,6 @@ export const bang = (head: string[], rows: string[][]) =>
 /** Nhãn "đầu vào" / "đầu ra" dùng trong bảng và lời giải thích. */
 export const VAO = '<span class="tag vao">đầu vào</span>'
 export const RA = '<span class="tag ra">đầu ra</span>'
+
+/** Một câu so robot với cơ thể người: da, mắt, tai, miệng, cơ bắp, khớp tay. */
+export const giong = (html: string) => `<p class="giong">🧍 <b>Giống cơ thể người:</b> ${html}</p>`

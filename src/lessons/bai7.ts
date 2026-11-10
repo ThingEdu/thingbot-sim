@@ -7,7 +7,7 @@
  * tự chấm.
  */
 import { makeGrader, motorSpeed } from './grader'
-import { ask, B, ctrl, ev, hat, hieu, program, S, STARTER, tb, toolbox, wait } from './state'
+import { ask, B, ctrl, ev, giong, hat, hieu, program, S, STARTER, tb, toolbox, wait } from './state'
 import type { Card, Lesson } from './types'
 
 const CARDS: Card[] = [
@@ -15,8 +15,9 @@ const CARDS: Card[] = [
     title: 'Nhiệm vụ: băng chuyền',
     body: `<p>Đèn và màn hình giúp robot <b>nói</b>. Động cơ giúp robot <b>làm việc thật</b>: quay quạt, chạy <b>băng chuyền</b> ở siêu thị, kéo bánh xe.</p>
       <p>Nhiệm vụ: cho động cơ vàng ở <b>cổng M1</b> quay tới, quay lùi như băng chuyền chở hàng qua lại, rồi đổi tốc độ.</p>
+      ${giong('động cơ là <b>cơ bắp</b>. Não người không tự nhấc được cặp sách; não gửi tín hiệu rất nhỏ, cơ bắp mới dùng sức. Ở robot, <b>mạch công suất</b> nhận tín hiệu nhỏ từ não rồi đẩy điện mạnh từ pin vào động cơ.')}
       ${ask('Vì sao não không nối thẳng vào động cơ?', [
-        ['Động cơ cần dòng điện lớn hơn não chịu được nhiều lần', true, 'Chân của não chỉ cho ra dòng điện rất nhỏ, đủ bật đèn tín hiệu. Nối thẳng động cơ vào sẽ hỏng chân não. Vì vậy lệnh đi qua chip PCA9685 rồi tới IC điều khiển động cơ, con chip đủ khoẻ để đẩy điện từ pin.'],
+        ['Động cơ cần dòng điện lớn hơn não chịu được nhiều lần', true, 'Chân của não chỉ cho ra dòng điện rất nhỏ, đủ bật đèn tín hiệu. Nối thẳng động cơ vào sẽ hỏng chân não. Vì vậy lệnh đi qua mạch công suất rồi tới IC điều khiển động cơ, con chip đủ khoẻ để đẩy điện từ pin.'],
         ['Vì động cơ ở xa não', false, 'Khoảng cách không phải vấn đề. Vấn đề là động cơ "ăn" dòng điện quá lớn.'],
       ])}
       <p>Nhớ bài 1: động cơ chỉ quay khi có <b>pin</b> và đã <b>bật công tắc nguồn</b> (nút 🔋 Nguồn).</p>`,
@@ -34,7 +35,7 @@ const CARDS: Card[] = [
         <li>${tb('set motor M1 go forward at 60')}, ${ctrl('đợi 2 giây')}</li>
         <li>${tb('set motor M1 go backward at 60')}, ${ctrl('đợi 2 giây')}</li>
       </ol>
-      ${hieu('Chiều quay là chuyện 0 và 1', `<p>Cổng M1 dùng <b>hai kênh</b> của chip PCA9685. Ô <b>2 · Chip PCA</b> cho thấy: đi tới thì <b>kênh 3</b> có xung, kênh 2 bằng 0; đi lùi thì ngược lại. IC động cơ nhìn kênh nào "bật" để đẩy dòng điện theo chiều nào. Đổi chiều điện là đổi chiều quay.</p>`)}`,
+      ${hieu('Chiều quay là chuyện 0 và 1', `<p>Cổng M1 dùng <b>hai kênh</b> của mạch công suất. Ô <b>2 · Mạch công suất</b> cho thấy: đi tới thì <b>kênh 3</b> có xung, kênh 2 bằng 0; đi lùi thì ngược lại. IC động cơ nhìn kênh nào "bật" để đẩy dòng điện theo chiều nào. Đổi chiều điện là đổi chiều quay.</p>`)}`,
     check: 'both',
   },
   {

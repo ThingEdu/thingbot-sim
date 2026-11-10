@@ -53,7 +53,7 @@ const CARDS: Card[] = [
   },
   {
     title: 'Thử thách: còi báo',
-    body: `<p>Cho xe <b>kêu</b> mỗi lần tránh vật: thêm ${tb('play note C octave 5 for 0.25 beats')} vào chỗ <b>thì</b>. Còi là một ${RA} nữa, nằm ở kênh 14 của chip PCA9685.</p>`,
+    body: `<p>Cho xe <b>kêu</b> mỗi lần tránh vật: thêm ${tb('play note C octave 5 for 0.25 beats')} vào chỗ <b>thì</b>. Còi là một ${RA} nữa, nằm ở kênh 14 của mạch công suất.</p>`,
     check: 'beep',
     optional: true,
   },

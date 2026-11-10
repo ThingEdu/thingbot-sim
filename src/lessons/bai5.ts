@@ -7,7 +7,7 @@
  * mạch thật. Vì vậy các bước chỉ ✓ khi đã bật nguồn.
  */
 import { makeGrader, ruleResult, servoAngle } from './grader'
-import { ask, B, ev, hat, hieu, program, S, STARTER, tb, toolbox } from './state'
+import { ask, B, ev, giong, hat, hieu, program, S, STARTER, tb, toolbox } from './state'
 import type { Card, Lesson } from './types'
 
 const R_90 = 'servo S1 ở 90 độ'
@@ -20,6 +20,7 @@ const CARDS: Card[] = [
     title: 'Nhiệm vụ: barie bãi gửi xe',
     body: `<p>Thanh <b>barie</b> ở bãi gửi xe, <b>cần gạt nước</b> ô tô, nắp <b>hộp quà tự mở</b>: chúng không quay tròn mãi mà quay tới <b>đúng một góc</b> rồi đứng yên. Thứ làm việc đó là <b>servo</b>.</p>
       <p>Nhiệm vụ: làm thanh barie bằng servo cắm ở cổng <b>S1</b> (hàng chân bên trái), mở lên 90 độ, rồi cho nó quét như cần gạt nước.</p>
+      ${giong('servo là <b>khớp tay</b>. Em nhắm mắt vẫn giơ tay đúng 90 độ rồi giữ yên được, vì cơ thể tự biết tay đang ở đâu. Servo cũng có bộ đo góc bên trong như vậy.')}
       ${ask('Servo khác động cơ bánh xe ở chỗ nào?', [
         ['Servo quay tới một góc rồi giữ nguyên', true, 'Bên trong servo có bộ đo góc: nó tự quay tới góc em đặt rồi giữ chặt ở đó. Động cơ bánh xe thì quay mãi.'],
         ['Servo quay nhanh hơn', false, 'Tốc độ không phải điểm khác chính. Servo biết mình đang ở góc nào, động cơ bánh xe thì không.'],
@@ -30,7 +31,7 @@ const CARDS: Card[] = [
   {
     title: 'Mở barie: 90 độ',
     body: `<p>Kéo ${tb('set servo S1 to angle 90 degrees')} vào ${ev('khi Arduino khởi động')}, dưới ${tb('init ThingBot')}. Bấm <b>▶ Chạy</b> và nhìn cần trắng của servo.</p>
-      ${hieu('Vì sao chọn S1?', `<p>Mỗi cổng S1–S5 có 3 chân: <b>GND</b> (dây nâu/đen), <b>5V</b> (dây đỏ), <b>tín hiệu</b> (dây cam/vàng). Năm cổng này được hàn sẵn tới năm kênh của chip PCA9685. Servo của bài cắm ở <b>S1</b> nên khối chọn S1; cắm sang S3 thì đổi khối thành S3.</p>`)}`,
+      ${hieu('Vì sao chọn S1?', `<p>Mỗi cổng S1–S5 có 3 chân: <b>GND</b> (dây nâu/đen), <b>5V</b> (dây đỏ), <b>tín hiệu</b> (dây cam/vàng). Năm cổng này được hàn sẵn tới năm kênh của mạch công suất. Servo của bài cắm ở <b>S1</b> nên khối chọn S1; cắm sang S3 thì đổi khối thành S3.</p>`)}`,
     check: 'r90',
   },
   {
@@ -46,7 +47,7 @@ const CARDS: Card[] = [
         <li>${tb('move servo S1 to angle 0 … over 1 seconds')}</li>
         <li>${tb('move servo S1 to angle 180 … over 1 seconds')}</li>
       </ol>
-      ${hieu('Góc nằm trong độ dài xung', `<p>Não không nói "quay 90 độ" bằng lời. Chip PCA9685 gửi cho servo một <b>xung điện</b> đều đặn 50 lần mỗi giây; <b>xung ngắn</b> nghĩa là góc nhỏ, <b>xung dài</b> nghĩa là góc lớn. Ô <b>2 · Chip PCA</b> hiện con số này: khoảng <b>102</b> là 0 độ, khoảng <b>512</b> là 180 độ (trên thang 4096).</p>`)}`,
+      ${hieu('Góc nằm trong độ dài xung', `<p>Não không nói "quay 90 độ" bằng lời. Mạch công suất gửi cho servo một <b>xung điện</b> đều đặn 50 lần mỗi giây; <b>xung ngắn</b> nghĩa là góc nhỏ, <b>xung dài</b> nghĩa là góc lớn. Ô <b>2 · Mạch công suất</b> hiện con số này: khoảng <b>102</b> là 0 độ, khoảng <b>512</b> là 180 độ (trên thang 4096).</p>`)}`,
     check: 'sweep',
   },
   {
@@ -96,7 +97,7 @@ export const BAI_5: Lesson = {
       if (run.elapsed < 1_500_000) return null
       const a = servoAngle(o.pwm[S1])
       if (a === null) return 'Chưa có lệnh cho servo S1: kéo khối «set servo S1 to angle …» hoặc «move servo S1 …» vào chương trình.'
-      if (!o.power) return 'Chip PCA9685 đã gửi lệnh nhưng servo chưa có điện: bấm 🔋 Nguồn để bật công tắc nguồn.'
+      if (!o.power) return 'Mạch công suất đã gửi lệnh nhưng servo chưa có điện: bấm 🔋 Nguồn để bật công tắc nguồn.'
       if (o.card.check === 'sweep' && run.elapsed > 4_000_000 && Number(run.seen.swings ?? 0) < 2)
         return 'Servo quay tới rồi đứng yên: đặt hai khối «move servo S1» (0 độ, rồi 180 độ) vào trong vòng lặp Arduino.'
       const rule = o.card.check === 'r90' ? R_90 : o.card.check === 'r180' ? R_180 : null

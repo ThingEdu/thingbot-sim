@@ -4,7 +4,7 @@
  */
 import { OPEN_FLOOR } from '../arena'
 import { makeGrader, motorSpeed } from './grader'
-import { ask, B, ctrl, ev, hat, hieu, program, S, STARTER, tb, toolbox, wait } from './state'
+import { ask, B, ctrl, ev, giong, hat, hieu, program, S, STARTER, tb, toolbox, wait } from './state'
 import type { Card, Lesson } from './types'
 
 const CARDS: Card[] = [
@@ -12,6 +12,7 @@ const CARDS: Card[] = [
     title: 'Nhiệm vụ: robot giao hàng',
     body: `<p>Robot giao hàng trong nhà kho, xe lăn điện, xe tăng: chúng <b>không có vô lăng</b>. Chúng rẽ bằng cách cho <b>hai bánh quay khác nhau</b>.</p>
       <p>ThingBot giờ là một chiếc xe: <b>M1</b> quay bánh <b>trái</b>, <b>M2</b> quay bánh <b>phải</b>. Sàn có ô lưới 20 cm. Nhiệm vụ: đi thẳng một đoạn rồi rẽ góc vuông, như robot chở hàng tới đúng kệ.</p>
+      ${giong('xe rẽ như <b>hai người chèo thuyền</b>: một bên chèo mạnh, một bên ngừng, thuyền quay về phía bên ngừng chèo.')}
       ${ask('Bánh trái quay tới, bánh phải đứng yên. Xe đi thế nào?', [
         ['Rẽ vòng sang phải', true, 'Bánh trái đẩy tới, bánh phải làm trục, nên xe vòng quanh bánh phải.'],
         ['Rẽ vòng sang trái', false, 'Thử hình dung: bánh trái đi tới mà bánh phải đứng yên, mũi xe sẽ quay về phía bánh đứng yên, tức là bên phải.'],

@@ -11,7 +11,7 @@
  * tắt" (thiếu đợi sau lệnh tắt) vẫn đạt "chu kỳ 0,5 giây" dù mắt chỉ thấy đèn sáng mãi. Vì vậy ở đây
  * một luật chỉ được ✓ khi đèn còn sáng và tắt mỗi thứ ít nhất VISIBLE thời gian quan sát.
  */
-import { ask, B, bang, ctrl, ev, hat, hieu, program, RA, setLed, STARTER, tb, toolbox, wait } from './state'
+import { ask, B, bang, ctrl, ev, giong, hat, hieu, program, RA, setLed, STARTER, tb, toolbox, wait } from './state'
 import type { Card, Grader, GraderChange, Lesson, Observation } from './types'
 
 const R_1S = 'L1 nhấp nháy, chu kỳ 1 giây ± 20%'
@@ -26,6 +26,7 @@ const CARDS: Card[] = [
     title: 'Nhiệm vụ: đèn báo hiệu',
     body: `<p>Đèn <b>xi nhan</b> xe máy, đèn <b>hải đăng</b>, đèn báo <b>pin sắp hết</b>… đều <b>chớp</b> chứ không sáng mãi. Vì sao? Vì mắt người <b>để ý</b> thứ đang thay đổi.</p>
       <p>Nhiệm vụ của em: biến <b>đèn L1</b> (chỗ vòng cam) thành đèn báo hiệu, sáng nửa giây, tắt nửa giây, mãi mãi.</p>
+      ${giong('đèn là cách robot <b>nháy mắt ra hiệu</b>. Não ra lệnh; <b>mạch công suất</b>, như dây thần kinh tới mí mắt, biến lệnh thành dòng điện làm đèn sáng.')}
       ${ask('Em xếp chỉ hai khối «bật đèn» rồi «tắt đèn», <b>không có</b> khối đợi. Em sẽ thấy gì?', [
         ['Đèn chớp rõ ràng, dễ nhìn', false, 'Não chạy mỗi vòng chỉ mất vài phần triệu giây, nhanh hơn mắt em rất nhiều. Phải có khối đợi thì mắt mới kịp thấy.'],
         ['Đèn trông như sáng mờ liên tục', true, 'Não bật tắt hàng nghìn lần mỗi giây, mắt em chỉ thấy một đèn mờ. Khối đợi là cách "làm chậm" não cho vừa mắt người.'],
@@ -52,7 +53,7 @@ const CARDS: Card[] = [
     body: `${hieu('Đèn là một đầu ra', `<p>Não <b>ra lệnh</b> cho đèn, đèn không báo gì về cho não. Thứ nhận lệnh như vậy gọi là ${RA}.</p>
       <p>Số trong khối là <b>độ sáng phần trăm</b>: <b>0</b> là tắt, <b>100</b> là sáng hết. Ở mức điện, đèn chỉ có hai trạng thái: <b>không có điện</b> (người ta viết là <b>0</b>) và <b>có điện</b> (viết là <b>1</b>). 0 và 1 ở đây không phải số đếm, mà là <b>tắt / bật</b>, giống công tắc.</p>
       <p>Còn 50 thì sao? Chip bật tắt đèn <b>cực nhanh</b>, bật một nửa thời gian, tắt một nửa, nên mắt thấy đèn mờ.</p>`)}
-      ${hieu('Vì sao chọn "đèn 1"?', `${bang(['Trên mạch', 'Nối vào', 'Khối'], [['Đèn L1 (đỏ)', 'chip PCA9685, kênh 15', tb('set led 1 …')], ['Đèn L2 (xanh lá)', 'chip PCA9685, kênh 13', tb('set led 2 …')], ['Còi', 'chip PCA9685, kênh 14', tb('play note …')]])}
+      ${hieu('Vì sao chọn "đèn 1"?', `${bang(['Trên mạch', 'Nối vào', 'Khối'], [['Đèn L1 (đỏ)', 'mạch công suất, kênh 15', tb('set led 1 …')], ['Đèn L2 (xanh lá)', 'mạch công suất, kênh 13', tb('set led 2 …')], ['Còi', 'mạch công suất, kênh 14', tb('play note …')]])}
       <p>Dây nối đã được <b>hàn sẵn</b> khi làm mạch. Người làm mạch ghi lại "đèn L1 ở kênh 15", và khối ${tb('set led 1')} đã biết điều đó, nên em chỉ cần chọn "đèn 1".</p>`)}
       <p>Dải <b>Nhịp đèn</b> dưới mạch vẽ lại đèn L1 trong 4 giây vừa qua: đoạn đỏ là lúc sáng (1), đoạn trống là lúc tắt (0).</p>`,
   },

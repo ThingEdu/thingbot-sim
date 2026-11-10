@@ -16,42 +16,42 @@ const PARTS: Part[] = [
     id: 'core',
     name: 'ThingBot Core — bộ não',
     at: [{ px: 770, py: 725 }],
-    info: `Tấm mạch nằm trên cùng. <b>Chip ESP32-C3</b> — bộ não — nằm ở <b>mặt dưới</b> tấm này vì Core cắm úp xuống Shield. Cổng <b>USB-C</b> dùng để nạp chương trình và nuôi mạch.`,
+    info: `Như <b>bộ não</b> người: nhận tin từ giác quan, nghĩ, rồi ra lệnh cho tay chân. Tấm mạch nằm trên cùng. <b>Chip ESP32-C3</b> — bộ não — nằm ở <b>mặt dưới</b> tấm này vì Core cắm úp xuống Shield. Cổng <b>USB-C</b> dùng để nạp chương trình và nuôi mạch.`,
     block: `${tb('init ThingBot')}, rồi mọi khối trong ${ev('khi Arduino khởi động')} và ${ev('vòng lặp Arduino')}`,
   },
   {
     id: 'sw',
     name: 'Nút bấm SW',
     at: [{ px: 1150, py: 797 }],
-    info: `${VAO} Nút nhấn ở cạnh phải. Nối vào chân <b>IO3</b> của não: nhả nút là HIGH (3,3 V), bấm là LOW (0 V).`,
+    info: `${VAO} Như <b>làn da</b>: chạm vào là não biết. Nút nhấn ở cạnh phải. Nối vào chân <b>IO3</b> của não: nhả nút là HIGH (3,3 V), bấm là LOW (0 V).`,
     block: tb('read switch'),
   },
   {
     id: 'l1',
     name: 'Đèn L1 (đỏ)',
     at: [{ px: 1035, py: 840 }],
-    info: `${RA} Đèn đỏ nằm trên Shield, sát mép dưới Core nên bị che một phần. Nhận lệnh từ chip PCA9685, kênh 15.`,
+    info: `${RA} Như <b>cái nháy mắt</b> ra hiệu. Đèn đỏ nằm trên Shield, sát mép dưới Core nên bị che một phần. Nhận lệnh từ mạch công suất (kênh 15).`,
     block: tb('set led 1 100'),
   },
   {
     id: 'l2',
     name: 'Đèn L2 (xanh lá)',
     at: [{ px: 532, py: 845 }],
-    info: `${RA} Đèn xanh lá ở mép trái dưới Core. Nhận lệnh từ chip PCA9685, kênh 13.`,
+    info: `${RA} Đèn xanh lá ở mép trái dưới Core. Nhận lệnh từ mạch công suất (kênh 13).`,
     block: tb('set led 2 100'),
   },
   {
     id: 'i2c',
     name: 'Cổng I2C',
     at: [{ px: 1110, py: 630 }],
-    info: 'Cổng 4 chân để cắm thêm màn hình OLED hoặc cảm biến MPU6050. Dùng chung đường I2C (chân 8 và 9) với chip PCA9685, nên đừng dùng chân 8, 9 cho cảm biến khác.',
+    info: 'Như <b>dây thần kinh chung</b>: hai sợi dây (chân 8 và 9) chở tin cho nhiều thiết bị, mỗi thiết bị một "số nhà". Cắm màn hình OLED, cảm biến màu hay MPU6050 ở đây. Mạch công suất cũng nghe trên hai dây này, nên đừng dùng chân 8, 9 cho việc khác.',
     block: 'các khối màn hình OLED',
   },
   {
     id: 'ps2',
     name: 'Cổng PS2',
     at: [{ px: 1110, py: 430 }],
-    info: `${VAO} Cổng 6 chân để cắm bộ thu của tay cầm PS2 — dùng khi lái xe bằng tay cầm.`,
+    info: `${VAO} Như <b>đôi tai</b> nghe lệnh từ xa. Cổng 6 chân để cắm bộ thu của tay cầm PS2 — dùng khi lái xe bằng tay cầm.`,
     block: tb('init PS2 on ThingBot'),
   },
   {
@@ -63,7 +63,7 @@ const PARTS: Part[] = [
       { px: 550, py: 965 },
       { px: 990, py: 965 },
     ],
-    info: `${RA} Bốn cổng 2 chân cho bốn động cơ bánh xe. Hai cổng phía trên in chữ <b>M3</b>, <b>M4</b>; hai cổng phía dưới là M1, M2. Động cơ chỉ quay khi có pin và đã bật công tắc nguồn.`,
+    info: `${RA} Như <b>cơ bắp chân</b>. Bốn cổng 2 chân cho bốn động cơ bánh xe. Hai cổng phía trên in chữ <b>M3</b>, <b>M4</b>; hai cổng phía dưới là M1, M2. Động cơ chỉ quay khi có pin và đã bật công tắc nguồn.`,
     block: tb('set motor M1 go forward at 60'),
   },
   {
@@ -82,7 +82,7 @@ const PARTS: Part[] = [
     id: 'servo',
     name: 'Cổng servo S1–S5',
     at: [{ px: 450, py: 560 }],
-    info: `${RA} Hàng chân bên trái: năm cổng S1–S5, mỗi cổng 3 chân <b>GND – 5V – tín hiệu</b>. Cắm servo hoặc module 3 chân.`,
+    info: `${RA} Như <b>khớp tay</b>: quay tới đúng góc rồi giữ yên. Hàng chân bên trái: năm cổng S1–S5, mỗi cổng 3 chân <b>GND – 5V – tín hiệu</b>. Cắm servo hoặc module 3 chân.`,
     block: tb('set servo S1 to angle 90 degrees'),
   },
   {
@@ -92,22 +92,22 @@ const PARTS: Part[] = [
       { px: 680, py: 965 },
       { px: 855, py: 965 },
     ],
-    info: `${VAO} Hai cổng 4 chân có chân GPIO (<b>IO0</b>, <b>IO4</b>) để cắm cảm biến như DHT11 hay cảm biến siêu âm.`,
+    info: `${VAO} Chỗ gắn thêm <b>giác quan</b> cho robot. Hai cổng 4 chân có chân GPIO (<b>IO0</b>, <b>IO4</b>) để cắm mắt hồng ngoại, cảm biến siêu âm hay DHT11.`,
     block: 'các khối cảm biến',
   },
   {
     id: 'pca',
-    name: 'Chip PCA9685 — trợ lý của não',
+    name: 'Mạch công suất — dây thần kinh tới cơ bắp',
     at: [{ px: 764, py: 618 }],
     under: true,
-    info: 'Nằm trên Shield, <b>dưới Core</b>. Não gửi lệnh cho chip này qua hai dây I2C (SDA, SCL); chip này điều khiển trực tiếp <b>đèn, còi, động cơ và servo</b>. Hai chip nhỏ hai bên nó điều khiển động cơ.',
+    info: 'Nằm trên Shield, <b>dưới Core</b>. Não chỉ "nói thầm": dòng điện ra từ não rất nhỏ. Mạch công suất nghe lời thầm đó qua hai dây I2C rồi đẩy điện đủ mạnh cho <b>đèn, còi, động cơ và servo</b>, như dây thần kinh và cơ bắp làm theo não. <span class="muted">Tên chip cho thầy cô: PCA9685, cùng hai chip động cơ hai bên.</span>',
   },
   {
     id: 'buzzer',
     name: 'Còi',
     at: [{ px: 785, py: 818 }],
     under: true,
-    info: `${RA} Chiếc còi tròn màu đen nằm <b>dưới Core</b>. Nhận lệnh từ chip PCA9685, kênh 14.`,
+    info: `${RA} Như <b>cái miệng</b> của robot. Chiếc còi tròn màu đen nằm <b>dưới Core</b>. Nhận lệnh từ mạch công suất (kênh 14).`,
     block: tb('play note C octave 4 for 1 beats'),
   },
 ]
@@ -157,20 +157,20 @@ const CARDS: Card[] = [
   {
     title: 'Giác quan, bộ não, tay chân',
     body: `${hieu('Robot giống một con người', `<p><b>Giác quan</b> báo tin cho não, <b>não</b> quyết định, <b>tay chân</b> làm theo. Trong robot, thứ báo tin cho não gọi là ${VAO}, thứ nhận lệnh từ não gọi là ${RA}.</p>
-      ${bang(['Vai', 'Trên ThingBot'], [[`${VAO} giác quan`, 'nút SW, cảm biến siêu âm, tay cầm PS2'], ['não', 'chip ESP32-C3'], [`${RA} tay chân`, 'đèn L1, L2, còi, động cơ, servo, màn hình']])}`)}
+      ${bang(['Vai', 'Trên ThingBot'], [[`${VAO} giác quan`, 'nút SW (da), mắt hồng ngoại, cảm biến siêu âm (tai), tay cầm PS2'], ['não', 'chip ESP32-C3'], [`${RA} tay chân`, 'đèn L1, L2, còi (miệng), động cơ (cơ bắp), servo (khớp tay), màn hình (khuôn mặt)']])}`)}
       ${ask('Màn hình OLED là đầu vào hay đầu ra?', [
         ['Đầu vào', false, 'Màn hình không báo gì cho não. Não gửi chữ tới, màn hình vẽ ra: đó là đầu ra.'],
         ['Đầu ra', true, 'Não ra lệnh "vẽ chữ này", màn hình làm theo. Giống cái miệng của robot.'],
       ])}
       ${ask('Cảm biến siêu âm là đầu vào hay đầu ra?', [
-        ['Đầu vào', true, 'Nó báo cho não "vật đang cách bao xa". Giống đôi mắt (hay đôi tai) của robot.'],
+        ['Đầu vào', true, 'Nó báo cho não "vật đang cách bao xa". Giống đôi tai của con dơi: phát tiếng rồi nghe tiếng vọng.'],
         ['Đầu ra', false, 'Nó không làm theo lệnh để tạo ra gì cho người xem; nó đo rồi báo về não. Đó là đầu vào.'],
       ])}`,
   },
   {
     title: 'Câu đố 1',
     body: `<p>Em bấm nút SW và đèn L1 sáng. <b>Ai ra lệnh trực tiếp cho đèn L1?</b></p>
-      <div class="choices">${choice('q1', 'sw', 'Nút SW')}${choice('q1', 'esp', 'Não ESP32-C3')}${choice('q1', 'pca', 'Chip PCA9685')}</div>`,
+      <div class="choices">${choice('q1', 'sw', 'Nút SW')}${choice('q1', 'esp', 'Não ESP32-C3')}${choice('q1', 'pca', 'Mạch công suất')}</div>`,
     check: 'q1',
   },
   {
@@ -182,7 +182,7 @@ const CARDS: Card[] = [
   },
   {
     title: 'Xong rồi! 🎉',
-    body: `<p>Em đã biết mọi bộ phận của ThingBot, và biết lệnh đi thế nào: <b>não → chip PCA9685 → đèn, còi, động cơ</b>.</p>
+    body: `<p>Em đã biết mọi bộ phận của ThingBot, và biết lệnh đi thế nào: <b>não → mạch công suất → đèn, còi, động cơ</b>, như não → dây thần kinh → cơ bắp.</p>
       <p>Sang <b>Bài 2</b> để tự ra lệnh cho đèn L1 chớp nhé.</p>`,
   },
 ]

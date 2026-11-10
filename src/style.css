@@ -1102,3 +1102,10 @@ table.io th {
     grid-row: 1 / -1;
   }
 }
+
+.giong {
+  border-left: 3px solid #e8a33d;
+  background: #fff8ec;
+  padding: 6px 10px;
+  border-radius: 6px;
+}

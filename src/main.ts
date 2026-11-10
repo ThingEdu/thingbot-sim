@@ -104,13 +104,13 @@ const renderPicker = () => {
 
 // --- dải dòng chảy ---------------------------------------------------------------------------
 const FLOWS: Record<FlowKind, string[]> = {
-  button: ['Nút SW', 'Não', 'Chip PCA', 'Đèn L1'],
-  blink: ['Não', 'Chip PCA', 'Đèn L1'],
+  button: ['Nút SW', 'Não', 'Mạch công suất', 'Đèn L1'],
+  blink: ['Não', 'Mạch công suất', 'Đèn L1'],
   explore: [],
   oled: ['Não', 'I2C', 'Màn OLED'],
-  servo: ['Não', 'Chip PCA', 'Servo S1'],
-  sonar: ['Cảm biến', 'Não', 'Chip PCA', 'Đèn L1'],
-  motor: ['Não', 'Chip PCA', 'IC động cơ', 'Bánh M1'],
+  servo: ['Não', 'Mạch công suất', 'Servo S1'],
+  sonar: ['Cảm biến', 'Não', 'Mạch công suất', 'Đèn L1'],
+  motor: ['Não', 'Mạch công suất', 'IC động cơ', 'Bánh M1'],
   car: ['Não', 'Bánh trái M1', 'Bánh phải M2', 'Xe'],
   ps2: ['Tay cầm', 'Não', 'Hai bánh', 'Xe'],
   avoid: ['Cảm biến', 'Não', 'Hai bánh', 'Xe'],
@@ -431,7 +431,7 @@ function renderButton(on: boolean, pwm: number[], bus: Bus, reads: boolean) {
   setFlow(
     'f3',
     on ? (writes ? `Lệnh: ${pct} %` : `Giữ lệnh: ${pct} %`) : '—',
-    on ? `I2C kênh 15 = ${Math.min(duty, 4095)}` : 'PCA9685 · I2C',
+    on ? `I2C kênh 15 = ${Math.min(duty, 4095)}` : 'Mạch công suất · I2C',
     writes ? 'bus' : on ? '' : 'idle',
   )
   setFlow('f4', pct > 0 ? `SÁNG ${pct} %` : 'TẮT', `PWM ${pct} %`, pct > 0 ? 'lit' : '')
@@ -482,7 +482,7 @@ function renderBlink(snap: Snapshot | null, on: boolean, pwm: number[], bus: Bus
   setFlow(
     'f2',
     on ? `Lệnh: ${pct} %` : '—',
-    on ? `I2C kênh ${ch} = ${Math.min(duty, 4095)}` : 'PCA9685 · I2C',
+    on ? `I2C kênh ${ch} = ${Math.min(duty, 4095)}` : 'Mạch công suất · I2C',
     busy ? 'bus' : on ? '' : 'idle',
   )
   setFlow('f3', pct > 0 ? `SÁNG ${pct} %` : 'TẮT', `PWM ${pct} %`, pct > 0 ? 'lit' : '', `Đèn ${activeLed}`)
@@ -640,7 +640,7 @@ function renderDevice(snap: Snapshot | null, on: boolean, pwm: number[], bus: Bu
       }
       lastOled = text
       setFlow('f1', on ? 'Đang chạy' : 'Chưa chạy', on ? doing(snap) : 'ESP32-C3', on ? 'active' : 'idle')
-      setFlow('f2', on && snap?.oled ? 'Màn hình 0x3C' : '—', 'SDA · SCL, chung với PCA9685', on && text ? 'bus' : on ? '' : 'idle')
+      setFlow('f2', on && snap?.oled ? 'Màn hình 0x3C' : '—', 'SDA · SCL, chung với mạch công suất', on && text ? 'bus' : on ? '' : 'idle')
       const first = (text ?? '').split('\n').filter((s) => s.trim())
       setFlow('f3', first.length ? first.join(' / ') : on && snap?.oled ? 'Đen' : 'Tắt', `${first.length} dòng chữ`, first.length ? 'lit' : '')
       break
@@ -659,14 +659,14 @@ function renderDevice(snap: Snapshot | null, on: boolean, pwm: number[], bus: Bu
       if (!on) setFlow('f2', 'Chưa chạy', 'ESP32-C3', 'idle')
       else setFlow('f2', reads ? 'Đang đo' : 'Không hỏi cảm biến', reads ? doing(snap) : 'thiếu «ultrasonic … read distance»', reads ? 'active' : 'idle')
       const p = pctOf(pwm[CH.L1])
-      setFlow('f3', on ? `Lệnh: ${p} %` : '—', on ? `I2C kênh 15 = ${Math.min(pwm[CH.L1], 4095)}` : 'PCA9685 · I2C', busy ? 'bus' : on ? '' : 'idle')
+      setFlow('f3', on ? `Lệnh: ${p} %` : '—', on ? `I2C kênh 15 = ${Math.min(pwm[CH.L1], 4095)}` : 'Mạch công suất · I2C', busy ? 'bus' : on ? '' : 'idle')
       setFlow('f4', p > 0 ? `SÁNG ${p} %` : 'TẮT', `PWM ${p} %`, p > 0 ? 'lit' : '')
       break
     }
     case 'motor': {
       const v = motorSpeed(pwm, 1)
       setFlow('f1', on ? 'Đang chạy' : 'Chưa chạy', on ? doing(snap) : 'ESP32-C3', on ? 'active' : 'idle')
-      setFlow('f2', on ? `kênh 2 = ${Math.min(pwm[2], 4095)}` : '—', on ? `kênh 3 = ${Math.min(pwm[3], 4095)}` : 'PCA9685 · I2C', busy ? 'bus' : on ? '' : 'idle')
+      setFlow('f2', on ? `kênh 2 = ${Math.min(pwm[2], 4095)}` : '—', on ? `kênh 3 = ${Math.min(pwm[3], 4095)}` : 'Mạch công suất · I2C', busy ? 'bus' : on ? '' : 'idle')
       setFlow('f3', !power ? 'Không có điện' : v > 0 ? 'Đẩy chiều tới' : v < 0 ? 'Đẩy chiều lùi' : 'Không đẩy', power ? 'dòng điện từ pin' : noPower, power && v ? 'active' : '')
       setFlow('f4', power ? wheelText(v) : 'ĐỨNG YÊN', `tốc độ ${pct(v)} %`, power && v ? 'lit' : '')
       break

@@ -6,7 +6,7 @@
  * khung hình 1 KB qua I2C mỗi lần `refresh`.
  */
 import { makeGrader, ruleResult } from './grader'
-import { ask, B, bang, CAT, ctrl, ev, hat, hieu, per, program, S, STARTER, toolbox } from './state'
+import { ask, B, bang, CAT, ctrl, ev, giong, hat, hieu, per, program, S, STARTER, toolbox } from './state'
 import type { Card, Lesson } from './types'
 
 const R_HELLO = 'OLED hiện "Xin chao"'
@@ -18,6 +18,7 @@ const CARDS: Card[] = [
     title: 'Nhiệm vụ: bảng tên robot',
     body: `<p>Đèn chỉ nói được hai điều: <b>có</b> hoặc <b>không</b>. Muốn robot nói được <b>chữ và số</b> (tên, nhiệt độ, lời nhắn) thì cần <b>màn hình</b>, như màn hình lò vi sóng hay đồng hồ điện tử.</p>
       <p>Nhiệm vụ: làm <b>bảng tên</b> cho robot trên màn hình <b>OLED</b> nhỏ cắm ở <b>cổng I2C</b>, cạnh phải mạch.</p>
+      ${giong('màn hình là <b>khuôn mặt</b> của robot: chỗ nó "nói" bằng chữ và hình cho người đứng xem.')}
       <p class="muted">Màn hình chỉ có chữ <b>không dấu</b> (ví dụ "Xin chao").</p>`,
   },
   {
@@ -45,7 +46,7 @@ const CARDS: Card[] = [
   {
     title: 'Hiểu sâu: hai dây, nhiều thiết bị',
     body: `${hieu('Cổng I2C', `${bang(['Chân', 'Nối vào não', 'Làm gì'], [['GND, VCC', '—', 'cấp điện cho màn hình'], ['SDA', 'IO8', 'chở dữ liệu (chữ, lệnh)'], ['SCL', 'IO9', 'gõ nhịp cho dữ liệu đi đều']])}
-      <p>Chip PCA9685 (điều khiển đèn, động cơ) cũng nằm trên <b>đúng hai dây này</b>. Vậy sao não không gửi nhầm? Vì mỗi thiết bị có một <b>"số nhà"</b> riêng, gọi là địa chỉ. Màn hình OLED có số nhà <b>0x3C</b> (ô "địa chỉ I2C" trong khối init). Não gọi đúng số nhà nào thì chỉ thiết bị đó trả lời.</p>
+      <p>Mạch công suất (điều khiển đèn, động cơ) cũng nằm trên <b>đúng hai dây này</b>. Vậy sao não không gửi nhầm? Vì mỗi thiết bị có một <b>"số nhà"</b> riêng, gọi là địa chỉ. Màn hình OLED có số nhà <b>0x3C</b> (ô "địa chỉ I2C" trong khối init). Não gọi đúng số nhà nào thì chỉ thiết bị đó trả lời.</p>
       <p>Vì vậy em đừng dùng IO8, IO9 cho việc khác: chúng đang là "đường dây chung" của cả mạch.</p>`)}`,
   },
   {

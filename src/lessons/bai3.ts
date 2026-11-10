@@ -5,7 +5,7 @@
  * Bộ chấm `kiểm:` của ThingBlock chưa có luật "khi giữ SW thì…", nên spike tự chấm; về sau thay bằng
  * luật trong `bai.vi.md`.
  */
-import { ask, B, bang, ctrl, ev, hat, hieu, program, setLed, STARTER, tb, toolbox } from './state'
+import { ask, B, bang, ctrl, ev, giong, hat, hieu, program, setLed, STARTER, tb, toolbox } from './state'
 import type { Card, Grader, GraderChange, Lesson, Observation } from './types'
 
 const L1 = 15
@@ -15,6 +15,7 @@ const CARDS: Card[] = [
     title: 'Nhiệm vụ: đèn pin bấm giữ',
     body: `<p><b>Chuông cửa</b>, nút <b>thang máy</b>, nút <b>đèn pin</b>: cách đơn giản nhất để người "nói" với máy là một <b>nút bấm</b>.</p>
       <p>Nhiệm vụ: biến ThingBot thành đèn pin, <b>giữ nút SW thì đèn L1 sáng, nhả ra thì tắt</b>. Nút SW ở cạnh phải, đèn L1 sát mép dưới tấm Core (chỗ vòng cam).</p>
+      ${giong('nút SW là <b>làn da</b> của robot. Ai chạm vào tay em, dây thần kinh báo lên não "có người chạm". Em bấm nút, sợi dây nối chân IO3 báo cho não "đang bị bấm".')}
       ${ask('Nút SW là đầu vào hay đầu ra?', [
         ['Đầu vào', true, 'Nút báo tin cho não ("đang bị bấm"), não không ra lệnh được cho nút. Báo tin cho não là đầu vào; nhận lệnh từ não là đầu ra.'],
         ['Đầu ra', false, 'Não không thể ra lệnh cho nút tự lún xuống. Nút chỉ báo cho não biết em đang bấm hay không.'],
@@ -38,7 +39,7 @@ const CARDS: Card[] = [
   {
     title: 'Giữ nút SW',
     body: `<p>Giữ chuột lên nút SW trên mạch, hoặc giữ nút <b>✋ Giữ SW</b>, hoặc giữ phím <kbd>Space</kbd>.</p>
-      <p>Nhìn dải <b>1 → 4</b> dưới mạch: tin đi từ nút vào não, não quyết định, rồi lệnh qua chip PCA9685 tới đèn.</p>`,
+      <p>Nhìn dải <b>1 → 4</b> dưới mạch: tin đi từ nút vào não, não quyết định, rồi lệnh qua mạch công suất tới đèn.</p>`,
     check: 'on',
     look: ['sw'],
   },
@@ -59,7 +60,7 @@ const CARDS: Card[] = [
   {
     title: 'Thử thách: đèn mờ',
     body: `<p>Làm cho đèn chỉ <b>sáng một nửa</b> khi giữ nút: đổi số trong ${tb('set led 1 100')} thành <b>50</b>, rồi giữ nút.</p>
-      <p>Ô <b>3</b> cho em thấy chip PCA9685 nhận con số nào: nó có 4096 bậc, 50% là khoảng 2048.</p>`,
+      <p>Ô <b>3</b> cho em thấy mạch công suất nhận con số nào: nó chia độ sáng thành 4096 bậc, 50% là khoảng 2048.</p>`,
     check: 'half',
     optional: true,
   },

@@ -5,7 +5,7 @@
  */
 import { OPEN_FLOOR } from '../arena'
 import { makeGrader, motorSpeed } from './grader'
-import { ask, B, CAT, ctrl, ev, hat, hieu, per, program, S, STARTER, tb, toolbox, wait } from './state'
+import { ask, B, CAT, ctrl, ev, giong, hat, hieu, per, program, S, STARTER, tb, toolbox, wait } from './state'
 import type { Card, Lesson, Observation } from './types'
 
 const UP = 'PSB_PAD_UP'
@@ -17,6 +17,7 @@ const CARDS: Card[] = [
   {
     title: 'Nhiệm vụ: xe điều khiển từ xa',
     body: `<p>Tay cầm PS2 gửi <b>sóng radio</b> tới <b>bộ thu</b> cắm ở <b>cổng PS2</b> trên mạch. Nhiệm vụ: làm một chiếc <b>xe điều khiển từ xa</b>, giữ ▲ thì chạy tới, nhả ra thì dừng.</p>
+      ${giong('bộ thu là <b>đôi tai</b> của robot, nghe lệnh từ xa như em nghe bạn gọi tên từ đầu kia sân trường.')}
       ${hieu('Mỗi nút là một 0 hoặc 1', `<p>Tay cầm có 16 nút. Mỗi lần não hỏi, bộ thu gửi về một dãy <b>0 và 1</b>, mỗi nút một số: <b>1</b> là đang bấm, <b>0</b> là không. Giống nút SW ở bài 3, chỉ là 16 nút cùng lúc, qua sóng radio.</p>
       <p>Bộ thu nối với não qua 4 chân đã hàn sẵn ở cổng PS2 (DAT 7, CMD 2, SEL 10, CLK 6). Khối ${tb('init PS2 on ThingBot')} đã biết các chân này, em không cần gõ số.</p>`)}
       <p>Tay cầm ảo nằm ở góc sàn: giữ nút ▲ ▼ ◀ ▶ bằng chuột, hoặc giữ phím mũi tên.</p>`,
@@ -51,7 +52,7 @@ const CARDS: Card[] = [
   },
   {
     title: 'Xong rồi! 🎉',
-    body: `<p>Em đã làm một chiếc xe điều khiển từ xa: <b>tay cầm → bộ thu → não → chip PCA9685 → hai bánh</b>. Robot thi FanRoc, FTC cũng lái theo đúng chuỗi này.</p>
+    body: `<p>Em đã làm một chiếc xe điều khiển từ xa: <b>tay cầm → bộ thu → não → mạch công suất → hai bánh</b>. Robot thi FanRoc, FTC cũng lái theo đúng chuỗi này.</p>
       <p>Bài 10: bỏ tay cầm đi, để xe <b>tự lái</b>.</p>`,
   },
 ]
