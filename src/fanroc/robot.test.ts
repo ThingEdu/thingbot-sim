@@ -274,3 +274,16 @@ test('Maker Hút: con lăn M3 hút bóng trước mũi vào lồng, 8 bóng là 
   }
   assert.equal(r.stored.length, 8)
 })
+
+test('Mẫu Maker: cửa ra ở đuôi (anh Tuấn 10/11) — điểm xả 100 mm sau tâm xe, bóng lăn ra sau; Maker Nâng vẫn xả ở mũi', async () => {
+  const { r } = await corridor()
+  const t = r.body.translation()
+  const p = r.releasePoint()
+  // yaw 0: mũi hướng −z ⇒ đuôi ở +z.
+  assert.ok(Math.abs(p.z - t.z - 0.1) < 0.003 && Math.abs(p.x - t.x) < 1e-6, `điểm xả ${JSON.stringify(p)}, tâm ${JSON.stringify(t)}`)
+  assert.ok(Math.abs(p.y - 0.093) < 0.003)
+  assert.equal(r.forwardExtension, 0)
+  const lift = (await corridor({ type: 'makerLift', drive: 'diff2', actuator: 'tt' })).r
+  const tl = lift.body.translation()
+  assert.ok(lift.releasePoint().z < tl.z, 'Maker Nâng xả ở mũi (−z)')
+})

@@ -1032,7 +1032,7 @@ export class Agent {
       return
     }
     if (t.phase === 'in') {
-      this.pushTo(h, CMD_SLOW)
+      this.pushTo(h, CMD_SLOW, r.def.chuteBehind)
       this.cmd.lift = -1
       if ((this.stillT > CONTACT_S && t.t > 0.5) || t.t > 6) {
         t.phase = 'drop'
@@ -1043,8 +1043,8 @@ export class Agent {
     }
     if (t.phase === 'drop') {
       this.cmd.sel = 'g'
-      // Giữ mũi tì gờ, chỉnh mức vươn theo rãnh của bóng tiếp theo rồi mở cửa đúng lúc.
-      this.pushTo(h, CMD_MIN)
+      // Giữ mũi (cửa ra ở đuôi: đuôi) tì gờ, chỉnh mức vươn theo rãnh của bóng tiếp theo rồi mở cửa đúng lúc.
+      this.pushTo(h, CMD_MIN, r.def.chuteBehind)
       const k = t.plan[0] ?? t.plan[t.plan.length - 1] ?? 1
       // Chỉ robot có thanh trượt vươn tới trước mới đẩy điểm xả ra các rãnh xa; còn lại thả ở rãnh mũi xe chạm.
       const want = LIFT_AXIS[r.def.type] === 'forward' ? DROP_EXTEND[k] : 0
@@ -1063,7 +1063,7 @@ export class Agent {
       if (this.cmd.lift === 0) this.cmd.release = true
       return
     }
-    this.cmd.fwd = -CMD_SLOW
+    this.cmd.fwd = r.def.chuteBehind ? CMD_SLOW : -CMD_SLOW
     this.cmd.lift = -1
     if (t.t > 0.6) this.setTask(null)
   }
@@ -1080,7 +1080,8 @@ export class Agent {
     }
     const r = this.robot
     this.cmd.sel = 'o'
-    const e = wrap(yawTo(r.pose, t.corner) - r.pose.yaw)
+    // Cửa ra ở đuôi (Mẫu Maker): quay đuôi về góc Khu Chữa Cháy.
+    const e = wrap(yawTo(r.pose, t.corner) - r.pose.yaw - (r.def.chuteBehind ? Math.PI : 0))
     if (Math.abs(e) > 0.25) {
       this.cmd.turn = Math.sign(e) * CMD_TURN
       return

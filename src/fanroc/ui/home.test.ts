@@ -59,13 +59,13 @@ test('robotStats: thanh lấy từ ROBOTS (storage/10 kẹp 1, cờ = có kẹp 
 
 test('router: camera mặc định theo màn (trận / đấu tập / Xưởng Theo robot, nhiệm vụ Toàn sân, màn chính quay chậm)', () => {
   assert.equal(defaultCamera('home'), 'orbit')
-  assert.equal(defaultCamera('match'), 'follow')
-  assert.equal(defaultCamera('practice'), 'follow')
+  assert.equal(defaultCamera('match'), 'driver')
+  assert.equal(defaultCamera('practice'), 'driver')
   assert.equal(defaultCamera('workshop'), 'follow')
   assert.equal(defaultCamera('mission'), 'field')
   assert.equal(defaultCamera('missions'), 'field')
   assert.equal(defaultCamera('tournament'), 'field')
-  assert.equal(defaultCamera('tmatch'), 'follow')
+  assert.equal(defaultCamera('tmatch'), 'driver')
   assert.equal(defaultCamera('treplay'), 'field')
   assert.equal(defaultCamera('rules'), 'orbit')
   assert.equal(defaultCamera('robots'), 'orbit')

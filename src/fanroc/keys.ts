@@ -10,7 +10,11 @@ type DriveDir = 'up' | 'down' | 'left' | 'right' | 'strafeL' | 'strafeR'
 export const KEY_TABLE: Record<KeyLayout, { drive: Record<DriveDir, string[]>; buttons: Record<string, string> }> = {
   solo: {
     drive: { up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'], strafeL: ['KeyQ'], strafeR: ['KeyE'] },
-    buttons: { KeyI: 'TRIANGLE', KeyK: 'CROSS', KeyJ: 'SQUARE', KeyL: 'CIRCLE', KeyU: 'L1', KeyO: 'R1', KeyY: 'L2', KeyP: 'R2' },
+    // Phím số thay nút hình (anh Tuấn 10/11): 1 = △, 2 = ○, 3 = ✕, 4 = □ — cùng nút với I / L / K / J.
+    buttons: {
+      KeyI: 'TRIANGLE', KeyK: 'CROSS', KeyJ: 'SQUARE', KeyL: 'CIRCLE', KeyU: 'L1', KeyO: 'R1', KeyY: 'L2', KeyP: 'R2',
+      Digit1: 'TRIANGLE', Digit2: 'CIRCLE', Digit3: 'CROSS', Digit4: 'SQUARE',
+    },
   },
   left: {
     drive: { up: ['KeyW'], down: ['KeyS'], left: ['KeyA'], right: ['KeyD'], strafeL: ['KeyQ'], strafeR: ['KeyE'] },

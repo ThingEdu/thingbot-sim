@@ -44,6 +44,11 @@ export interface RobotDef {
    */
   chute?: { reach: number; y: number }
   /**
+   * Cửa ra của lồng ở ĐUÔI xe (Mẫu Maker vẽ quay đầu, anh Tuấn chốt 10/11: hai càng lõm ủn bóng ở mũi, vòng cửa ra ở
+   * đuôi): điểm xả là `chute` lật ra sau tâm xe — `reach` khi đó tính từ mép đuôi; bóng lăn ra phía sau.
+   */
+  chuteBehind?: boolean
+  /**
    * Cửa ra của lồng ở S1 = 180° khi có servo MG996R nâng cửa lồng (mẫu Maker Nâng / Maker Pro): cửa ra đi thẳng từ `chute`
    * (S1 = 0°) tới đây theo S1 / 180 — với tới Rãnh 2–3. Phần vượt mũi khung tính vào mức mở rộng.
    */
@@ -67,6 +72,7 @@ const MAKER: RobotDef = {
   rearGrip: { rest: 0.1265, half: 0.0235, front: 0.039 },
   // Vòng cửa ra của lồng (CAD: tâm 68 mm trước tâm khung, cao 93 mm); bóng qua vòng rơi ra ở ~100 mm trước tâm.
   chute: { reach: -0.05, y: 0.093 },
+  chuteBehind: true,
   cad: 'maker',
 }
 
@@ -79,19 +85,19 @@ export const ROBOTS: Record<RobotType, RobotDef> = {
   maker: MAKER,
   // Ba mẫu cải tiến chỉ dùng linh kiện có trong CAD "Bộ thingbot mới" (servo MG996R, động cơ TT, bánh D65, thanh răng).
   makerLift: {
-    ...MAKER, type: 'makerLift', name: 'Maker Nâng',
+    ...MAKER, chuteBehind: false, type: 'makerLift', name: 'Maker Nâng',
     servos: { S1: 'Nâng cửa lồng (MG996R)', S2: 'Kẹp cờ', S3: 'Cửa xả' },
     arm: undefined,
     chuteLift: CHUTE_LIFT,
   },
   makerIntake: {
-    ...MAKER, type: 'makerIntake', name: 'Maker Hút',
+    ...MAKER, chuteBehind: false, type: 'makerIntake', name: 'Maker Hút',
     size: { ...MAKER.size, h: TALL_H },
     mech: { M3: 'Con lăn hút', M4: 'Thanh trượt răng' },
     storage: 8,
   },
   makerPro: {
-    ...MAKER, type: 'makerPro', name: 'Maker Pro',
+    ...MAKER, chuteBehind: false, type: 'makerPro', name: 'Maker Pro',
     size: { ...MAKER.size, h: TALL_H },
     drives: ['omni', 'mecanum', 'diff2'],
     mech: { M3: 'Con lăn hút', M4: 'Thanh trượt răng' },

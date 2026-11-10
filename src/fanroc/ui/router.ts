@@ -11,8 +11,8 @@ export type Screen = 'home' | 'match' | 'practice' | 'workshop' | 'missions' | '
 export const SCREENS: readonly Screen[] = ['home', 'match', 'practice', 'workshop', 'missions', 'mission', 'tournament', 'tmatch', 'treplay', 'rules', 'robots']
 
 /**
- * Camera mặc định khi vào màn (spec §6.5; camera không lưu — §8.7): màn chính quay chậm quanh sân, trận / đấu tập /
- * Xưởng theo robot của em, nhiệm vụ toàn sân (thấy rõ vệt), giải đấu (ghi danh, Pit) toàn sân.
+ * Camera mặc định khi vào màn (spec §6.5; camera không lưu — §8.7): màn chính quay chậm quanh sân, trận / đấu tập
+ * Ghế lái, Xưởng theo robot của em, nhiệm vụ toàn sân (thấy rõ vệt), giải đấu (ghi danh, Pit) toàn sân.
  */
 export function defaultCamera(s: Screen): CameraView {
   switch (s) {
@@ -20,10 +20,12 @@ export function defaultCamera(s: Screen): CameraView {
     case 'rules':
     case 'robots':
       return 'orbit'
+    // Trận: góc Ghế lái (góc thứ 3, nhìn rộng cả sân — anh Tuấn chốt 10/11), hai bạn cùng nhìn chung một màn hình.
     case 'match':
     case 'practice':
-    case 'workshop':
     case 'tmatch':
+      return 'driver'
+    case 'workshop':
       return 'follow'
     default:
       return 'field'

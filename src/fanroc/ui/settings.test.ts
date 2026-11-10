@@ -48,7 +48,9 @@ test('keyRows: đủ phím của bố cục (lái + 8 nút); đi ngang chỉ đ�
   assert.equal(maker[0].action, 'Chạy tới')
   assert.match(maker[4].action, /chỉ đế 4 bánh/)
   assert.ok(!/chỉ đế 4 bánh/.test(keyRows('solo', { type: 'maker', drive: 'omni', actuator: 's360' })[4].action))
-  const circle = maker.find((r) => r.keys === 'L = ○')!
+  // Phím số 1–4 gom vào dòng của nút hình (anh Tuấn 10/11).
+  const circle = maker.find((r) => r.keys === 'L / 2 = ○')!
+  assert.ok(maker.some((r) => r.keys === 'I / 1 = △') && maker.some((r) => r.keys === 'K / 3 = ✕') && maker.some((r) => r.keys === 'J / 4 = □'))
   assert.equal(circle.action, 'Giữ: mở cửa xả')
   const left = keyRows('left', defaultConfig('maker'))
   assert.equal(left[0].keys, 'W')
@@ -58,8 +60,8 @@ test('keyRows: đủ phím của bố cục (lái + 8 nút); đi ngang chỉ đ�
   assert.equal(right[4].keys, ',')
   // Mỗi phím của bảng KEY_TABLE xuất hiện đúng một lần.
   for (const layout of ['solo', 'left', 'right'] as const) {
-    const all = keyRows(layout, defaultConfig('co')).map((r) => r.keys).join(' ')
-    for (const code of Object.keys(KEY_TABLE[layout].buttons)) assert.ok(all.includes(`${keyName(code)} =`), `${layout} ${code}`)
+    const shown = keyRows(layout, defaultConfig('co')).flatMap((r) => (r.keys.includes(' = ') ? r.keys.split(' = ')[0].split(' / ') : []))
+    for (const code of Object.keys(KEY_TABLE[layout].buttons)) assert.equal(shown.filter((k) => k === keyName(code)).length, 1, `${layout} ${code}`)
   }
 })
 

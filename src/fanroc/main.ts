@@ -892,6 +892,10 @@ async function start(): Promise<void> {
     sound: settings.sound,
     setSound: (v) => ((settings.sound = v), saveSettings()),
     layout2p: players() === 2,
+    pads: (() => {
+      const { status, ids } = seats.read()
+      return { lines: [padLine(status[0], ids[0], 1), padLine(status[1], ids[1], 2)], ready: status.filter((s) => s === 'ok').length }
+    })(),
     layoutLocked: tourLocksLayout() ? TOUR_LAYOUT_LOCKED : undefined,
     setLayout2p: (v) => {
       // Giải đấu: số bạn (bố cục bàn phím) chốt lúc ghi danh — đổi giữa giải thì trận ghi với tay lái sai.
@@ -1072,6 +1076,10 @@ async function start(): Promise<void> {
     makePads()
     showTabs()
   }
+  /** Tên tay cầm gọn: bỏ phần "(Vendor: … Product: …)" / "(STANDARD GAMEPAD …)" của trình duyệt. */
+  const padName = (id: string | null | undefined) => (id ?? '').replace(/\s*\(.*\)\s*$/, '').replace(/^[0-9a-f]+-[0-9a-f]+-/i, '').trim()
+  const padLine = (st: SeatStatus | undefined, id: string | null | undefined, n: number) =>
+    st === 'ok' ? `Tay ${n}: đã nhận${padName(id) ? ` — ${padName(id)}` : ''}` : st === 'nonstandard' ? `Tay ${n}: chưa hỗ trợ — dùng bàn phím` : st === 'lost' ? `Tay ${n}: vừa rút ra` : `Tay ${n}: chưa cắm — dùng bàn phím`
   const padText = (st: SeatStatus | undefined, n: number) =>
     st === 'ok' ? `Tay PS2 thứ ${n}: đã nhận` : st === 'nonstandard' ? `Tay thứ ${n} không chuẩn — dùng bàn phím` : `Chưa có tay PS2 thứ ${n} — dùng bàn phím`
   const pitView = (t: TournamentState): PitView => ({
@@ -1316,8 +1324,15 @@ async function start(): Promise<void> {
   let last = performance.now()
   let lastPreview = 0
   let lastIdleDraw = 0
+  let padSig = ''
   const frame = (now: number) => {
-    const { pads, status } = seats.read()
+    const { pads, status, ids } = seats.read()
+    // Cắm / rút tay lúc ⚙ đang mở: vẽ lại để dòng "Tay cầm" luôn đúng.
+    const sig = `${status.join()}|${ids.join()}`
+    if (sig !== padSig) {
+      if (padSig && popover.shown) reopen()
+      padSig = sig
+    }
     for (const p of PLAYERS) editors.input(p, padOf(p, pads))
     if (screen === 'tournament' && tScreen.view === 'keytest') {
       const live = (p: Player) => keypads[p]?.active() || (!!pads[p] && mergePad(pads[p], PS2_NEUTRAL) === pads[p])

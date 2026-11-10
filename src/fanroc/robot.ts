@@ -152,7 +152,7 @@ export class RobotBody {
 
   /** Phần nhô ra trước mũi xe (vươn + tay kẹp, hoặc cửa lồng nâng bằng servo vượt mũi khung), m. */
   get forwardExtension(): number {
-    return this.forwardExtend + (this.flagBehind ? 0 : this.armReach) + Math.max(0, chuteExit(this.def, this.armFrac)?.reach ?? 0)
+    return this.forwardExtend + (this.flagBehind ? 0 : this.armReach) + (this.def.chuteBehind ? 0 : Math.max(0, chuteExit(this.def, this.armFrac)?.reach ?? 0))
   }
 
   /** Phần nhô ra sau đuôi xe (giá cờ trên thanh răng vượt mép sau), m. */
@@ -184,6 +184,7 @@ export class RobotBody {
   /** Điểm xả bóng: mũi + reach (+ vươn), cao release.y (+ nâng). */
   releasePoint(): { x: number; y: number; z: number } {
     const c = chuteExit(this.def, this.armFrac)
+    if (c && this.def.chuteBehind) return this.along(-(this.def.size.l / 2 + c.reach), c.y)
     if (c) return this.ahead(c.reach, c.y)
     return this.ahead(this.def.release.reach + this.forwardExtend, this.def.release.y + this.liftUp)
   }
@@ -328,7 +329,8 @@ export class RobotBody {
     this.releaseWait = RELEASE_EVERY
     const { f } = this.axes()
     const v = this.body.linvel()
-    this.world.placeBall(i, this.releasePoint(), { x: v.x + f.x * RELEASE_V, y: 0, z: v.z + f.z * RELEASE_V })
+    const out = this.def.chuteBehind ? -RELEASE_V : RELEASE_V // bóng lăn ra phía cửa ra (đuôi với Mẫu Maker)
+    this.world.placeBall(i, this.releasePoint(), { x: v.x + f.x * out, y: 0, z: v.z + f.z * out })
   }
 
   private flag(ports: PortValues): void {

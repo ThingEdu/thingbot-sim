@@ -94,3 +94,12 @@ test('layoutFor: một bạn solo; hai bạn: bạn 1 nửa trái, bạn 2 nửa
   assert.equal(layoutFor(0, true), 'left')
   assert.equal(layoutFor(1, true), 'right')
 })
+
+test('một bạn: phím số 1 = △, 2 = ○, 3 = ✕, 4 = □ (anh Tuấn 10/11)', () => {
+  const want: [string, string][] = [['Digit1', 'TRIANGLE'], ['Digit2', 'CIRCLE'], ['Digit3', 'CROSS'], ['Digit4', 'SQUARE']]
+  for (const [code, name] of want) {
+    const s = press('solo', 'diff2', code)
+    const on = Object.keys(s).filter((k) => k.startsWith('ps2_PSB_') && s[k] === 1)
+    assert.deepEqual(on, [`ps2_PSB_${name}`], code)
+  }
+})

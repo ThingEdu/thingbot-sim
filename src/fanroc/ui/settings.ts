@@ -84,8 +84,11 @@ export function keyRows(layout: KeyLayout, cfg: RobotConfig): { keys: string; ac
     keys: t.drive[d].map(keyName).join(' / '),
     action: d.startsWith('strafe') && !four ? `${action} (chỉ đế 4 bánh)` : action,
   }))
-  for (const [code, name] of Object.entries(t.buttons)) {
-    rows.push({ keys: `${keyName(code)} = ${PS2_SYM[name as Ps2Button]}`, action: roles[name as Ps2Button] ?? 'Mẫu chưa dùng — chương trình của em gán' })
+  // Một dòng mỗi nút PS2, gom mọi phím của nút đó: "I / 1 = △".
+  const byButton = new Map<Ps2Button, string[]>()
+  for (const [code, name] of Object.entries(t.buttons)) byButton.set(name as Ps2Button, [...(byButton.get(name as Ps2Button) ?? []), keyName(code)])
+  for (const [name, codes] of byButton) {
+    rows.push({ keys: `${codes.join(' / ')} = ${PS2_SYM[name]}`, action: roles[name] ?? 'Mẫu chưa dùng — chương trình của em gán' })
   }
   return rows
 }
@@ -101,6 +104,8 @@ export interface SettingsCtx {
   setSound(v: boolean): void
   layout2p: boolean
   setLayout2p(v: boolean): void
+  /** Tình trạng tay cầm của bạn 1, bạn 2 (chữ để hiện) và số tay đang nhận được. */
+  pads: { lines: string[]; ready: number }
   /** Chế độ giáo viên: màn chơi cũng hiện đủ vỏ lập trình (khối, Serial, số đo cổng). */
   teacher: boolean
   setTeacher(v: boolean): void
@@ -152,6 +157,7 @@ html[data-chrome="game"] .st-pop { left: auto; right: 12px; top: 62px; bottom: a
 .st-pop button:disabled { opacity: .4; cursor: default; }
 .st-pop label { display: inline-flex; gap: 4px; align-items: center; }
 .st-pop select { font: 13px var(--font); border: 1px solid var(--line); border-radius: 5px; padding: 2px 4px; background: #fff; max-width: 210px; }
+.st-pop .st-pad { padding: 2px 8px; border-radius: 5px; background: #f1f3f2; }
 .st-pop .fe-cfg label { border: 0; padding: 0; font-weight: 500; }
 .st-note { font: 600 12px var(--font); color: var(--muted); }
 .st-note[hidden] { display: none; }
@@ -252,9 +258,13 @@ export function createSettings(): SettingsPopover {
     parts.push(row('Camera', ...group<CameraView>([['field', 'Toàn sân'], ['follow', 'Theo robot'], ['driver', 'Ghế lái']], c.camera, c.setCamera)))
     parts.push(row('Đồ hoạ', ...group<Quality>([['high', 'Cao'], ['low', 'Thấp']], c.quality, c.setQuality)))
     parts.push(row('Âm thanh', ...group([[true, 'Bật'], [false, 'Tắt']], c.sound, c.setSound)))
-    const two = group([[false, 'Một bạn'], [true, 'Hai bạn (chia đôi bàn phím)']], c.layout2p, c.setLayout2p)
+    const padRow = row('Tay cầm', ...c.pads.lines.map((t) => el('span', 'st-pad', t)))
+    padRow.dataset.role = 'pads'
+    parts.push(padRow)
+    const two = group([[false, 'Một bạn'], [true, 'Hai bạn (mỗi bạn một tay / chia đôi bàn phím)']], c.layout2p, c.setLayout2p)
     if (c.layoutLocked) for (const b of two) b.disabled = true
-    const twoRow = row('Hai bạn chơi', ...two, ...(c.layoutLocked ? [el('span', 'st-note', c.layoutLocked)] : []))
+    const hint = c.pads.ready >= 2 && !c.layout2p && !c.layoutLocked ? [el('span', 'st-note', 'Đã nhận 2 tay — chọn Hai bạn để cùng thi đấu trên một màn hình')] : []
+    const twoRow = row('Hai bạn chơi', ...two, ...hint, ...(c.layoutLocked ? [el('span', 'st-note', c.layoutLocked)] : []))
     twoRow.dataset.role = 'layout2p'
     parts.push(twoRow)
     const tables = el('div', 'st-tables')
