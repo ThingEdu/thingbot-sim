@@ -45,7 +45,8 @@ import { createRobotsGallery, viewerCount } from './ui/robots-gallery.ts'
 import { fanrocRules } from './rules-data.ts'
 import { assignSeat, createSettings, defaultSeats, playerSeat, seatOf, seatOptions, type SeatMode, type SettingsCtx } from './ui/settings.ts'
 import { createWorkshopBar, Drafts, resetVerified, saveVerified, sameProgram } from './ui/workshop.ts'
-import { createRobotCards, type CardInfo } from './ui/robotcard.ts'
+import { createRobotCards, WarningHold, type CardInfo } from './ui/robotcard.ts'
+import { createFeed, EventFeed, foulItem, scoreItem } from './ui/feed.ts'
 import { penaltyPoints, playAgents } from './quickmatch.ts'
 import { nextMatch, record, type Played, type TournamentState } from './tournament.ts'
 import {
@@ -277,6 +278,9 @@ async function start(): Promise<void> {
   const hud = createHud(shell.panel.events)
   const board = createScoreboard(stage)
   const cards = createRobotCards(stage)
+  const feedView = createFeed(stage)
+  const feed = new EventFeed()
+  const holds = [new WarningHold(), new WarningHold()]
   const ticker = new ScoreTicker()
   const sound = createSound(() => settings.sound)
   const popover = createSettings()
@@ -462,6 +466,7 @@ async function start(): Promise<void> {
           old.dispose()
           board.hideResult()
           board.clearFx()
+          feed.clear()
           if (isMatch()) {
             for (const p of PLAYERS) if (playerSeat(modes, p) >= 0) editors.run(p)
             game.match.log(
@@ -990,6 +995,8 @@ async function start(): Promise<void> {
     board.visible(c.scoreboard)
     board.hideResult()
     board.clearFx()
+    feed.clear()
+    feedView.visible(c.scoreboard)
     cards.visible(isMatch() || next === 'workshop' || next === 'tmatch')
     // Xem nhanh chạy ×40 (không có chương trình nào nên R24 không khoá); rời Xem nhanh về ×1.
     if (next === 'treplay') requested = 40
@@ -1269,7 +1276,7 @@ async function start(): Promise<void> {
         pad: { n: p + 1, status: status[p] },
         held: r ? r.stored.length : 0,
         storage: r ? r.def.storage : 0,
-        warnings: deadZoneLines(game.ports[seat]),
+        warnings: holds[p].update(performance.now(), deadZoneLines(game.ports[seat])),
       })
     }
     cards.update(list)
@@ -1279,12 +1286,15 @@ async function start(): Promise<void> {
   let boardMatch = game.match
   let prevT = game.match.t
   let resultShown = false
+  let feedEvents = game.match.events.length
   const showBoard = (now: number) => {
     const m = game.match
     if (m !== boardMatch) {
       boardMatch = m
       prevT = m.t
       resultShown = false
+      feedEvents = 0
+      feed.clear()
     }
     // Màn không có bảng điểm (màn chính, Xưởng, nhiệm vụ): không tính điểm, không "ting". Phiên đang bị thay (Về chỗ
     // cũ / đổi màn đang dựng phiên mới): không xét — kết quả của nó đã bỏ (R126).
@@ -1294,7 +1304,15 @@ async function start(): Promise<void> {
       // Không hiện chữ báo điểm nổi giữa màn (anh Tuấn 10/11: gây nhiễu) — vẫn kêu "ting" khi được điểm.
       board.update(out.line, [])
       if (out.pops.some((p) => p.startsWith('+'))) sound.ting()
+      // Thay vào đó: góc dưới phải trôi lần lượt từng mục cộng / trừ điểm (anh Tuấn 10/11).
+      feed.push(out.pops.map(scoreItem))
     }
+    // Lỗi trọng tài ghi (kèm lý do) cũng trôi ở góc dưới phải — biết vì sao đội bị trừ điểm.
+    for (; feedEvents < m.events.length; feedEvents++) {
+      const it = foulItem(m.events[feedEvents], teamNames)
+      if (it) feed.push([it])
+    }
+    feedView.render(feed.tick(now))
     if (!m.practice) {
       const cue = countdownCue(prevT, m.t)
       if (cue !== null) {

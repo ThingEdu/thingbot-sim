@@ -19,3 +19,16 @@ test('cardText: tay rút ra / sai bố cục và cảnh báo vùng chết hiện
   assert.match(padLine(2, 'nonstandard')!, /Tay cầm 2 không đúng bố cục chuẩn/)
   assert.equal(padLine(1, 'ok'), null)
 })
+
+test('WarningHold: dòng cảnh báo không nháy — ở lại WARN_HOLD_MS sau lần cuối, số % đổi tối đa một lần mỗi WARN_HOLD_MS', async () => {
+  const { WarningHold, WARN_HOLD_MS } = await import('./robotcard.ts')
+  const h = new WarningHold()
+  const a = 'M1 = 12 % < 20 %: động cơ TT không quay'
+  const b = 'M1 = 15 % < 20 %: động cơ TT không quay'
+  assert.deepEqual(h.update(0, [a]), [a])
+  assert.deepEqual(h.update(16, []), [a], 'tắt một khung hình vẫn còn')
+  assert.deepEqual(h.update(32, [b]), [a], 'chưa đủ thời gian thì chưa đổi số')
+  assert.deepEqual(h.update(WARN_HOLD_MS, [b]), [b])
+  assert.deepEqual(h.update(2 * WARN_HOLD_MS - 1, []), [b])
+  assert.deepEqual(h.update(2 * WARN_HOLD_MS, []), [])
+})

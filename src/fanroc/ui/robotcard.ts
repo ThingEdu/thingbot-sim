@@ -36,6 +36,32 @@ export function cardText(c: CardInfo): string[] {
   ]
 }
 
+/** Một dòng cảnh báo ở lại ít nhất bấy lâu sau lần cuối còn đúng, và chữ (số %) đổi tối đa một lần trong bấy lâu, ms. */
+export const WARN_HOLD_MS = 2000
+
+/**
+ * Giữ dòng cảnh báo khỏi nháy (anh Tuấn 10/11: chữ bên trái nháy quá nhanh): tay cầm quanh ngưỡng 20 % làm dòng
+ * "M1 = 12 % < 20 %…" bật / tắt / đổi số mỗi khung hình. Mỗi dòng theo khoá (chữ trước dấu " ", vd "M1") ở lại
+ * WARN_HOLD_MS sau lần cuối thấy, và chữ của nó chỉ thay sau WARN_HOLD_MS kể từ lần thay trước.
+ */
+export class WarningHold {
+  private lines = new Map<string, { text: string; seen: number; set: number }>()
+
+  update(now: number, warnings: string[]): string[] {
+    for (const w of warnings) {
+      const k = w.split(' ')[0]
+      const cur = this.lines.get(k)
+      if (!cur) this.lines.set(k, { text: w, seen: now, set: now })
+      else {
+        cur.seen = now
+        if (cur.text !== w && now - cur.set >= WARN_HOLD_MS) Object.assign(cur, { text: w, set: now })
+      }
+    }
+    for (const [k, v] of this.lines) if (now - v.seen >= WARN_HOLD_MS) this.lines.delete(k)
+    return [...this.lines.values()].map((v) => v.text)
+  }
+}
+
 const CSS = `
 .rc-me { position: absolute; left: 10px; bottom: 10px; z-index: 6; display: grid; gap: 6px; max-width: min(330px, calc(100% - 20px)); pointer-events: none; }
 .rc-me[hidden] { display: none; }

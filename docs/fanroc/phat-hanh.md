@@ -1,4 +1,4 @@
-# Phát hành ThingBot FanRoc Game
+# Phát hành TSim (ThingBot FanRoc Game)
 
 Tài liệu cho người vận hành (anh Tuấn và đội sự kiện). Hai đường phát hành: **bản máy tính (desktop)** và **bản web sự kiện** chạy tĩnh trên máy 201.
 
@@ -10,7 +10,7 @@ Dựng: `npm run dist:game` (Tauri) — ra `.app` + `.dmg` trong `src-tauri/targ
 
 Cài và mở:
 
-1. Kéo **ThingBot FanRoc Game** vào thư mục Applications.
+1. Kéo **TSim** vào thư mục Applications.
 2. Ứng dụng **chưa được ký** của Apple nên lần đầu macOS sẽ chặn. Bấm chuột phải vào ứng dụng, chọn **Mở (Open)**, rồi bấm **Mở** ở hộp thoại. Từ lần sau mở như thường.
 3. Chương trình khối xuất ra là tệp `.tb`, được lưu vào thư mục **Downloads** (Tải về) của máy; nạp tệp này vào ThingBot thật như bình thường.
 
