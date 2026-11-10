@@ -51,6 +51,7 @@ Mỗi lần chạy thật là quyết định của người vận hành; nên t
 - [x] **Tên FANROC**: anh Tuấn xác nhận được dùng (06/11/2026).
 - [ ] **Nguồn** (⚙ › Nguồn, `NGUON.md`): mọi phần dùng lại có link / commit / giấy phép; thêm phần mới thì thêm vào `src/fanroc/credits.ts`.
 - [ ] **Link mã nguồn AGPL** hiện rõ trong trang và bấm vào mở đúng kho mã.
+- [ ] **Giấy phép trong bộ cài**: `LICENSE` (AGPL-3.0), `NGUON.md`, `THIRD_PARTY_LICENSES.txt` nằm trong app (Tauri `bundle.resources`; bộ cài Windows hiện trang AGPL qua `licenseFile`) và trong thư mục dựng `.dmg` tay. Thêm thư viện MIT / Apache mới thì chép văn bản giấy phép của nó vào `THIRD_PARTY_LICENSES.txt` (`credits.test.ts` kiểm tra).
 - [ ] **Link ThingBlock**: hiện **chưa có** (`THINGBLOCK_URL` đang để `''`). Xác nhận đúng ý định, hoặc điền link khi sẵn sàng.
 - [ ] **Câu chữ luật thi** đã được anh Tuấn rà.
 - [ ] **Nhiệm vụ 9** đã chơi thử từ đầu đến cuối.

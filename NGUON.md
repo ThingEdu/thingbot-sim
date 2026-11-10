@@ -8,9 +8,12 @@ ThingBot FanRoc Challenge (bộ cài TiFa) dùng lại các phần dưới đây
 | Khối lệnh + bo ThingBot ảo (ThingBlock) | https://github.com/ThingEdu/thingblock-editor commit `866ff1cc8` (thư mục anh em `../thingblock-editor-sim`, CI tải đúng commit này) | AGPL-3.0 (scratch-gui, scratch-vm, thingblock-resource, thingblock-sim), Apache-2.0 (scratch-blocks) |
 | Đồ hoạ 3D three.js | https://github.com/mrdoob/three.js r180 (`three@0.180.0`) | MIT |
 | Vật lý Rapier | https://github.com/dimforge/rapier.js (`@dimforge/rapier3d-compat@0.14.0`) | Apache-2.0 |
+| Cách đặt vận tốc robot mỗi bước (UrSimulator) | https://github.com/AendeGitHub/UrSimulator `src/sim/RobotSim.ts` — viết lại cho đế ThingBot (`src/fanroc/robot.ts`), không chép nguyên văn | MIT (Copyright (c) 2026 Khussein) |
 | Đọc / ghi tệp .tb (JSZip) | https://github.com/Stuk/jszip (`jszip@3.10.1`) | MIT hoặc GPL-3.0 |
 | Số đo sân + lưới núi | CAD "Lắp sân.step" do anh Tuấn (ThingEdu) gửi 03/11/2026 → `src/fanroc/layout.ts`, `src/fanroc/assets/mountain-mesh.json` | của ThingEdu, đồng ý công khai 06/11/2026 |
 | Hình Mẫu Maker và linh kiện 3 mẫu cải tiến | CAD Onshape "Bộ thingbot mới" của anh Tuấn (ThingEdu) → `src/fanroc/assets/robot-maker.json`, `robot-parts.json` (công cụ `scripts/cad/`) | của ThingEdu, đồng ý công khai 06/11/2026 |
 | Luật chơi | Thể lệ FANROC 2026–2027 của Ban tổ chức FANROC — game tóm tắt bằng lời riêng, không chép văn bản | tên FANROC dùng có xin phép (06/11/2026) |
 
-Mã của game: AGPL-3.0 (`LICENSE`), https://github.com/ThingEdu/thingbot-sim nhánh `feat/fanroc`.
+Mã của game: AGPL-3.0 (`LICENSE`), https://github.com/ThingEdu/thingbot-sim nhánh `feat/fanroc`; mã đúng của từng bản
+phát hành ở tag `fanroc-v<số bản>`. Văn bản giấy phép của các phần bên thứ ba: `THIRD_PARTY_LICENSES.txt`. Bộ cài
+kèm cả ba tệp `LICENSE`, `NGUON.md`, `THIRD_PARTY_LICENSES.txt`.

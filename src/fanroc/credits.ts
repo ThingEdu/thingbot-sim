@@ -22,6 +22,11 @@ export const CREDITS: readonly Credit[] = [
     from: 'https://github.com/dimforge/rapier.js (@dimforge/rapier3d-compat@0.14.0)',
     license: 'Apache-2.0',
   },
+  {
+    name: 'Cách đặt vận tốc robot mỗi bước (UrSimulator)',
+    from: 'https://github.com/AendeGitHub/UrSimulator src/sim/RobotSim.ts — viết lại cho đế ThingBot, không chép nguyên văn',
+    license: 'MIT (Copyright (c) 2026 Khussein)',
+  },
   { name: 'Đọc / ghi tệp .tb (JSZip)', from: 'https://github.com/Stuk/jszip (jszip@3.10.1)', license: 'MIT hoặc GPL-3.0' },
   {
     name: 'Số đo sân + lưới núi',
