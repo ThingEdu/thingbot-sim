@@ -1767,26 +1767,22 @@ async function shellTests() {
     return `đếm ngược ${counts.join(' · ')} · tổng ${shown} · đỏ ${red.join('/')} · xanh ${blue.join('/')}`
   })
 
-  await test('N2b báo điểm nổi "+10 · Vùng Bảo Vệ" khi robot vào Vùng Bảo Vệ; thanh chạy nằm dưới bảng điểm', async (page) => {
+  await test('N2b vào Vùng Bảo Vệ: bảng điểm lên "Đỗ 10", không hiện chữ báo điểm nổi; thanh chạy nằm dưới bảng điểm', async (page) => {
     await open(page)
     await go(page, 'match')
     await quietOthers(page)
     await skipRelease(page)
     const s = ZONES.safe.red
     await page.evaluate((p) => window.__fanroc.robots[0].setPose(p), { x: (s.x0 + s.x1) / 2, z: (s.z0 + s.z1) / 2, yaw: 0 })
-    await page.locator('.sb-pop', { hasText: '+10 · Vùng Bảo Vệ' }).waitFor({ timeout: 3000 })
-    await page.waitForTimeout(250) // qua phần phóng to của chữ nổi
+    await page.locator('.sb [data-side="red"] .sb-hd span', { hasText: 'Đỗ 10' }).waitFor({ timeout: 3000 })
+    await page.waitForTimeout(300)
+    const pops = await page.locator('.sb-pop').count()
+    expect(pops === 0, `còn ${pops} chữ báo điểm nổi (anh Tuấn 10/11: bỏ)`)
     const sb = await page.locator('.sb').boundingBox()
     const run = await page.locator('.sh-run').boundingBox()
     expect(run.y >= sb.y + sb.height, `thanh chạy y=${run.y} đè bảng điểm (đáy ${sb.y + sb.height})`)
-    const park = await page.locator('.sb [data-side="red"] .sb-hd span').innerText()
-    expect(park === 'Đỗ 10', `ô Đỏ: "${park}"`)
     if (SHOTS) await page.screenshot({ path: resolve(SHOTS, 't12-match.png') })
-    await page.waitForTimeout(1600)
-    // Chữ nổi tự tắt sau 1,5 s (Human Player tự động có thể ghi thêm "+5 · Chữa Cháy" mới trong lúc chờ).
-    const left = await page.locator('.sb-pop', { hasText: 'Vùng Bảo Vệ' }).count()
-    expect(left === 0, `sau 1,5 s còn ${left} chữ "Vùng Bảo Vệ"`)
-    return `bảng điểm đáy ${Math.round(sb.y + sb.height)} px, thanh chạy ${Math.round(run.y)} px · "${park}"`
+    return `bảng điểm đáy ${Math.round(sb.y + sb.height)} px, thanh chạy ${Math.round(run.y)} px · không chữ nổi`
   })
 }
 

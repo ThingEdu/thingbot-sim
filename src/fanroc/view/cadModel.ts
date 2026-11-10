@@ -90,6 +90,16 @@ export function cadPart(name: CadPart, x: number, y: number, z: number, rotY = 0
   return g
 }
 
+/**
+ * Mẫu Maker vẽ quay đầu (anh Tuấn chốt 10/11): hai càng lõm ủn bóng ở đuôi CAD là đầu xe, nên hình xoay 180° quanh trục
+ * đứng — chỉ phần hình, điểm xả bóng / kẹp cờ của vật lý giữ nguyên. Ba mẫu cải tiến giữ hướng CAD (con lăn hút ở mũi).
+ */
+export const cadFlipped = (def: RobotDef): boolean => def.type === 'maker'
+/** Đổi một điểm của hình CAD (mm) sang hệ của hình đã xoay 180° nếu `def` vẽ quay đầu. */
+export function cadToModel(def: RobotDef, v: THREE.Vector3): THREE.Vector3 {
+  return cadFlipped(def) ? v.set(-v.x, v.y, -v.z) : v
+}
+
 /** Tên 4 nhóm bánh trong tệp CAD. */
 export const CAD_WHEELS = ['wheel1', 'wheel3', 'wheel4', 'wheel5'] as const
 /**

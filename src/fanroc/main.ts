@@ -1267,7 +1267,7 @@ async function start(): Promise<void> {
     cards.update(list)
   }
 
-  // Bảng điểm: dòng điểm ≤ SCORE_HZ lần/giây + báo nổi; đếm ngược 3 s cuối xả bóng; còi; màn kết quả khi hết giờ.
+  // Bảng điểm: dòng điểm ≤ SCORE_HZ lần/giây; đếm ngược 3 s cuối xả bóng; còi; màn kết quả khi hết giờ.
   let boardMatch = game.match
   let prevT = game.match.t
   let resultShown = false
@@ -1283,7 +1283,8 @@ async function start(): Promise<void> {
     if (!chrome(screen).scoreboard || game.mode === 'mission' || game === replacing) return
     const out = ticker.tick(now, m, game.robots, programs(), teamNames)
     if (out) {
-      board.update(out.line, out.pops)
+      // Không hiện chữ báo điểm nổi giữa màn (anh Tuấn 10/11: gây nhiễu) — vẫn kêu "ting" khi được điểm.
+      board.update(out.line, [])
       if (out.pops.some((p) => p.startsWith('+'))) sound.ting()
     }
     if (!m.practice) {

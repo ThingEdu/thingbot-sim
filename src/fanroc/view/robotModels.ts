@@ -7,7 +7,7 @@
 import * as THREE from 'three'
 import type { Alliance } from '../layout.ts'
 import { ROBOTS, type RobotConfig } from '../robots.ts'
-import { BALL_CHUTE, CAD_WHEELS, cadPart, chuteExitModel, makerCad, TALL_TOP } from './cadModel.ts'
+import { BALL_CHUTE, CAD_WHEELS, cadFlipped, cadPart, chuteExitModel, makerCad, TALL_TOP } from './cadModel.ts'
 
 const mat = (color: number, o: THREE.MeshStandardMaterialParameters = {}) =>
   new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0.05, ...o })
@@ -401,10 +401,13 @@ export function buildRobotModel(cfg: RobotConfig, alliance: Alliance): RobotMode
   const cad = def.cad === 'maker' ? buildMakerCad(cfg, body) : null
   const mech = cad ?? BUILD[cfg.type as keyof typeof BUILD](cfg, body)
   const wheels = cad ? cad.wheels : buildDrive(cfg, body)
+  // Hình CAD quay đầu (cadFlipped): bánh ở x của hình nằm ở −x của xe và lăn ngược chiều khi xe tiến.
+  const flip = cadFlipped(def) ? -1 : 1
+  body.rotation.y = flip < 0 ? Math.PI : 0
   // Dải màu liên minh quanh thân.
   const bandMat = mat(BAND[alliance], { transparent: true, opacity: 0.85 })
   // Hai dải mỏng ốp ngoài hai bên thân — không phủ khung / linh kiện. Mẫu Maker CAD: tấm bên khung 240 mm, cao ~35 mm.
-  if (cad) for (const sx of [-1, 1]) group.add(box(0.003, 0.014, 0.2, bandMat, sx * 0.1215, 0.032, -0.035))
+  if (cad) for (const sx of [-1, 1]) group.add(box(0.003, 0.014, 0.2, bandMat, sx * 0.1215, 0.032, -0.035 * flip))
   else for (const sx of [-1, 1]) group.add(box(0.003, 0.012, def.size.l * 0.6, bandMat, sx * (def.size.w / 2 + 0.0015), 0.05, 0))
   group.traverse((o) => {
     if (o instanceof THREE.Mesh && o.material !== M.acrylic) {
@@ -420,7 +423,7 @@ export function buildRobotModel(cfg: RobotConfig, alliance: Alliance): RobotMode
       const dt = Math.min(0.1, (now - last) / 1000)
       last = now
       // Bánh lăn theo quãng đường của chính nó: bánh bên trái (+x) đi fwd − dyaw·x.
-      for (const w of wheels) w.obj.rotation.x += (p.fwd - p.dyaw * w.x) / 0.0325
+      for (const w of wheels) w.obj.rotation.x += (flip * (p.fwd - p.dyaw * flip * w.x)) / 0.0325
       mech.update(p, dt)
     },
     dispose() {
