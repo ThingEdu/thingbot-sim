@@ -135,6 +135,19 @@ const dots = $('#dots')
 /** Câu đố: câu trả lời em chọn gần nhất cho mỗi câu. */
 let answered: Record<string, string> = {}
 $('#step-body').addEventListener('click', (e) => {
+  // Câu hỏi "Đoán trước" (state.ts → ask): chỉ hiện đúng/sai và lời giải thích, không chấm.
+  const pick = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-pick]')
+  if (pick) {
+    const box = pick.closest('.ask')!
+    for (const o of box.querySelectorAll('[data-pick]')) o.classList.remove('right', 'wrong')
+    const ok = pick.dataset.pick === '1'
+    pick.classList.add(ok ? 'right' : 'wrong')
+    const why = box.querySelector<HTMLElement>('.why')!
+    why.hidden = false
+    why.className = `why ${ok ? 'ok' : 'no'}`
+    why.innerHTML = `${ok ? 'Đúng rồi! ' : 'Chưa đúng. '}${pick.dataset.why ?? ''}`
+    return
+  }
   const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-answer]')
   if (!b) return
   const q = b.dataset.answer!.split(':')[0]

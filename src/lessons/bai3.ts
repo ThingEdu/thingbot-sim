@@ -5,54 +5,68 @@
  * Bộ chấm `kiểm:` của ThingBlock chưa có luật "khi giữ SW thì…", nên spike tự chấm; về sau thay bằng
  * luật trong `bai.vi.md`.
  */
-import { B, ctrl, ev, hat, program, setLed, STARTER, tb, toolbox } from './state'
+import { ask, B, bang, ctrl, ev, hat, hieu, program, setLed, STARTER, tb, toolbox } from './state'
 import type { Card, Grader, GraderChange, Lesson, Observation } from './types'
 
 const L1 = 15
 
 const CARDS: Card[] = [
   {
-    title: 'Chào em!',
-    body: `<p>Trên mạch ThingBot có <b>nút SW</b> (cạnh phải) và <b>đèn L1</b> (nằm sát mép dưới tấm Core, gần nút SW) — chỗ có vòng cam nhấp nháy.</p>
-      <p>Bấm <b>👁 Dưới Core</b> để thấy những con chip nằm bên dưới.</p>
-      <p>Hôm nay em làm cho <b>đèn sáng khi giữ nút, tắt khi nhả nút</b>.</p>`,
+    title: 'Nhiệm vụ: đèn pin bấm giữ',
+    body: `<p><b>Chuông cửa</b>, nút <b>thang máy</b>, nút <b>đèn pin</b>: cách đơn giản nhất để người "nói" với máy là một <b>nút bấm</b>.</p>
+      <p>Nhiệm vụ: biến ThingBot thành đèn pin, <b>giữ nút SW thì đèn L1 sáng, nhả ra thì tắt</b>. Nút SW ở cạnh phải, đèn L1 sát mép dưới tấm Core (chỗ vòng cam).</p>
+      ${ask('Nút SW là đầu vào hay đầu ra?', [
+        ['Đầu vào', true, 'Nút báo tin cho não ("đang bị bấm"), não không ra lệnh được cho nút. Báo tin cho não là đầu vào; nhận lệnh từ não là đầu ra.'],
+        ['Đầu ra', false, 'Não không thể ra lệnh cho nút tự lún xuống. Nút chỉ báo cho não biết em đang bấm hay không.'],
+      ])}`,
     look: ['sw', 'l1'],
   },
   {
     title: 'Ghép khối',
     body: `<ol class="todo">
         <li>Kéo ${ctrl('nếu … thì … nếu không thì')} vào trong ${ev('vòng lặp Arduino')}.</li>
-        <li>Đặt ${tb('read switch')} vào ô hình lục giác.</li>
+        <li>Đặt ${tb('read switch')} vào ô hình lục giác, đó là câu hỏi "nút có đang bấm không?".</li>
         <li>Đặt ${tb('set led 1 100')} vào chỗ <b>thì</b>, ${tb('set led 1 0')} vào chỗ <b>nếu không thì</b>.</li>
         <li>Bấm <b>▶ Chạy</b> ở trên mạch.</li>
-      </ol>`,
+      </ol>
+      ${ask('Vì sao phải đặt «nếu» trong <b>vòng lặp</b>, không đặt trong «khi Arduino khởi động»?', [
+        ['Vì khởi động chỉ chạy một lần lúc bật máy', true, 'Đặt ở khởi động thì não chỉ hỏi nút đúng một lần rồi thôi. Trong vòng lặp, não hỏi lại liên tục nên biết ngay khi em bấm.'],
+        ['Vì đặt ở khởi động thì báo lỗi', false, 'Không báo lỗi, nhưng não chỉ hỏi nút đúng một lần lúc bật máy, sau đó không biết em bấm nữa.'],
+      ])}`,
     check: 'build',
   },
   {
     title: 'Giữ nút SW',
     body: `<p>Giữ chuột lên nút SW trên mạch, hoặc giữ nút <b>✋ Giữ SW</b>, hoặc giữ phím <kbd>Space</kbd>.</p>
-      <p>Nhìn dải <b>1 → 4</b> dưới mạch: dữ liệu đi từ nút vào não, qua chip PCA9685 rồi tới đèn.</p>`,
+      <p>Nhìn dải <b>1 → 4</b> dưới mạch: tin đi từ nút vào não, não quyết định, rồi lệnh qua chip PCA9685 tới đèn.</p>`,
     check: 'on',
     look: ['sw'],
   },
   {
     title: 'Nhả nút',
     body: `<p>Thả nút ra. Đèn L1 phải <b>tắt</b>.</p>
-      <p>Để ý ô <b>2</b>: não hỏi nút liên tục hàng nghìn lần mỗi giây — vì vậy đèn đổi ngay khi em nhả.</p>`,
+      <p>Để ý ô <b>2</b>: não hỏi nút <b>hàng nghìn lần mỗi giây</b>, vì vậy đèn đổi ngay khi em nhả.</p>`,
     check: 'off',
     look: ['l1'],
   },
   {
-    title: 'Thử thách',
+    title: 'Hiểu sâu: 0 và 1 của nút',
+    body: `${hieu('Nút chỉ có hai trạng thái', `<p>Nút SW được hàn sẵn vào <b>chân IO3</b> của não. Não không "thấy" ngón tay em; nó chỉ đo xem chân IO3 <b>có điện hay không</b>:</p>
+      ${bang(['Em làm', 'Chân IO3', 'read switch'], [['Nhả nút', '3,3 V → <b>1</b>', 'sai'], ['Bấm nút', '0 V → <b>0</b>', '<b>đúng</b>']])}
+      <p>Lạ không: <b>bấm lại là 0</b>! Vì nút này nối kiểu "bấm thì kéo chân xuống 0 V" (người ta gọi là điện trở kéo lên). Khối ${tb('read switch')} đã <b>đảo lại cho em</b>, nên em chỉ cần nhớ: bấm là <b>đúng</b>.</p>`)}
+      ${hieu('Vì sao là IO3 mà không phải chân khác?', `<p>Chip não ESP32-C3 có nhiều chân, mỗi chân một số: IO0, IO1, IO2, IO3… Chân nào nối với cái gì là do <b>người thiết kế mạch</b> chọn rồi hàn cố định. Lập trình viên đọc <b>sơ đồ mạch</b> để biết. Trên ThingBot: nút SW ở IO3, cổng cảm biến ở IO0 và IO4, hai dây I2C ở IO8 và IO9.</p>`)}`,
+  },
+  {
+    title: 'Thử thách: đèn mờ',
     body: `<p>Làm cho đèn chỉ <b>sáng một nửa</b> khi giữ nút: đổi số trong ${tb('set led 1 100')} thành <b>50</b>, rồi giữ nút.</p>
-      <p>Ô <b>3</b> sẽ cho em thấy chip PCA9685 nhận con số nào.</p>`,
+      <p>Ô <b>3</b> cho em thấy chip PCA9685 nhận con số nào: nó có 4096 bậc, 50% là khoảng 2048.</p>`,
     check: 'half',
     optional: true,
   },
   {
     title: 'Xong rồi! 🎉',
-    body: `<p>Em đã cho <b>não</b> đọc nút và ra lệnh cho <b>chip PCA9685</b> bật tắt đèn.</p>
-      <p>Muốn thử trên kit thật: mở ThingBlock, chọn bo ThingBot, ghép đúng các khối này rồi bấm <b>Nạp</b>.</p>`,
+    body: `<p>Em vừa làm một vòng <b>đầu vào → não → đầu ra</b>: nút báo tin, não quyết định, đèn làm theo. Đèn pin, chuông cửa, nút thang máy đều chạy theo đúng vòng này.</p>
+      <p class="muted">Nghĩ thêm: muốn <b>bấm một lần sáng, bấm lần nữa tắt</b> như công tắc đèn phòng thì não phải <b>nhớ</b> đèn đang bật hay tắt. Đó là việc của <b>biến</b>, em sẽ gặp ở các ví dụ ThingBlock.</p>`,
   },
 ]
 

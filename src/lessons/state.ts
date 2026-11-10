@@ -161,3 +161,27 @@ export const CAT = {
 }
 export const op = (t: string) => `<span class="chip op">${t}</span>`
 export const per = (t: string) => `<span class="chip per">${t}</span>`
+
+const attr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+
+/**
+ * Câu hỏi "Đoán trước": trẻ chọn trước khi chạy thử, bấm là thấy đúng/sai và lời giải thích ngay
+ * (main.ts xử lý `data-pick`). Không chấm điểm, không chặn bước — để trẻ có lý do muốn bấm Chạy.
+ */
+export const ask = (q: string, options: [text: string, right: boolean, why: string][]) =>
+  `<div class="ask"><p class="q">🤔 ${q}</p><div class="choices">${options
+    .map(([t, r, w]) => `<button type="button" class="choice" data-pick="${r ? 1 : 0}" data-why="${attr(w)}">${t}</button>`)
+    .join('')}</div><p class="why" hidden></p></div>`
+
+/** Hộp "Hiểu sâu": một ý nền (0 và 1, đầu vào/đầu ra, vì sao chân này) đặt cạnh việc đang làm. */
+export const hieu = (title: string, html: string) => `<div class="hieu"><p class="h">💡 ${title}</p>${html}</div>`
+
+/** Bảng nhỏ "cắm ở đâu, là gì": hàng đầu là tiêu đề. */
+export const bang = (head: string[], rows: string[][]) =>
+  `<table class="io"><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows
+    .map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`)
+    .join('')}</tbody></table>`
+
+/** Nhãn "đầu vào" / "đầu ra" dùng trong bảng và lời giải thích. */
+export const VAO = '<span class="tag vao">đầu vào</span>'
+export const RA = '<span class="tag ra">đầu ra</span>'

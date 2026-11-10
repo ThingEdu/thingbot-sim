@@ -11,7 +11,7 @@
  * tắt" (thiếu đợi sau lệnh tắt) vẫn đạt "chu kỳ 0,5 giây" dù mắt chỉ thấy đèn sáng mãi. Vì vậy ở đây
  * một luật chỉ được ✓ khi đèn còn sáng và tắt mỗi thứ ít nhất VISIBLE thời gian quan sát.
  */
-import { B, ctrl, ev, hat, program, setLed, STARTER, tb, toolbox, wait } from './state'
+import { ask, B, bang, ctrl, ev, hat, hieu, program, RA, setLed, STARTER, tb, toolbox, wait } from './state'
 import type { Card, Grader, GraderChange, Lesson, Observation } from './types'
 
 const R_1S = 'L1 nhấp nháy, chu kỳ 1 giây ± 20%'
@@ -23,49 +23,62 @@ const CHANNEL = { L1: 15, L2: 13 } as const
 
 const CARDS: Card[] = [
   {
-    title: 'Chào em!',
-    body: `<p>Hôm nay em làm cho <b>đèn L1</b> (chỗ vòng cam) <b>chớp</b>: sáng nửa giây, tắt nửa giây, rồi cứ thế mãi.</p>
-      <p>Bí mật nằm ở khối ${ev('vòng lặp Arduino')}: nó chạy các khối bên trong <b>từ trên xuống dưới</b>, hết thì <b>quay lại đầu</b> — mãi mãi. Vì vậy em không cần thêm khối lặp nào khác.</p>`,
+    title: 'Nhiệm vụ: đèn báo hiệu',
+    body: `<p>Đèn <b>xi nhan</b> xe máy, đèn <b>hải đăng</b>, đèn báo <b>pin sắp hết</b>… đều <b>chớp</b> chứ không sáng mãi. Vì sao? Vì mắt người <b>để ý</b> thứ đang thay đổi.</p>
+      <p>Nhiệm vụ của em: biến <b>đèn L1</b> (chỗ vòng cam) thành đèn báo hiệu, sáng nửa giây, tắt nửa giây, mãi mãi.</p>
+      ${ask('Em xếp chỉ hai khối «bật đèn» rồi «tắt đèn», <b>không có</b> khối đợi. Em sẽ thấy gì?', [
+        ['Đèn chớp rõ ràng, dễ nhìn', false, 'Não chạy mỗi vòng chỉ mất vài phần triệu giây, nhanh hơn mắt em rất nhiều. Phải có khối đợi thì mắt mới kịp thấy.'],
+        ['Đèn trông như sáng mờ liên tục', true, 'Não bật tắt hàng nghìn lần mỗi giây, mắt em chỉ thấy một đèn mờ. Khối đợi là cách "làm chậm" não cho vừa mắt người.'],
+        ['Đèn tắt hẳn', false, 'Đèn có bật, chỉ là bật tắt quá nhanh. Thử ở bước sau sẽ thấy.'],
+      ])}`,
     look: ['l1'],
   },
   {
     title: 'Bật rồi tắt',
     body: `<p>Bên trong ${ev('vòng lặp Arduino')}, xếp lần lượt:</p>
       <ol class="todo">
-        <li>${tb('set led 1 100')}</li>
-        <li>${ctrl('đợi 0.5 giây')}</li>
-        <li>${tb('set led 1 0')}</li>
+        <li>${tb('set led 1 100')} — bật</li>
+        <li>${ctrl('đợi 0.5 giây')} — giữ cho mắt kịp thấy</li>
+        <li>${tb('set led 1 0')} — tắt</li>
         <li>${ctrl('đợi 0.5 giây')}</li>
       </ol>
       <p>Bấm <b>▶ Chạy</b> và chờ vài giây để mạch đếm được 3 lần chớp.</p>
-      <p class="muted">Khối ${ctrl('đợi … giây')} ở nhóm Điều khiển màu cam. Bấm vào ô số để đổi 1 thành 0.5.</p>`,
+      <p class="muted">${ev('vòng lặp Arduino')} chạy các khối từ trên xuống, hết thì quay lại đầu, mãi mãi, nên không cần khối lặp nào khác. Khối ${ctrl('đợi … giây')} ở nhóm Điều khiển màu cam.</p>`,
     check: R_1S,
     look: ['l1'],
   },
   {
-    title: 'Nhìn nhịp đèn',
-    body: `<p>Dải <b>Nhịp đèn</b> dưới mạch vẽ lại đèn L1 trong 4 giây vừa qua: đoạn đỏ là lúc sáng.</p>
-      <p>Ô <b>1 · Não</b> đếm số vòng. Mỗi vòng là 4 khối của em chạy một lượt — để ý khối đang chạy sáng lên trong vùng khối.</p>`,
+    title: 'Hiểu sâu: 0 và 100 là gì?',
+    body: `${hieu('Đèn là một đầu ra', `<p>Não <b>ra lệnh</b> cho đèn, đèn không báo gì về cho não. Thứ nhận lệnh như vậy gọi là ${RA}.</p>
+      <p>Số trong khối là <b>độ sáng phần trăm</b>: <b>0</b> là tắt, <b>100</b> là sáng hết. Ở mức điện, đèn chỉ có hai trạng thái: <b>không có điện</b> (người ta viết là <b>0</b>) và <b>có điện</b> (viết là <b>1</b>). 0 và 1 ở đây không phải số đếm, mà là <b>tắt / bật</b>, giống công tắc.</p>
+      <p>Còn 50 thì sao? Chip bật tắt đèn <b>cực nhanh</b>, bật một nửa thời gian, tắt một nửa, nên mắt thấy đèn mờ.</p>`)}
+      ${hieu('Vì sao chọn "đèn 1"?', `${bang(['Trên mạch', 'Nối vào', 'Khối'], [['Đèn L1 (đỏ)', 'chip PCA9685, kênh 15', tb('set led 1 …')], ['Đèn L2 (xanh lá)', 'chip PCA9685, kênh 13', tb('set led 2 …')], ['Còi', 'chip PCA9685, kênh 14', tb('play note …')]])}
+      <p>Dây nối đã được <b>hàn sẵn</b> khi làm mạch. Người làm mạch ghi lại "đèn L1 ở kênh 15", và khối ${tb('set led 1')} đã biết điều đó, nên em chỉ cần chọn "đèn 1".</p>`)}
+      <p>Dải <b>Nhịp đèn</b> dưới mạch vẽ lại đèn L1 trong 4 giây vừa qua: đoạn đỏ là lúc sáng (1), đoạn trống là lúc tắt (0).</p>`,
   },
   {
     title: 'Chớp nhanh gấp đôi',
-    body: `<p>Đổi <b>cả hai</b> ô ${ctrl('đợi')} thành <b>0.25</b>.</p>
-      <p>Đèn sẽ chớp nhanh gấp đôi: các vạch đỏ trên dải nhịp sát nhau hơn.</p>`,
+    body: `${ask('Đổi <b>cả hai</b> ô đợi từ 0.5 thành 0.25. Đèn sẽ…', [
+        ['Chớp nhanh gấp đôi', true, 'Một lần chớp giờ mất 0,25 + 0,25 = 0,5 giây thay vì 1 giây.'],
+        ['Chớp chậm gấp đôi', false, 'Đợi ít hơn thì lặp lại sớm hơn, nên nhanh hơn.'],
+        ['Sáng mờ hơn', false, 'Độ sáng do số 100 quyết định; khối đợi chỉ đổi nhịp.'],
+      ])}
+      <p>Giờ đổi thật và bấm Chạy: các vạch đỏ trên dải nhịp sát nhau hơn.</p>`,
     check: R_HALF,
   },
   {
-    title: 'Thử thách',
-    body: `<p>Cho <b>đèn L2</b> (đèn xanh lá, mép trái dưới Core) chớp, mỗi lần chớp 1 giây.</p>
-      <p>Bấm mũi tên ▾ trong khối ${tb('set led 1 …')} để chọn đèn <b>2</b>.</p>
-      <p class="muted">Muốn khó hơn: cho L1 và L2 thay nhau chớp như đèn xe cứu hoả.</p>`,
+    title: 'Thử thách: xe cứu hoả',
+    body: `<p>Cho <b>đèn L2</b> (đèn xanh lá, mép trái dưới Core) chớp, mỗi lần chớp 1 giây. Bấm mũi tên ▾ trong khối ${tb('set led 1 …')} để chọn đèn <b>2</b>.</p>
+      <p class="muted">Khó hơn: cho L1 và L2 <b>thay nhau</b> chớp như đèn xe cứu hoả. Gợi ý: lúc L1 bật thì L2 tắt.</p>`,
     check: R_L2,
     optional: true,
     look: ['l2'],
   },
   {
     title: 'Xong rồi! 🎉',
-    body: `<p>Em đã dùng ${ev('vòng lặp Arduino')} để não lặp lại mãi một việc, và dùng ${ctrl('đợi')} để đặt nhịp.</p>
-      <p>Muốn thử trên kit thật: mở ThingBlock, chọn bo ThingBot, ghép đúng các khối này rồi bấm <b>Nạp</b>.</p>`,
+    body: `<p>Em vừa làm đúng việc của <b>mạch đèn xi nhan</b>: một đầu ra, bật tắt theo nhịp em chọn.</p>
+      <p>Nhưng đèn này chạy một mình, không nghe ai. Bài 3 em cho robot <b>nghe lời người</b> qua một nút bấm.</p>
+      <p class="muted">Muốn thử trên kit thật: mở ThingBlock, chọn bo ThingBot, ghép đúng các khối này rồi bấm <b>Nạp</b>.</p>`,
   },
 ]
 

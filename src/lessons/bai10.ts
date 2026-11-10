@@ -11,7 +11,7 @@
 import { OBSTACLE_COURSE } from '../arena'
 import { SONAR_KEY } from '../sim-extra'
 import { makeGrader, motorSpeed } from './grader'
-import { B, CAT, ctrl, ev, hat, op, per, program, S, STARTER, tb, toolbox, wait } from './state'
+import { ask, B, bang, CAT, ctrl, ev, hat, hieu, op, per, program, RA, S, STARTER, tb, toolbox, VAO, wait } from './state'
 import type { Card, Lesson } from './types'
 
 const BUZZER = 14
@@ -24,9 +24,10 @@ const lessThan25 = { ...B.lessThan, inputs: { OPERAND1: { shadow: { type: 'text'
 
 const CARDS: Card[] = [
   {
-    title: 'Dự án: xe tự lái',
-    body: `<p>Xe có <b>cảm biến siêu âm</b> ở mũi (TRIG IO0, ECHO IO4) và hai bánh M1 (trái), M2 (phải). Trên sàn có mấy hộp gỗ.</p>
-      <p>Nhiệm vụ: xe <b>tự chạy 3 mét</b> mà <b>không đâm</b> vào đâu. Em đã có đủ mảnh ghép từ bài 6 và bài 8!</p>`,
+    title: 'Dự án: robot hút bụi',
+    body: `<p><b>Robot hút bụi</b> tự đi khắp phòng mà không đâm vào tủ. Bí mật của nó là lặp mãi ba việc: <b>nhìn → nghĩ → làm</b>.</p>
+      ${hieu('Ba việc của mọi robot tự động', bang(['Việc', 'Bài', 'Trên xe của em'], [['Nhìn', '6', `${VAO} cảm biến siêu âm ở mũi, TRIG IO0, ECHO IO4`], ['Nghĩ', '3, 6', 'nếu khoảng cách &lt; 25 cm thì xoay, không thì đi thẳng'], ['Làm', '7, 8', `${RA} hai bánh: M1 trái, M2 phải`]]))}
+      <p>Trên sàn có mấy hộp gỗ. Nhiệm vụ: xe <b>tự chạy 3 mét</b> mà <b>không đâm</b> vào đâu. Em đã có đủ mảnh ghép!</p>`,
   },
   {
     title: 'Lắp bộ não tự lái',
@@ -42,19 +43,23 @@ const CARDS: Card[] = [
   },
   {
     title: 'Nhanh hơn thì sao?',
-    body: `<p>Đổi tốc độ đi thẳng lên <b>80</b> rồi bấm Chạy vài lần. Xe có hay đâm hơn không?</p>
-      <p>Thử chỉnh ngưỡng ${op('… < 25')} và tốc độ xoay để tìm cặp số chạy an toàn nhất. Ghi lại các lần thử!</p>
-      <p class="muted">Xe càng nhanh thì càng cần thấy vật từ xa hơn: cảm biến chỉ nhìn thẳng phía trước, nên lách qua góc hộp dễ đâm hông.</p>`,
+    body: `${ask('Xe chạy nhanh hơn thì ngưỡng nên…', [
+        ['To hơn (thấy vật từ xa hơn)', true, 'Xe nhanh thì trong lúc não "nghĩ" và xe kịp xoay, nó đã lao thêm một đoạn. Thấy vật sớm hơn mới kịp né, giống ô tô chạy nhanh phải giữ khoảng cách xa hơn.'],
+        ['Nhỏ hơn', false, 'Ngưỡng nhỏ là đợi vật thật sát mới né. Chạy nhanh mà né muộn thì dễ đâm.'],
+        ['Không cần đổi', false, 'Thử thật sẽ thấy: tốc độ 80 với ngưỡng 25 hay đâm hơn tốc độ 50.'],
+      ])}
+      <p>Giờ thử: đổi tốc độ đi thẳng lên <b>80</b>, bấm Chạy vài lần, rồi chỉnh ngưỡng ${op('… < 25')}. <b>Ghi lại</b> mỗi lần thử: tốc độ, ngưỡng, có đâm không. Kỹ sư thật cũng làm vậy.</p>
+      <p class="muted">Cảm biến chỉ nhìn thẳng phía trước, nên lách qua góc hộp dễ đâm hông.</p>`,
   },
   {
     title: 'Thử thách: còi báo',
-    body: `<p>Cho xe <b>kêu</b> mỗi lần tránh vật: thêm ${tb('play note C octave 5 for 0.25 beats')} vào chỗ <b>thì</b>.</p>`,
+    body: `<p>Cho xe <b>kêu</b> mỗi lần tránh vật: thêm ${tb('play note C octave 5 for 0.25 beats')} vào chỗ <b>thì</b>. Còi là một ${RA} nữa, nằm ở kênh 14 của chip PCA9685.</p>`,
     check: 'beep',
     optional: true,
   },
   {
     title: 'Hoàn thành 10 bài! 🏆',
-    body: `<p>Em đã đi hết đường: <b>đèn → nút → màn hình → servo → cảm biến → động cơ → xe → tay cầm → xe tự lái</b>.</p>
+    body: `<p>Em đã đi hết đường: <b>đèn → nút → màn hình → servo → cảm biến → động cơ → xe → tay cầm → xe tự lái</b>. Và em đã biết ba điều mà mọi kỹ sư robot dùng hằng ngày: <b>đầu vào / đầu ra</b>, <b>0 và 1</b>, và <b>đọc sơ đồ để biết chân nào nối với gì</b>.</p>
       <p>Mang chương trình sang ThingBlock, chọn bo ThingBot, bấm <b>Nạp</b> và cho xe thật chạy thử nhé!</p>`,
   },
 ]

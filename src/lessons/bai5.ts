@@ -7,7 +7,7 @@
  * mạch thật. Vì vậy các bước chỉ ✓ khi đã bật nguồn.
  */
 import { makeGrader, ruleResult, servoAngle } from './grader'
-import { B, ev, hat, program, S, STARTER, tb, toolbox } from './state'
+import { ask, B, ev, hat, hieu, program, S, STARTER, tb, toolbox } from './state'
 import type { Card, Lesson } from './types'
 
 const R_90 = 'servo S1 ở 90 độ'
@@ -17,35 +17,42 @@ const S1 = 12
 
 const CARDS: Card[] = [
   {
-    title: 'Chào em!',
-    body: `<p><b>Servo</b> là động cơ quay tới một <b>góc</b> rồi đứng yên, từ 0 đến 180 độ. Servo của bài cắm vào cổng <b>S1</b> (hàng chân bên trái).</p>
+    title: 'Nhiệm vụ: barie bãi gửi xe',
+    body: `<p>Thanh <b>barie</b> ở bãi gửi xe, <b>cần gạt nước</b> ô tô, nắp <b>hộp quà tự mở</b>: chúng không quay tròn mãi mà quay tới <b>đúng một góc</b> rồi đứng yên. Thứ làm việc đó là <b>servo</b>.</p>
+      <p>Nhiệm vụ: làm thanh barie bằng servo cắm ở cổng <b>S1</b> (hàng chân bên trái), mở lên 90 độ, rồi cho nó quét như cần gạt nước.</p>
+      ${ask('Servo khác động cơ bánh xe ở chỗ nào?', [
+        ['Servo quay tới một góc rồi giữ nguyên', true, 'Bên trong servo có bộ đo góc: nó tự quay tới góc em đặt rồi giữ chặt ở đó. Động cơ bánh xe thì quay mãi.'],
+        ['Servo quay nhanh hơn', false, 'Tốc độ không phải điểm khác chính. Servo biết mình đang ở góc nào, động cơ bánh xe thì không.'],
+        ['Servo không cần điện', false, 'Servo cần điện từ pin, như động cơ. Đó là lý do phải bật công tắc nguồn.'],
+      ])}
       <p>Servo cần điện từ <b>pin</b>: bấm nút <b>🔋 Nguồn</b> trên mạch để gạt công tắc nguồn sang ON.</p>`,
   },
   {
-    title: 'Quay ngay tới 90 độ',
-    body: `<p>Kéo ${tb('set servo S1 to angle 90 degrees')} vào ${ev('khi Arduino khởi động')}, dưới ${tb('init ThingBot')}. Bấm <b>▶ Chạy</b> và nhìn cần trắng của servo.</p>`,
+    title: 'Mở barie: 90 độ',
+    body: `<p>Kéo ${tb('set servo S1 to angle 90 degrees')} vào ${ev('khi Arduino khởi động')}, dưới ${tb('init ThingBot')}. Bấm <b>▶ Chạy</b> và nhìn cần trắng của servo.</p>
+      ${hieu('Vì sao chọn S1?', `<p>Mỗi cổng S1–S5 có 3 chân: <b>GND</b> (dây nâu/đen), <b>5V</b> (dây đỏ), <b>tín hiệu</b> (dây cam/vàng). Năm cổng này được hàn sẵn tới năm kênh của chip PCA9685. Servo của bài cắm ở <b>S1</b> nên khối chọn S1; cắm sang S3 thì đổi khối thành S3.</p>`)}`,
     check: 'r90',
   },
   {
-    title: 'Quay từ từ',
-    body: `<p>Quay ngay thì giật. Đổi sang ${tb('move servo S1 to angle 180 degrees over 2 seconds')}: servo đi từ chỗ đang đứng tới 180 độ trong 2 giây.</p>
+    title: 'Mở từ từ',
+    body: `<p>Barie bật phắt lên thì nguy hiểm. Đổi sang ${tb('move servo S1 to angle 180 degrees over 2 seconds')}: servo đi từ chỗ đang đứng tới 180 độ trong 2 giây.</p>
       <p class="muted">Khối "move" chờ quay xong rồi mới chạy khối tiếp theo.</p>`,
     check: 'r180',
   },
   {
     title: 'Quét qua lại',
-    body: `<p>Cho servo quét mãi như cần gạt nước: trong ${ev('vòng lặp Arduino')}, xếp</p>
+    body: `<p>Cho servo quét mãi như <b>cần gạt nước</b>: trong ${ev('vòng lặp Arduino')}, xếp</p>
       <ol class="todo">
         <li>${tb('move servo S1 to angle 0 … over 1 seconds')}</li>
         <li>${tb('move servo S1 to angle 180 … over 1 seconds')}</li>
       </ol>
-      <p>Ô <b>2 · Chip PCA</b> cho thấy con số não gửi cho servo thay đổi theo góc.</p>`,
+      ${hieu('Góc nằm trong độ dài xung', `<p>Não không nói "quay 90 độ" bằng lời. Chip PCA9685 gửi cho servo một <b>xung điện</b> đều đặn 50 lần mỗi giây; <b>xung ngắn</b> nghĩa là góc nhỏ, <b>xung dài</b> nghĩa là góc lớn. Ô <b>2 · Chip PCA</b> hiện con số này: khoảng <b>102</b> là 0 độ, khoảng <b>512</b> là 180 độ (trên thang 4096).</p>`)}`,
     check: 'sweep',
   },
   {
     title: 'Xong rồi! 🎉',
-    body: `<p>Em đã biết hai cách quay servo: <b>set</b> quay ngay, <b>move</b> quay từ từ và chờ. Góc 0–180 độ được não đổi thành độ rộng xung (102–512) gửi cho chip PCA9685.</p>
-      <p>Thả servo khi xong việc để đỡ tốn pin: ${tb('release servo S1')}.</p>`,
+    body: `<p>Em biết hai cách quay servo: <b>set</b> quay ngay, <b>move</b> quay từ từ và chờ. Barie thật cũng vậy, chỉ thêm một cảm biến thấy xe tới.</p>
+      <p>Thả servo khi xong việc để đỡ tốn pin: ${tb('release servo S1')}. Bài 6 em làm cho robot <b>tự thấy</b> vật ở gần.</p>`,
   },
 ]
 

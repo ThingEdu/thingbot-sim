@@ -4,14 +4,19 @@
  */
 import { OPEN_FLOOR } from '../arena'
 import { makeGrader, motorSpeed } from './grader'
-import { B, ctrl, ev, hat, program, S, STARTER, tb, toolbox, wait } from './state'
+import { ask, B, ctrl, ev, hat, hieu, program, S, STARTER, tb, toolbox, wait } from './state'
 import type { Card, Lesson } from './types'
 
 const CARDS: Card[] = [
   {
-    title: 'Chào em!',
-    body: `<p>Bây giờ ThingBot là một <b>chiếc xe</b>: động cơ <b>M1</b> quay bánh <b>trái</b>, <b>M2</b> quay bánh <b>phải</b>. Xe chạy trên sàn có ô lưới 20 cm.</p>
-      <p>Hai bánh cùng tiến thì xe đi thẳng. Một bánh tiến, một bánh lùi thì xe <b>xoay tại chỗ</b>.</p>`,
+    title: 'Nhiệm vụ: robot giao hàng',
+    body: `<p>Robot giao hàng trong nhà kho, xe lăn điện, xe tăng: chúng <b>không có vô lăng</b>. Chúng rẽ bằng cách cho <b>hai bánh quay khác nhau</b>.</p>
+      <p>ThingBot giờ là một chiếc xe: <b>M1</b> quay bánh <b>trái</b>, <b>M2</b> quay bánh <b>phải</b>. Sàn có ô lưới 20 cm. Nhiệm vụ: đi thẳng một đoạn rồi rẽ góc vuông, như robot chở hàng tới đúng kệ.</p>
+      ${ask('Bánh trái quay tới, bánh phải đứng yên. Xe đi thế nào?', [
+        ['Rẽ vòng sang phải', true, 'Bánh trái đẩy tới, bánh phải làm trục, nên xe vòng quanh bánh phải.'],
+        ['Rẽ vòng sang trái', false, 'Thử hình dung: bánh trái đi tới mà bánh phải đứng yên, mũi xe sẽ quay về phía bánh đứng yên, tức là bên phải.'],
+        ['Đi thẳng', false, 'Muốn đi thẳng thì hai bánh phải quay cùng chiều, cùng tốc độ.'],
+      ])}`,
   },
   {
     title: 'Đi thẳng rồi dừng',
@@ -27,19 +32,21 @@ const CARDS: Card[] = [
   {
     title: 'Xoay tại chỗ',
     body: `<p>Thêm vào sau khi dừng: ${tb('set motor M1 go forward at 50')}, ${tb('set motor M2 go backward at 50')}, ${ctrl('đợi … giây')}, rồi dừng cả hai.</p>
-      <p>Chỉnh số trong ${ctrl('đợi')} cho xe xoay khoảng <b>một góc vuông</b> (90 độ).</p>`,
+      <p>Chỉnh số trong ${ctrl('đợi')} cho xe xoay khoảng <b>một góc vuông</b> (90 độ).</p>
+      ${hieu('Thời gian thay cho la bàn', `<p>Xe này không có la bàn, nên <b>góc = tốc độ × thời gian</b>: quay ở tốc độ 50 trong khoảng 0,35 giây thì được chừng 90 độ. Pin yếu hay sàn trơn là lệch ngay, vì vậy robot thật thường có thêm cảm biến (đếm vòng bánh, la bàn điện tử) để tự kiểm tra.</p>`)}`,
     check: 'turn',
   },
   {
-    title: 'Thử thách: hình vuông',
-    body: `<p>Dùng ${ctrl('lặp lại 4')}: bên trong cho xe đi thẳng 1 giây rồi xoay một góc vuông. Xe phải về gần chỗ xuất phát (vòng tròn xanh).</p>
+    title: 'Thử thách: đi một vòng kho',
+    body: `<p>Dùng ${ctrl('lặp lại 4')}: bên trong cho xe đi thẳng 1 giây rồi xoay một góc vuông. Xe phải về gần chỗ xuất phát (vòng tròn xanh), như robot đi tuần một vòng kho.</p>
       <p class="muted">Bấm <b>↺ Đặt lại xe</b> để đưa xe về chỗ cũ.</p>`,
     check: 'square',
     optional: true,
   },
   {
     title: 'Xong rồi! 🎉',
-    body: `<p>Em đã lái xe bằng cách điều khiển <b>riêng từng bánh</b>. Bài 9 em lái bằng <b>tay cầm</b>.</p>`,
+    body: `<p>Em đã lái xe bằng cách điều khiển <b>riêng từng bánh</b>, đúng cách robot giao hàng và xe lăn điện rẽ.</p>
+      <p>Nhưng xe này chạy theo kịch bản cố định. Bài 9 em lái nó <b>bằng tay cầm</b>, bài 10 nó <b>tự lái</b>.</p>`,
   },
 ]
 

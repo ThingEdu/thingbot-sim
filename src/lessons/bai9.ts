@@ -5,7 +5,7 @@
  */
 import { OPEN_FLOOR } from '../arena'
 import { makeGrader, motorSpeed } from './grader'
-import { B, CAT, ctrl, ev, hat, per, program, S, STARTER, tb, toolbox, wait } from './state'
+import { ask, B, CAT, ctrl, ev, hat, hieu, per, program, S, STARTER, tb, toolbox, wait } from './state'
 import type { Card, Lesson, Observation } from './types'
 
 const UP = 'PSB_PAD_UP'
@@ -15,8 +15,10 @@ const RIGHT = 'PSB_PAD_RIGHT'
 
 const CARDS: Card[] = [
   {
-    title: 'Chào em!',
-    body: `<p>Tay cầm PS2 gửi sóng radio tới <b>bộ thu</b> cắm ở <b>cổng PS2</b> trên mạch. Mỗi vòng lặp, não hỏi bộ thu "nút nào đang được bấm?" rồi quyết định cho bánh quay.</p>
+    title: 'Nhiệm vụ: xe điều khiển từ xa',
+    body: `<p>Tay cầm PS2 gửi <b>sóng radio</b> tới <b>bộ thu</b> cắm ở <b>cổng PS2</b> trên mạch. Nhiệm vụ: làm một chiếc <b>xe điều khiển từ xa</b>, giữ ▲ thì chạy tới, nhả ra thì dừng.</p>
+      ${hieu('Mỗi nút là một 0 hoặc 1', `<p>Tay cầm có 16 nút. Mỗi lần não hỏi, bộ thu gửi về một dãy <b>0 và 1</b>, mỗi nút một số: <b>1</b> là đang bấm, <b>0</b> là không. Giống nút SW ở bài 3, chỉ là 16 nút cùng lúc, qua sóng radio.</p>
+      <p>Bộ thu nối với não qua 4 chân đã hàn sẵn ở cổng PS2 (DAT 7, CMD 2, SEL 10, CLK 6). Khối ${tb('init PS2 on ThingBot')} đã biết các chân này, em không cần gõ số.</p>`)}
       <p>Tay cầm ảo nằm ở góc sàn: giữ nút ▲ ▼ ◀ ▶ bằng chuột, hoặc giữ phím mũi tên.</p>`,
   },
   {
@@ -26,14 +28,19 @@ const CARDS: Card[] = [
         <li>${ev('vòng lặp Arduino')}: ${per('read PS2 receiver data')} đầu tiên.</li>
         <li>Dưới nó: ${ctrl('nếu … thì … nếu không thì')} với ${per('PS2 up button is pressed?')}.</li>
         <li><b>thì</b>: M1 và M2 «forward at 50». <b>nếu không thì</b>: M1 và M2 «at 0».</li>
-        <li>Cuối vòng: ${ctrl('đợi 0.02 giây')}.</li>
+        <li>Cuối vòng: ${ctrl('đợi 0.02 giây')}, não hỏi tay cầm 50 lần mỗi giây, đủ nhanh để tay em không thấy trễ.</li>
       </ol>
+      ${ask('Nếu bỏ khối «read PS2 receiver data» thì sao?', [
+        ['Bấm nút mà xe không phản ứng', true, 'Khối này là lúc não hỏi bộ thu "nút nào đang bấm?". Không hỏi thì não không có tin mới, cứ tưởng chưa ai bấm gì.'],
+        ['Xe chạy nhanh hơn', false, 'Khối này không liên quan tốc độ. Nó là câu hỏi gửi bộ thu mỗi vòng.'],
+      ])}
       <p>Bấm <b>▶ Chạy</b>, giữ ▲: xe đi tới. Nhả ra: xe dừng.</p>`,
     check: 'up',
   },
   {
     title: 'Giữ ▼ để lùi',
-    body: `<p>Trong chỗ <b>nếu không thì</b>, đặt thêm một ${ctrl('nếu … thì … nếu không thì')} hỏi ${per('PS2 down button is pressed?')}: <b>thì</b> cho hai bánh «backward at 50», <b>nếu không thì</b> dừng.</p>`,
+    body: `<p>Trong chỗ <b>nếu không thì</b>, đặt thêm một ${ctrl('nếu … thì … nếu không thì')} hỏi ${per('PS2 down button is pressed?')}: <b>thì</b> cho hai bánh «backward at 50», <b>nếu không thì</b> dừng.</p>
+      <p class="muted">Nhả mọi nút thì xe phải dừng: đó là quy tắc an toàn của mọi xe điều khiển, kể cả robot thi đấu.</p>`,
     check: 'down',
   },
   {
@@ -44,7 +51,8 @@ const CARDS: Card[] = [
   },
   {
     title: 'Xong rồi! 🎉',
-    body: `<p>Em đã làm một chiếc xe điều khiển từ xa: <b>tay cầm → bộ thu → não → chip PCA9685 → hai bánh</b>.</p>`,
+    body: `<p>Em đã làm một chiếc xe điều khiển từ xa: <b>tay cầm → bộ thu → não → chip PCA9685 → hai bánh</b>. Robot thi FanRoc, FTC cũng lái theo đúng chuỗi này.</p>
+      <p>Bài 10: bỏ tay cầm đi, để xe <b>tự lái</b>.</p>`,
   },
 ]
 

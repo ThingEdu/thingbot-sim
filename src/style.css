@@ -826,6 +826,86 @@ kbd {
   border-color: var(--hi);
   background: #fff1ef;
 }
+/* "Đoán trước" và "Hiểu sâu" */
+.ask {
+  margin: 12px 0 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fff8ec;
+  border: 1.5px dashed #f0b45a;
+}
+.ask .q {
+  margin: 0;
+  font-weight: 700;
+}
+.ask .choices {
+  margin-top: 8px;
+}
+.ask .why {
+  margin: 8px 0 0;
+  font-size: 0.95em;
+}
+.ask .why.ok {
+  color: #1d7a45;
+}
+.ask .why.no {
+  color: #b2442f;
+}
+.hieu {
+  margin: 12px 0 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #eef6fb;
+  border-left: 4px solid var(--teal);
+}
+.hieu .h {
+  margin: 0 0 6px;
+  font-weight: 700;
+}
+.hieu p {
+  margin: 4px 0;
+}
+table.io {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 0.85em;
+  line-height: 1.35;
+}
+table.io th,
+table.io td {
+  border: 1px solid var(--line);
+  padding: 3px 4px;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: break-word;
+}
+table.io .chip {
+  white-space: normal;
+}
+table.io th:last-child,
+table.io td:last-child {
+  width: 48%;
+}
+table.io th {
+  background: #f4f6f8;
+}
+.tag {
+  display: inline-block;
+  white-space: nowrap;
+  padding: 0 6px;
+  border-radius: 6px;
+  font-size: 0.85em;
+  font-weight: 700;
+  color: #fff;
+}
+.tag.vao {
+  background: #3b82c4;
+}
+.tag.ra {
+  background: #e07b2a;
+}
 .chip.op {
   background: #59c059;
 }

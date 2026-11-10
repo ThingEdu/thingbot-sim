@@ -5,7 +5,7 @@
  */
 import { SONAR_KEY } from '../sim-extra'
 import { makeGrader } from './grader'
-import { B, CAT, ctrl, ev, hat, op, per, program, S, setLed, STARTER, tb, toolbox, wait } from './state'
+import { ask, B, bang, CAT, ctrl, ev, hat, hieu, op, per, program, RA, S, setLed, STARTER, tb, toolbox, VAO, wait } from './state'
 import type { Card, Lesson } from './types'
 
 const L1 = 15
@@ -13,9 +13,17 @@ const NEAR = 20
 
 const CARDS: Card[] = [
   {
-    title: 'Chào em!',
-    body: `<p><b>Cảm biến siêu âm</b> phát một tiếng "chíp" mà tai người không nghe được, rồi đo xem <b>bao lâu</b> tiếng vọng quay về. Vật càng xa, tiếng vọng về càng chậm.</p>
-      <p>Cảm biến cắm vào cổng cảm biến: chân <b>TRIG vào IO0</b>, <b>ECHO vào IO4</b>. Kéo thanh <b>Vật cản</b> trên mạch để đưa vật lại gần hay ra xa.</p>`,
+    title: 'Nhiệm vụ: cảm biến lùi xe',
+    body: `<p>Ô tô lùi gần tường thì kêu <b>tít tít</b>; cửa siêu thị tự mở khi em đi tới; con <b>dơi</b> bay trong đêm không đâm vào cây. Cả ba dùng chung một mẹo: <b>phát tiếng rồi nghe tiếng vọng</b>.</p>
+      <p>Cảm biến siêu âm phát một tiếng "chíp" tai người không nghe được, rồi đo xem <b>bao lâu</b> tiếng vọng quay về. Nhiệm vụ: làm <b>đèn báo vật gần</b>, vật dưới 20 cm thì đèn L1 sáng.</p>
+      ${ask('Vật càng xa thì tiếng vọng quay về…', [
+        ['Càng chậm', true, 'Tiếng phải đi xa hơn rồi quay lại. Âm thanh đi khoảng 343 mét mỗi giây, nên não đổi thời gian thành khoảng cách được.'],
+        ['Càng nhanh', false, 'Đường đi dài hơn thì mất nhiều thời gian hơn, nên chậm hơn.'],
+        ['Như nhau', false, 'Nếu như nhau thì cảm biến không đo được gì. Thời gian chính là thứ cho biết khoảng cách.'],
+      ])}
+      ${hieu('Vì sao gõ 0 và 4 trong khối?', `${bang(['Chân cảm biến', 'Nối vào não', 'Với não là'], [['TRIG', 'IO0', `${RA}: não ra lệnh "phát tiếng"`], ['ECHO', 'IO4', `${VAO}: cảm biến báo "đã nghe vọng"`], ['VCC, GND', '—', 'cấp điện']])}
+      <p>Cổng cảm biến của ThingBot được hàn sẵn tới IO0 và IO4, nên trong khối em gõ <b>TRIG 0, ECHO 4</b>. Cắm sang cổng khác thì phải sửa số cho khớp, nếu không não sẽ "nói" và "nghe" ở nhầm chỗ.</p>`)}
+      <p>Kéo thanh <b>Vật cản</b> trên mạch để đưa vật lại gần hay ra xa.</p>`,
   },
   {
     title: 'Đèn báo vật gần',
@@ -24,7 +32,7 @@ const CARDS: Card[] = [
         <li>Kéo ${ctrl('nếu … thì … nếu không thì')} vào.</li>
         <li>Đặt ${op('… < 20')} vào ô lục giác, rồi đặt ${per('ultrasonic sensor … read distance cm')} vào ô bên trái của dấu &lt;.</li>
         <li>Chỗ <b>thì</b>: ${tb('set led 1 100')}. Chỗ <b>nếu không thì</b>: ${tb('set led 1 0')}.</li>
-        <li>Dưới cùng thêm ${ctrl('đợi 0.05 giây')}.</li>
+        <li>Dưới cùng thêm ${ctrl('đợi 0.05 giây')} để cảm biến kịp nghe tiếng vọng.</li>
       </ol>
       <p>Bấm <b>▶ Chạy</b>, kéo vật cản lại gần <b>dưới 20 cm</b>.</p>`,
     check: 'near',
@@ -32,19 +40,21 @@ const CARDS: Card[] = [
   {
     title: 'Đưa vật ra xa',
     body: `<p>Kéo vật cản ra <b>xa hơn 20 cm</b>. Đèn L1 phải tắt.</p>
-      <p>Để ý ô <b>1 · Cảm biến</b>: vật cách 30 cm thì tiếng vọng mất khoảng 1 740 micro giây (một phần triệu giây) để quay về.</p>`,
+      ${hieu('Từ con số tới có / không', `<p>Nút SW chỉ có 0 hoặc 1. Cảm biến này đưa ra <b>một con số</b>: 7 cm, 30 cm, 150 cm… Não <b>so sánh</b> con số với <b>ngưỡng</b> 20 để biến nó thành có/không: dưới 20 là "gần" (đúng), còn lại là "xa" (sai). Ngưỡng là con số <b>em chọn</b> tuỳ việc: cảm biến lùi xe dùng ngưỡng khác cửa siêu thị.</p>`)}
+      <p class="muted">Ô <b>1 · Cảm biến</b>: vật cách 30 cm thì tiếng vọng mất khoảng 1 740 micro giây (một phần triệu giây) để quay về.</p>`,
     check: 'far',
   },
   {
-    title: 'Thử thách',
+    title: 'Thử thách: hiện số đo',
     body: `<p>Cho màn OLED <b>hiện số đo</b>: trong vòng lặp thêm ${per('clear oled')}, ${per('oled print …')} (đặt khối cảm biến vào ô chữ), ${per('refresh oled display')}. Đừng quên ${per('init oled …')} trong khởi động.</p>
-      <p>Rồi kéo thanh <b>Vật cản</b>: số trên màn hình phải đổi theo.</p>`,
+      <p>Rồi kéo thanh <b>Vật cản</b>: số trên màn hình phải đổi theo. Giờ em có một <b>thước đo không chạm</b>.</p>`,
     check: 'oled',
     optional: true,
   },
   {
     title: 'Xong rồi! 🎉',
-    body: `<p>Em đã cho não <b>đo khoảng cách</b> và tự quyết định bật đèn. Robot ở bài 10 sẽ dùng đúng cách này để né vật cản.</p>`,
+    body: `<p>Robot của em đã <b>tự thấy</b> vật ở gần và tự quyết định bật đèn, như cảm biến lùi xe ô tô.</p>
+      <p>Bài 7 em cho robot <b>chuyển động</b>. Bài 10 sẽ ghép cảm biến này với bánh xe để xe tự né vật cản.</p>`,
   },
 ]
 

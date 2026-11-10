@@ -6,7 +6,7 @@
  * khung hình 1 KB qua I2C mỗi lần `refresh`.
  */
 import { makeGrader, ruleResult } from './grader'
-import { B, CAT, ctrl, ev, hat, per, program, S, STARTER, toolbox } from './state'
+import { ask, B, bang, CAT, ctrl, ev, hat, hieu, per, program, S, STARTER, toolbox } from './state'
 import type { Card, Lesson } from './types'
 
 const R_HELLO = 'OLED hiện "Xin chao"'
@@ -15,31 +15,41 @@ const RULES = [R_HELLO, R_TB]
 
 const CARDS: Card[] = [
   {
-    title: 'Chào em!',
-    body: `<p>Màn hình <b>OLED</b> nhỏ cắm vào <b>cổng I2C</b> ở cạnh phải mạch. Bài này em viết chữ lên màn hình.</p>
-      <p>Màn hình dùng chung hai dây I2C với chip PCA9685: não gửi chữ qua dây, màn hình vẽ ra.</p>
+    title: 'Nhiệm vụ: bảng tên robot',
+    body: `<p>Đèn chỉ nói được hai điều: <b>có</b> hoặc <b>không</b>. Muốn robot nói được <b>chữ và số</b> (tên, nhiệt độ, lời nhắn) thì cần <b>màn hình</b>, như màn hình lò vi sóng hay đồng hồ điện tử.</p>
+      <p>Nhiệm vụ: làm <b>bảng tên</b> cho robot trên màn hình <b>OLED</b> nhỏ cắm ở <b>cổng I2C</b>, cạnh phải mạch.</p>
       <p class="muted">Màn hình chỉ có chữ <b>không dấu</b> (ví dụ "Xin chao").</p>`,
   },
   {
     title: 'Viết dòng đầu tiên',
     body: `<p>Xếp ba khối nhóm OLED vào trong ${ev('khi Arduino khởi động')}, dưới ${per('init ThingBot')}:</p>
       <ol class="todo">
-        <li>${per('init oled width 128 height 64…')} — khởi động màn hình</li>
-        <li>${per('oled print Xin chao')} — viết chữ vào bộ nhớ</li>
-        <li>${per('refresh oled display')} — đưa chữ ra màn hình</li>
+        <li>${per('init oled width 128 height 64…')} — đánh thức màn hình</li>
+        <li>${per('oled print Xin chao')} — viết chữ vào <b>bộ nhớ</b></li>
+        <li>${per('refresh oled display')} — đưa bộ nhớ ra màn hình</li>
       </ol>
+      ${ask('Nếu thiếu khối «refresh oled display», màn hình sẽ…', [
+        ['Vẫn hiện chữ', false, 'Chữ mới chỉ nằm trong bộ nhớ của màn hình. Phải refresh thì nó mới vẽ ra.'],
+        ['Đen, không có gì', true, 'Màn hình vẽ xong cả trang trong bộ nhớ rồi mới hiện một lần, để không bị nhấp nháy. Refresh là lệnh "hiện ra".'],
+      ])}
       <p>Bấm <b>▶ Chạy</b>.</p>`,
     check: 'hello',
   },
   {
     title: 'Dòng thứ hai',
     body: `<p>Trước khối ${per('refresh oled display')}, thêm ${per('set oled cursor x: 0 y: 16')} rồi ${per('oled print ThingBot')}.</p>
-      <p class="muted">Thứ tự: init → print "Xin chao" → set cursor → print "ThingBot" → refresh.</p>
-      <p>Thấy hình bông tuyết <b>Adafruit</b> trên màn? Đó là logo thư viện vẽ sẵn lúc khởi động — mạch thật cũng vậy. Thêm ${per('clear oled')} ngay sau khối init để xoá nó.</p>`,
+      ${hieu('x và y trên màn hình', `<p>Màn hình là lưới <b>128 × 64 chấm sáng</b>. Gốc (0, 0) ở <b>góc trên bên trái</b>; <b>x</b> đi sang phải, <b>y</b> đi xuống dưới. Chữ cỡ nhỏ cao 8 chấm, nên y: 16 là xuống dưới, cách dòng đầu một khoảng.</p>`)}
+      <p class="muted">Thấy hình bông tuyết <b>Adafruit</b>? Đó là logo thư viện vẽ sẵn lúc khởi động, mạch thật cũng vậy. Thêm ${per('clear oled')} ngay sau khối init để xoá nó.</p>`,
     check: 'two',
   },
   {
-    title: 'Thử thách',
+    title: 'Hiểu sâu: hai dây, nhiều thiết bị',
+    body: `${hieu('Cổng I2C', `${bang(['Chân', 'Nối vào não', 'Làm gì'], [['GND, VCC', '—', 'cấp điện cho màn hình'], ['SDA', 'IO8', 'chở dữ liệu (chữ, lệnh)'], ['SCL', 'IO9', 'gõ nhịp cho dữ liệu đi đều']])}
+      <p>Chip PCA9685 (điều khiển đèn, động cơ) cũng nằm trên <b>đúng hai dây này</b>. Vậy sao não không gửi nhầm? Vì mỗi thiết bị có một <b>"số nhà"</b> riêng, gọi là địa chỉ. Màn hình OLED có số nhà <b>0x3C</b> (ô "địa chỉ I2C" trong khối init). Não gọi đúng số nhà nào thì chỉ thiết bị đó trả lời.</p>
+      <p>Vì vậy em đừng dùng IO8, IO9 cho việc khác: chúng đang là "đường dây chung" của cả mạch.</p>`)}`,
+  },
+  {
+    title: 'Thử thách: tên của em',
     body: `<p>Cho màn hình hiện <b>tên em</b> (không dấu) ở dòng thứ ba: ${per('set oled cursor x: 0 y: 32')} rồi ${per('oled print …')}.</p>
       <p class="muted">Muốn chữ to: thêm ${per('set oled text size')} ngay sau khối init, chọn 12x16.</p>`,
     check: 'name',
@@ -47,8 +57,8 @@ const CARDS: Card[] = [
   },
   {
     title: 'Xong rồi! 🎉',
-    body: `<p>Em đã biết ba việc với OLED: <b>khởi động</b>, <b>in chữ</b> ở chỗ mình chọn, và <b>refresh</b> để hiện ra.</p>
-      <p>Bài 6 em sẽ cho màn hình hiện số đo khoảng cách. Thứ tự ${ctrl('đợi')} hay ${ev('vòng lặp Arduino')} vẫn dùng như cũ.</p>`,
+    body: `<p>Robot của em đã có <b>bảng tên</b>. Em biết ba việc với OLED: <b>khởi động</b>, <b>in chữ</b> ở chỗ mình chọn bằng x, y, và <b>refresh</b> để hiện ra.</p>
+      <p>Bài 6 màn hình này sẽ hiện <b>số đo khoảng cách</b> mà robot tự đo được.</p>`,
   },
 ]
 
