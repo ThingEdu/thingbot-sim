@@ -709,10 +709,12 @@ export function createScene(el: HTMLElement): FanrocScene {
       followIdx = robot
       if (v === 'field') setFieldView()
       else if (v === 'driver') {
-        // Mắt người lái đứng giữa Khu Điều Khiển của liên minh robot đó.
+        // Mắt người lái đứng sau Khu Điều Khiển của liên minh robot đó, cao và lùi xa để thấy trọn sân cả Khu Xuất Phát
+        // (góc mặc định của trận, anh Tuấn 10/11: nhìn rộng); khung dọc thì lùi xa thêm như Toàn sân.
         const a = built?.[robot]?.alliance ?? (robot % 2 === 0 ? 'red' : 'blue') // ghế [Đỏ 0, Xanh 0, Đỏ 1, Xanh 1]
-        const x = a === 'red' ? -0.6 : 0.6
-        goal = { pos: new THREE.Vector3(x, 1.45, DRIVER_Z.z0 + 0.35), target: new THREE.Vector3(x * 0.3, 0, -0.2) }
+        const x = a === 'red' ? -0.45 : 0.45
+        const k = Math.max(1, 1.1 / camera.aspect)
+        goal = { pos: new THREE.Vector3(x, 2.25 * k, DRIVER_Z.z0 + 0.95 * k), target: new THREE.Vector3(x * 0.2, 0, -0.05) }
       } else goal = null
     },
     quality: setQuality,
