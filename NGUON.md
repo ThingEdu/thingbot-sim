@@ -1,6 +1,6 @@
 # Nguồn
 
-TSim (trước là ThingBot FanRoc Game) dùng lại các phần dưới đây. Danh sách này khớp với mục ⚙ › Nguồn trong game
+ThingBot FanRoc Challenge (bộ cài TiFa) dùng lại các phần dưới đây. Danh sách này khớp với mục ⚙ › Nguồn trong game
 (`src/fanroc/credits.ts`; phép thử `credits.test.ts` giữ hai chỗ khớp nhau).
 
 | Phần | Lấy từ | Giấy phép / quyền dùng |

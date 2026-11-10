@@ -256,8 +256,8 @@ export function createHome(root: HTMLElement, on: { open(item: HomeItem): void; 
   const render = (info: HomeInfo) => {
     const brand = el('div', 'hm-brand')
     const h1 = el('h1')
-    // Tên app: TSim (anh Tuấn đổi 10/11, trước là ThingBot FanRoc Game).
-    h1.append('T', el('b', undefined, 'SIM'))
+    // Tên đầy đủ: ThingBot FanRoc Challenge; tên ngắn của bộ cài: TiFa (anh Tuấn chốt 10/11).
+    h1.append('THINGBOT ', el('b', undefined, 'FANROC'), ' CHALLENGE')
     const sub = el('div', 'hm-sub')
     sub.dataset.role = 'robot-line'
     sub.append(`${info.season} · robot của em: ${info.robot} · chương trình: `, el('b', undefined, info.program))

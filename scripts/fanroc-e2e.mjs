@@ -250,7 +250,7 @@ async function main() {
     // Task 12: bảng điểm Đỏ | chung | Xanh thay HUD cũ; kiểm tra theo luật ở thẻ "Sự kiện trận".
     const hud = await page.locator('.sb').innerText()
     const events = await page.locator('.sh-pbody[data-panel="events"]').textContent()
-    expect(title === 'TSim', `tiêu đề "${title}"`)
+    expect(title === 'ThingBot FanRoc Challenge', `tiêu đề "${title}"`)
     expect(/XẢ BÓNG/.test(hud) && /ĐỎ/.test(hud) && /XANH/.test(hud) && /Bạn 1/.test(hud) && /Chuồn Chuồn/.test(hud), `bảng điểm: ${hud.replace(/\n/g, ' ').slice(0, 120)}`)
     expect(/Kiểm tra theo luật/.test(events) && /Nhật ký trận/.test(events), `thẻ Sự kiện trận: ${events.slice(0, 80)}`)
     expect((await page.locator('.fe-tabs button').first().innerText()).startsWith('Bạn 1'), 'thiếu thẻ khối Bạn 1')
@@ -1588,7 +1588,7 @@ async function shellTests() {
     expect(!badHome.length, `nút màn chính có emoji: ${badHome.slice(0, 3).join(' | ')}`)
     await go(page, 'match')
     const title = await page.title()
-    expect(title === 'TSim', `tiêu đề "${title}"`)
+    expect(title === 'ThingBot FanRoc Challenge', `tiêu đề "${title}"`)
     await devChrome(page)
     const act = page.locator('.sh-act button[data-view="blocks"]')
     const side = page.locator('[data-side="blocks"]')

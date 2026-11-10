@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "TSim",
+  "productName": "TiFa",
   "version": "0.1.1",
   "identifier": "vn.thingedu.fanrocgame",
   "build": {
@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "TSim",
+        "title": "ThingBot FanRoc Challenge",
         "width": 1366,
         "height": 768,
         "minWidth": 1024,

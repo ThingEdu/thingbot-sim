@@ -1,4 +1,4 @@
-# Bộ cài TSim (trước là ThingBot FanRoc Game) (Tauri 2) cho macOS (universal: Apple Silicon + Intel) và Windows (.msi + .exe).
+# Bộ cài TiFa (ThingBot FanRoc Challenge) (Tauri 2) cho macOS (universal: Apple Silicon + Intel) và Windows (.msi + .exe).
 # Chạy khi đẩy tag `fanroc-v*`: dựng trên máy chủ GitHub rồi gắn bộ cài vào bản phát hành cùng tên tag.
 # Trang game cần mã ThingBlock (vite.config.ts, public/media) ở thư mục anh em ../thingblock-editor-sim — tải đúng
 # commit đang dùng khi dựng bản này (THINGBLOCK_REF).
@@ -67,11 +67,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: TSim ${{ github.ref_name }}
+          releaseName: TiFa — ThingBot FanRoc Challenge ${{ github.ref_name }}
           releaseBody: |
-            Bộ cài TSim — game mô phỏng ThingBot FanRoc (mã nguồn AGPL-3.0: nhánh feat/fanroc của kho này).
+            Bộ cài TiFa — ThingBot FanRoc Challenge, game mô phỏng ThingBot FanRoc (mã nguồn AGPL-3.0: nhánh feat/fanroc của kho này).
 
-            - macOS: tải `.dmg`, kéo TSim vào Applications. Ứng dụng chưa ký với Apple: lần đầu bấm chuột phải › Mở (Open) › Mở.
+            - macOS: tải `.dmg`, kéo TiFa vào Applications. Ứng dụng chưa ký với Apple: lần đầu bấm chuột phải › Mở (Open) › Mở.
             - Windows: tải `.msi` hoặc `-setup.exe`. Ứng dụng chưa ký: nếu SmartScreen chặn, bấm "More info" › "Run anyway".
           releaseDraft: false
           prerelease: false
