@@ -119,6 +119,8 @@ const KID = {
   ],
 }
 
+// Bài viết lại (Lesson.rev) mà bài lưu thiếu rev thì mở lại từ thẻ đầu, nên phải ghi rev để vào đúng thẻ.
+const REV = { 'bai-6': 2, 'bai-10': 2 }
 const browser = await chromium.launch()
 const starter = process.argv.includes('--starter')
 const only = process.argv.slice(2).filter((a) => !a.startsWith('--'))
@@ -130,8 +132,8 @@ for (const [id, [card, script]] of Object.entries(CASES)) {
   page.on('pageerror', (e) => errors.push(e.message))
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
   await page.addInitScript(
-    ([id, card]) => localStorage.setItem('thingbot-sim:v1', JSON.stringify({ done: [], current: id, power: true, lessons: { [id]: { card } } })),
-    [id, card],
+    ([id, card, rev]) => localStorage.setItem('thingbot-sim:v1', JSON.stringify({ done: [], current: id, power: true, lessons: { [id]: { card, rev } } })),
+    [id, card, REV[id]],
   )
   await page.goto(URL)
   await page.waitForTimeout(1200)
@@ -154,8 +156,8 @@ if (!starter && (!only.length || only.includes('kid')))
     const errors = []
     page.on('pageerror', (e) => errors.push(e.message))
     await page.addInitScript(
-      ([id, card, workspace]) => localStorage.setItem('thingbot-sim:v1', JSON.stringify({ done: [], current: id, power: true, lessons: { [id]: { card, workspace } } })),
-      [id, card, workspace],
+      ([id, card, workspace, rev]) => localStorage.setItem('thingbot-sim:v1', JSON.stringify({ done: [], current: id, power: true, lessons: { [id]: { card, workspace, rev } } })),
+      [id, card, workspace, REV[id]],
     )
     await page.goto(URL)
     await page.waitForTimeout(1200)
