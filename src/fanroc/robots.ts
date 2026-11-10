@@ -39,6 +39,11 @@ export interface RobotDef {
    */
   rearGrip?: { rest: number; half: number; front: number }
   /**
+   * Thanh răng + giá cờ ở MŨI xe (Mẫu Maker vẽ quay đầu, anh Tuấn chốt 10/11): `rearGrip` lật ra trước tâm xe — giá cờ
+   * vươn ra trước mũi, `front` khi đó là phần thanh răng nhô sau đuôi (đẩy thanh thì đuôi ngắn lại).
+   */
+  flagFront?: boolean
+  /**
    * Bóng ra ở cửa máng thay cho `release` (Mẫu Maker: lồng ống cong xuống vòng cửa ra trước thân, servo S3 chặn cửa; không
    * có cơ cấu nâng hạ nên chỉ tới Rãnh 1). `reach` tính từ mũi khung (âm = lùi vào trong thân), `y` là tâm bóng so với sàn.
    */
@@ -73,6 +78,7 @@ const MAKER: RobotDef = {
   // Vòng cửa ra của lồng (CAD: tâm 68 mm trước tâm khung, cao 93 mm); bóng qua vòng rơi ra ở ~100 mm trước tâm.
   chute: { reach: -0.05, y: 0.093 },
   chuteBehind: true,
+  flagFront: true,
   cad: 'maker',
 }
 
@@ -85,19 +91,19 @@ export const ROBOTS: Record<RobotType, RobotDef> = {
   maker: MAKER,
   // Ba mẫu cải tiến chỉ dùng linh kiện có trong CAD "Bộ thingbot mới" (servo MG996R, động cơ TT, bánh D65, thanh răng).
   makerLift: {
-    ...MAKER, chuteBehind: false, type: 'makerLift', name: 'Maker Nâng',
+    ...MAKER, chuteBehind: false, flagFront: false, type: 'makerLift', name: 'Maker Nâng',
     servos: { S1: 'Nâng cửa lồng (MG996R)', S2: 'Kẹp cờ', S3: 'Cửa xả' },
     arm: undefined,
     chuteLift: CHUTE_LIFT,
   },
   makerIntake: {
-    ...MAKER, chuteBehind: false, type: 'makerIntake', name: 'Maker Hút',
+    ...MAKER, chuteBehind: false, flagFront: false, type: 'makerIntake', name: 'Maker Hút',
     size: { ...MAKER.size, h: TALL_H },
     mech: { M3: 'Con lăn hút', M4: 'Thanh trượt răng' },
     storage: 8,
   },
   makerPro: {
-    ...MAKER, chuteBehind: false, type: 'makerPro', name: 'Maker Pro',
+    ...MAKER, chuteBehind: false, flagFront: false, type: 'makerPro', name: 'Maker Pro',
     size: { ...MAKER.size, h: TALL_H },
     drives: ['omni', 'mecanum', 'diff2'],
     mech: { M3: 'Con lăn hút', M4: 'Thanh trượt răng' },
@@ -218,20 +224,24 @@ export function localGripPoint(def: RobotDef, extend: number, armFrac: number): 
   const up = axis === 'up' ? extend : 0
   const arm = armFrac * (def.arm?.reach ?? 0)
   const y = def.release.y + up + armFrac * (def.arm?.up ?? 0)
-  if (axis === 'back') return { x: 0, y, z: -((def.rearGrip?.rest ?? def.size.l / 2 + def.release.reach) + extend + arm) }
+  const rack = (def.rearGrip?.rest ?? def.size.l / 2 + def.release.reach) + extend + arm
+  if (axis === 'back') return { x: 0, y, z: def.flagFront ? rack : -rack }
   return { x: 0, y, z: def.size.l / 2 + def.release.reach + (axis === 'forward' ? extend : 0) + arm }
 }
 
 /**
- * Mức mở rộng một chiều tính theo luật của robot cắm cờ bằng đuôi: phần nhô ra sau trừ phần mũi ngắn lại (thanh răng
- * lùi thì đầu trước của nó cũng lùi vào), m; robot khác 0.
+ * Mức mở rộng một chiều tính theo luật của robot cắm cờ bằng thanh răng: phần giá cờ nhô ra trừ phần đầu kia ngắn lại
+ * (thanh răng trượt thì đầu bên kia của nó cũng thụt vào), m; robot khác 0.
  */
-export function rearExtent(def: RobotDef, extend: number, armFrac: number): number {
-  return Math.max(0, rearOverhang(def, extend, armFrac) - Math.min(extend, def.rearGrip?.front ?? 0))
+export function rackExtent(def: RobotDef, extend: number, armFrac: number): number {
+  return Math.max(0, rackOverhang(def, extend, armFrac) - Math.min(extend, def.rearGrip?.front ?? 0))
 }
 
-/** Phần nhô ra sau đuôi xe của robot cắm cờ bằng đuôi (giá cờ + đế cờ vượt mép sau), m; robot khác 0. */
-export function rearOverhang(def: RobotDef, extend: number, armFrac: number): number {
+/**
+ * Phần giá cờ + đế cờ nhô khỏi mép khung của robot cắm cờ bằng thanh răng (ra sau đuôi, hoặc ra trước mũi với
+ * `flagFront`), m; robot khác 0.
+ */
+export function rackOverhang(def: RobotDef, extend: number, armFrac: number): number {
   if (LIFT_AXIS[def.type] !== 'back') return 0
-  return Math.max(0, -localGripPoint(def, extend, armFrac).z + (def.rearGrip?.half ?? 0) - def.size.l / 2)
+  return Math.max(0, Math.abs(localGripPoint(def, extend, armFrac).z) + (def.rearGrip?.half ?? 0) - def.size.l / 2)
 }

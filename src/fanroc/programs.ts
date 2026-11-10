@@ -196,9 +196,10 @@ export function teleopButtons(cfg: RobotConfig): Partial<Record<Ps2Button, strin
   if (ports.intake) out.R1 = `Giữ: ${def.mech.M3!.toLowerCase()}`
   if (ports.lift) {
     const what = def.mech.M4!.toLowerCase()
-    // Mẫu Maker: thanh răng lùi ra đuôi xe mang giá cờ (LIFT_AXIS 'back'), không lên xuống.
+    // Họ Maker: thanh răng mang giá cờ (LIFT_AXIS 'back'), không lên xuống — Mẫu Maker đẩy ra mũi, mẫu cải tiến lùi ra đuôi.
     const back = LIFT_AXIS[cfg.type] === 'back'
-    out.TRIANGLE = back ? `Giữ: ${what} lùi ra đuôi` : `Giữ: ${what} lên`
+    const toward = ROBOTS[cfg.type].flagFront ? 'đẩy ra mũi' : 'lùi ra đuôi'
+    out.TRIANGLE = back ? `Giữ: ${what} ${toward}` : `Giữ: ${what} lên`
     out.CROSS = back ? `Giữ: ${what} thu về` : `Giữ: ${what} xuống`
   }
   if (cfg.type === 'ui') {

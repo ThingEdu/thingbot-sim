@@ -304,20 +304,20 @@ export const MISSIONS: Mission[] = [
   },
   {
     id: 'cam-co', stage: 3, n: 10, title: 'Cắm cờ',
-    goal: 'Lái robot tới Núi A, quay đuôi vào núi, đưa cờ ở đuôi xe tới trên lỗ rồi cắm cờ vào lỗ trên đỉnh núi.',
+    goal: 'Lái robot tới Núi A, hướng mũi vào núi, đưa cờ ở mũi xe tới trên lỗ rồi cắm cờ vào lỗ trên đỉnh núi.',
     robot: MAKER, start: ROBOT1, balls: true, toolbox: TOOLBOX, starter: TELEOP, kind: 'drive', maxTime: 60,
     path: [{ x: ROBOT1.x, z: ROBOT1.z }, { x: HOLE_A.x, z: HOLE_A.z }],
     guide: [
-      'Robot đang kẹp sẵn một lá cờ ở ĐUÔI xe. Giữ △ thanh trượt răng lùi ra đuôi, giữ ✕ thu về; giữ □ mở kẹp thả cờ.',
-      'Lái robot tới Núi A rồi quay ĐUÔI xe vào đỉnh núi (lùi lại gần núi).',
+      'Robot đang kẹp sẵn một lá cờ ở MŨI xe. Giữ △ thanh trượt răng đẩy ra mũi, giữ ✕ thu về; giữ □ mở kẹp thả cờ.',
+      'Lái robot tới Núi A rồi hướng MŨI xe vào đỉnh núi (tiến lại gần núi).',
       'Giữ △ cho thanh răng đưa cờ ra tới ngay trên lỗ, rồi giữ □ mở kẹp để cờ rơi vào lỗ.',
       'Em dừng lại suy nghĩ bao lâu cũng được. Làm xong việc thì robot đứng yên 1 giây là được chấm, hoặc em bấm Chấm.',
     ],
     goals: [{ type: 'flag', mountain: 0 }],
     stars: { two: [{ type: 'time', max: 45 }], three: [{ type: 'time', max: 25 }] },
     hints: [
-      { when: 'flag', text: 'Cờ chưa vào lỗ Núi A — quay đuôi xe vào núi, giữ △ đưa cờ ra thẳng trên lỗ rồi mới mở kẹp.' },
-      { when: 'time', text: 'Cắm được rồi! Thử lại nhanh hơn: vừa lùi về núi vừa giữ △ đưa cờ ra.' },
+      { when: 'flag', text: 'Cờ chưa vào lỗ Núi A — hướng mũi xe vào núi, giữ △ đưa cờ ra thẳng trên lỗ rồi mới mở kẹp.' },
+      { when: 'time', text: 'Cắm được rồi! Thử lại nhanh hơn: vừa tiến về núi vừa giữ △ đưa cờ ra.' },
     ],
   },
   {

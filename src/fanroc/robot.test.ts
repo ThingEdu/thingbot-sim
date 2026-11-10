@@ -104,7 +104,7 @@ test('Xe Ủi không có cửa xả S3 (R33): lệnh S3 = 150 không xả bóng 
   assert.equal(w.balls[0].st, 'held')
 })
 
-test('Nâng/vươn M4 = 100: extend tăng 0.08 m/s, kẹp ở maxExtend, footprint dài thêm (Mẫu Maker: thêm về phía đuôi)', async () => {
+test('Nâng/vươn M4 = 100: extend tăng 0.08 m/s, kẹp ở maxExtend, footprint dài thêm (Mẫu Maker: thêm về phía mũi)', async () => {
   const { w, r } = await corridor()
   drive(w, r, { M4: 100 }, 1)
   assert.ok(Math.abs(r.extend - 0.08) < 0.005, `extend ${r.extend}`)
@@ -113,17 +113,17 @@ test('Nâng/vươn M4 = 100: extend tăng 0.08 m/s, kẹp ở maxExtend, footpri
   const zs = r.footprint().map((c) => c.z)
   const len = Math.max(...zs) - Math.min(...zs)
   assert.ok(Math.abs(len - (ROBOTS.maker.size.l + ROBOTS.maker.maxExtend)) < 0.005, `dài ${len}`)
-  assert.ok(r.backExtension > 0.12 && r.forwardExtension === 0, `trước ${r.forwardExtension} / sau ${r.backExtension}`)
+  assert.ok(r.forwardExtension > 0.12 && r.backExtension === 0, `trước ${r.forwardExtension} / sau ${r.backExtension}`)
   drive(w, r, { M4: -100 }, 3)
   assert.equal(r.extend, 0)
 })
 
-/** Đặt Maker sao cho điểm kẹp (giá cờ ở đuôi thanh răng: Mẫu Maker cắm cờ bằng đuôi) nằm ngay trên lỗ cờ Núi A. */
+/** Đặt Maker sao cho điểm kẹp (giá cờ ở đầu thanh răng: Mẫu Maker cắm cờ bằng mũi) nằm ngay trên lỗ cờ Núi A. */
 const overHoleA = async () => {
   const w = await FanrocWorld.create(1)
   const r = new RobotBody(w, MAKER, 'red', 0)
   const h = w.holeCentres()[0]
-  // yaw π: mũi hướng +z, đuôi hướng −z về phía lỗ; thanh răng lùi hết (giá cờ ra sau đuôi).
+  // yaw π: mũi hướng +z; thanh răng đẩy hết (giá cờ ra trước mũi) — z tâm xe = z lỗ − z điểm kẹp theo trục xe.
   r.extend = ROBOTS.maker.maxExtend
   r.setPose({ x: h.x, z: h.z - localGripPoint(ROBOTS.maker, r.extend, 0).z, yaw: Math.PI })
   return { w, r, h }
@@ -208,9 +208,9 @@ test('Lao vào rào và vào núi: bị chặn, không leo lên (thân vẫn sá
   assert.ok(r.pose.z < 1.2 - ROBOTS.maker.size.l / 2 + 0.01, `xuyên rào tới z ${r.pose.z}`)
 })
 
-for (const type of ['maker', 'co'] as const) {
-  // Mẫu Maker cắm cờ bằng đuôi (thanh răng lùi ra sau): lùi đuôi vào núi; Xe Cắm Cờ tiến mũi vào.
-  const back = type === 'maker'
+for (const type of ['maker', 'makerLift', 'co'] as const) {
+  // Maker Nâng cắm cờ bằng đuôi (thanh răng lùi ra sau): lùi đuôi vào núi; Mẫu Maker (thanh răng ra mũi) và Xe Cắm Cờ tiến mũi vào.
+  const back = type === 'makerLift'
   test(`Cờ (${ROBOTS[type].name}): ${back ? 'lùi đuôi' : 'lái thẳng'} vào Núi A theo trục lỗ, vươn + tay S1, mở kẹp ⇒ onFlag(0) (không dịch chuyển tức thời)`, async () => {
     const w = await FanrocWorld.create(1)
     const r = new RobotBody(w, { type, drive: 'diff2', actuator: 'tt' }, 'red', 0)
@@ -286,4 +286,18 @@ test('Mẫu Maker: cửa ra ở đuôi (anh Tuấn 10/11) — điểm xả 100 m
   const lift = (await corridor({ type: 'makerLift', drive: 'diff2', actuator: 'tt' })).r
   const tl = lift.body.translation()
   assert.ok(lift.releasePoint().z < tl.z, 'Maker Nâng xả ở mũi (−z)')
+})
+
+test('Mẫu Maker cắm cờ ở mũi (anh Tuấn 10/11, khớp hình quay đầu): điểm kẹp trước mũi xe; Maker Nâng vẫn ở đuôi', async () => {
+  const { r } = await corridor()
+  r.extend = ROBOTS.maker.maxExtend
+  const t = r.body.translation()
+  // yaw 0: mũi hướng −z.
+  const g = r.gripPoint()
+  assert.ok(g.z < t.z - ROBOTS.maker.size.l / 2, `điểm kẹp ${g.z.toFixed(3)} phải trước mũi (tâm ${t.z.toFixed(3)})`)
+  assert.equal(r.flagBehind, false)
+  const lift = (await corridor({ type: 'makerLift', drive: 'diff2', actuator: 'tt' })).r
+  lift.extend = ROBOTS.makerLift.maxExtend
+  assert.ok(lift.gripPoint().z > lift.body.translation().z + ROBOTS.makerLift.size.l / 2, 'Maker Nâng cắm cờ bằng đuôi (+z)')
+  assert.equal(lift.flagBehind, true)
 })

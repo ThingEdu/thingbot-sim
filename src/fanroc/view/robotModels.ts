@@ -416,6 +416,7 @@ export function buildRobotModel(cfg: RobotConfig, alliance: Alliance): RobotMode
     }
   })
   let last = performance.now()
+  const grip = new THREE.Vector3()
   return {
     group,
     update(p) {
@@ -424,7 +425,8 @@ export function buildRobotModel(cfg: RobotConfig, alliance: Alliance): RobotMode
       last = now
       // Bánh lăn theo quãng đường của chính nó: bánh bên trái (+x) đi fwd − dyaw·x.
       for (const w of wheels) w.obj.rotation.x += (flip * (p.fwd - p.dyaw * flip * w.x)) / 0.0325
-      mech.update(p, dt)
+      // Cờ / kẹp nằm trong thân CAD (đã quay 180° với Mẫu Maker): đổi điểm kẹp từ hệ hình robot sang hệ thân.
+      mech.update(flip < 0 ? { ...p, grip3: grip.set(-p.grip3.x, p.grip3.y, -p.grip3.z) } : p, dt)
     },
     dispose() {
       const geos = new Set<THREE.BufferGeometry>()

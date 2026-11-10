@@ -79,10 +79,10 @@ test('teleopButtons khớp mẫu TeleOp: nút có chức năng ⇔ mẫu đọc 
   }
 })
 
-test('nhãn △/✕ của Mẫu Maker: thanh răng lùi ra đuôi / thu về (cắm cờ bằng đuôi), không lên xuống', () => {
+test('nhãn △/✕ họ Maker: thanh răng đẩy ra mũi (Mẫu Maker) / lùi ra đuôi (mẫu cải tiến), thu về; không lên xuống', () => {
   for (const type of ['maker', 'makerLift', 'makerIntake', 'makerPro'] as const) {
     const b = teleopButtons({ ...defaultConfig(type) })
-    assert.match(b.TRIANGLE ?? '', /lùi ra đuôi/, type)
+    assert.match(b.TRIANGLE ?? '', type === 'maker' ? /đẩy ra mũi/ : /lùi ra đuôi/, type)
     assert.match(b.CROSS ?? '', /thu về/, type)
   }
 })

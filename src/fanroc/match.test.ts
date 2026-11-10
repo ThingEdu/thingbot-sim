@@ -203,8 +203,8 @@ test('leo núi P12 hai lần ⇒ lần đầu cảnh cáo, lần sau 1 lỗi', a
 test('vươn ra ngoài rào S02 ⇒ thẻ vàng một lần mỗi đợt', async () => {
   const { w, robots, m } = await setup()
   m.t = 0
-  // Maker sát rào phía xa, đuôi hướng −z (yaw π); M4 lùi thanh răng ra sau, ra ngoài rào.
-  robots[0].setPose({ x: -0.6, z: -FIELD / 2 + 0.16, yaw: Math.PI })
+  // Maker sát rào phía xa, mũi hướng −z (yaw 0); M4 đẩy thanh răng ra mũi, ra ngoài rào.
+  robots[0].setPose({ x: -0.6, z: -FIELD / 2 + 0.16, yaw: 0 })
   run(m, only(0, { M4: 100 }), 2)
   assert.equal(m.pens[0].yellow, 1)
   run(m, only(0, { M4: 100 }), 2)
@@ -287,7 +287,7 @@ test('G15 không tính khi một robot có góc trong Vùng Bảo Vệ / Khu Ti�
 test('luyện tập: không hết giờ, không phạt (sự kiện ghi "luyện tập")', async () => {
   const { robots, m } = await setup(undefined, true)
   m.t = 0
-  robots[0].setPose({ x: -0.6, z: -FIELD / 2 + 0.16, yaw: Math.PI })
+  robots[0].setPose({ x: -0.6, z: -FIELD / 2 + 0.16, yaw: 0 })
   run(m, only(0, { M4: 100 }), 2)
   assert.equal(m.pens[0].yellow, 0)
   assert.ok(m.events.some((e) => e.text.includes('S02') && e.text.includes('luyện tập')))
@@ -327,7 +327,7 @@ test('cán cờ nằm trên sàn (P10) ⇒ cảnh cáo, không phạt điểm', 
   const { robots, m } = await setup()
   m.t = 0
   robots[0].setPose({ x: 0, z: 0, yaw: 0 })
-  // Mẫu Maker giữ cờ trên nóc: lùi thanh răng ra sau rồi mở kẹp xa lỗ cờ ⇒ cờ rơi ra sàn sau đuôi xe.
+  // Mẫu Maker giữ cờ trên nóc: đẩy thanh răng ra mũi rồi mở kẹp xa lỗ cờ ⇒ cờ rơi ra sàn trước mũi xe.
   run(m, only(0, { M4: 100 }), 3)
   run(m, only(0, { M4: 0, S2: 0 }), 1)
   const f = robots[0].flagBody!.translation()

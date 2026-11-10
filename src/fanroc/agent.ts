@@ -945,7 +945,7 @@ export class Agent {
   private runFlag(view: AgentView, t: Extract<Task, { kind: 'flag' }>): void {
     const r = this.robot
     const h = view.world.holeCentres()[t.m]
-    // Robot cắm cờ bằng đuôi (Mẫu Maker): lùi đuôi vào lỗ, rời núi thì tiến ra.
+    // Robot cắm cờ bằng đuôi (Maker Nâng / Hút / Pro): lùi đuôi vào lỗ, rời núi thì tiến ra; Mẫu Maker cắm bằng mũi.
     const away = r.flagBehind ? CMD_SLOW : -CMD_SLOW
     if (!r.hasFlag) {
       // Đã cắm (hoặc làm rơi): rời núi rồi xong.

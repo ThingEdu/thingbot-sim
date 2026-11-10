@@ -10,7 +10,7 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import type { FanrocWorld } from './world.ts'
 import { HOLE, PEAK_Y, START_POSES, type Alliance, type Pose } from './layout.ts'
 import { servo360, type PortValues } from './ports.ts'
-import { chuteExit, LIFT_AXIS, localGripPoint, rearExtent, rearOverhang, ROBOTS, portMap, type PortMap, type RobotConfig, type RobotDef } from './robots.ts'
+import { chuteExit, LIFT_AXIS, localGripPoint, rackExtent, rackOverhang, ROBOTS, portMap, type PortMap, type RobotConfig, type RobotDef } from './robots.ts'
 
 export type Vec2 = { x: number; z: number }
 
@@ -140,29 +140,41 @@ export class RobotBody {
     return LIFT_AXIS[this.def.type] === 'forward' ? this.extend : 0
   }
 
-  /** Cắm cờ bằng đuôi xe (Mẫu Maker: thanh răng lùi ra sau mang giá cờ). */
-  get flagBehind(): boolean {
+  /** Điểm kẹp cờ đi theo thanh răng (họ Maker): ra sau đuôi, hoặc ra trước mũi với Mẫu Maker (`flagFront`). */
+  private get rackFlag(): boolean {
     return LIFT_AXIS[this.def.type] === 'back'
   }
 
-  /** Phần tay kẹp cờ đang vươn ra (tới trước, hoặc ra sau với robot cắm cờ bằng đuôi), m. */
+  /** Cắm cờ bằng đuôi xe (Maker Nâng / Hút / Pro: thanh răng lùi ra sau mang giá cờ). */
+  get flagBehind(): boolean {
+    return this.rackFlag && !this.def.flagFront
+  }
+
+  /** Phần giá cờ trên thanh răng nhô khỏi mép khung (trước hoặc sau), m. */
+  private get rackOver(): number {
+    return rackOverhang(this.def, this.extend, this.armFrac)
+  }
+
+  /** Phần tay kẹp cờ đang vươn ra (tới trước; với robot cắm cờ bằng thanh răng đã tính trong điểm kẹp), m. */
   private get armReach(): number {
     return this.armFrac * (this.def.arm?.reach ?? 0)
   }
 
   /** Phần nhô ra trước mũi xe (vươn + tay kẹp, hoặc cửa lồng nâng bằng servo vượt mũi khung), m. */
   get forwardExtension(): number {
-    return this.forwardExtend + (this.flagBehind ? 0 : this.armReach) + (this.def.chuteBehind ? 0 : Math.max(0, chuteExit(this.def, this.armFrac)?.reach ?? 0))
+    const rack = this.def.flagFront ? this.rackOver : 0
+    return this.forwardExtend + (this.rackFlag ? rack : this.armReach) + (this.def.chuteBehind ? 0 : Math.max(0, chuteExit(this.def, this.armFrac)?.reach ?? 0))
   }
 
   /** Phần nhô ra sau đuôi xe (giá cờ trên thanh răng vượt mép sau), m. */
   get backExtension(): number {
-    return rearOverhang(this.def, this.extend, this.armFrac)
+    return this.flagBehind ? this.rackOver : 0
   }
 
   /** Tổng phần mở rộng ra khỏi kích thước xuất phát (trước + sau, trừ phần mũi thu vào), m — đưa vào ruleChecks. */
   get extension(): number {
-    return this.forwardExtension + rearExtent(this.def, this.extend, this.armFrac)
+    // Phần giá cờ nhô ra (đã tính ở trước hoặc sau) thay bằng mức mở rộng theo luật của thanh răng.
+    return this.forwardExtension + this.backExtension - this.rackOver + rackExtent(this.def, this.extend, this.armFrac)
   }
 
   /** Điểm cách mũi xe thêm `ahead` theo phương ngang và cao `y` so với sàn. */
@@ -189,11 +201,11 @@ export class RobotBody {
     return this.ahead(this.def.release.reach + this.forwardExtend, this.def.release.y + this.liftUp)
   }
 
-  /** Điểm kẹp cờ: như điểm xả, cộng phần tay kẹp S1 (R17); robot cắm cờ bằng đuôi thì ở sau đuôi xe. */
+  /** Điểm kẹp cờ: như điểm xả, cộng phần tay kẹp S1 (R17); robot cắm cờ bằng thanh răng thì ở đầu thanh (trước mũi / sau đuôi). */
   gripPoint(): { x: number; y: number; z: number } {
     const up = this.armFrac * (this.def.arm?.up ?? 0)
     const y = this.def.release.y + this.liftUp + up
-    if (this.flagBehind) return this.along(localGripPoint(this.def, this.extend, this.armFrac).z, y)
+    if (this.rackFlag) return this.along(localGripPoint(this.def, this.extend, this.armFrac).z, y)
     return this.ahead(this.def.release.reach + this.forwardExtend + this.armReach, y)
   }
 

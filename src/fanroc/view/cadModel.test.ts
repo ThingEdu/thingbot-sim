@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import * as THREE from 'three'
 import { BALL_CHUTE, BALL_STEP, CAD_WHEELS, chuteExitModel, chuteSlot, makerCad, TALL_TOP } from './cadModel.ts'
-import { ROBOTS, localGripPoint, rearExtent, rearOverhang } from '../robots.ts'
+import { ROBOTS, localGripPoint, rackExtent, rackOverhang } from '../robots.ts'
 
 test('Mẫu Maker CAD: đủ nhóm thân / thanh răng / tay vòng / 4 bánh; cỡ khớp hộp va chạm 240 × 300 mm', () => {
   const { groups } = makerCad()
@@ -44,13 +44,14 @@ test('Lồng chứa bóng: 4 bóng nối nhau theo ống cong, quả đầu ở 
   assert.ok(Math.hypot(last.x - 58, last.z - 43) < 5 && last.y + R < top, `quả cuối ở ${last.toArray().map((v) => v.toFixed(0))} — phải trong ống đứng`)
 })
 
-test('Mẫu Maker cắm cờ bằng đuôi: lúc thu giá cờ trên nóc (chưa nhô), lùi hết vẫn trong trần mở rộng 500 mm', () => {
+test('Mẫu Maker cắm cờ bằng mũi: lúc thu giá cờ trên nóc (chưa nhô), đẩy hết vẫn trong trần mở rộng 500 mm', () => {
   const def = ROBOTS.maker
-  assert.equal(rearOverhang(def, 0, 0), 0, 'lúc thu mép giá cờ ngang đuôi khung (CAD: −153 / −151 mm)')
-  assert.ok(localGripPoint(def, 0, 0).z > -def.size.l / 2, 'lúc thu giá cờ nằm trong thân')
-  const full = rearOverhang(def, def.maxExtend, 0)
-  assert.ok(full > 0.17, `lùi hết nhô ${full}`)
-  assert.ok(Math.max(def.size.w, def.size.l) + rearExtent(def, def.maxExtend, 0) <= 0.5 + 1e-9)
+  assert.equal(rackOverhang(def, 0, 0), 0, 'lúc thu mép giá cờ ngang mép khung (CAD: −153 / −151 mm, vẽ quay đầu)')
+  assert.ok(Math.abs(localGripPoint(def, 0, 0).z) < def.size.l / 2, 'lúc thu giá cờ nằm trong thân')
+  assert.ok(localGripPoint(def, def.maxExtend, 0).z > def.size.l / 2, 'đẩy hết giá cờ ra trước mũi (+z hình)')
+  const full = rackOverhang(def, def.maxExtend, 0)
+  assert.ok(full > 0.17, `đẩy hết nhô ${full}`)
+  assert.ok(Math.max(def.size.w, def.size.l) + rackExtent(def, def.maxExtend, 0) <= 0.5 + 1e-9)
 })
 
 test('Linh kiện CAD rời: bánh D65, động cơ, bo ThingBot, servo SG90, khay pin — cỡ đúng linh kiện thật', async () => {
