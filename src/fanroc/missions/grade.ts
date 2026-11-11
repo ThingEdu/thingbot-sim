@@ -175,7 +175,9 @@ export function grade(m: Mission, r: RunRecord): GradeResult {
     hint = h.text.replace('{d}', String(x.c.d ?? ''))
     break
   }
-  return { done: tierOk[0], stars, goals: rows.flat().map((x) => ({ text: x.mark + describe(x.g), ok: x.c.ok })), hint }
+  const goals = rows.flat().map((x) => ({ text: x.mark + describe(x.g), ok: x.c.ok }))
+  if (r.error) return { done: false, stars: 0, goals, hint: `${r.error}. Sửa chương trình rồi bấm ▶ chạy lại.` }
+  return { done: tierOk[0], stars, goals, hint }
 }
 
 /** Trạng thái lần chạy mà GameSession đưa vào `shouldGrade` mỗi bước. */
@@ -190,7 +192,7 @@ export type RunState = {
   /** R95: chương trình đang ở khối «đợi» (`restWaits`) — nhiệm vụ lập trình không chấm vì đứng yên. */
   waiting?: boolean
 }
-export type GradeReason = 'pressed' | 'maxTime' | 'rest'
+export type GradeReason = 'pressed' | 'maxTime' | 'rest' | 'error'
 
 /**
  * Đã tới lúc chấm chưa (R57 + R59 + R95; hợp đồng đầy đủ ở RunRecord, types.ts): trả lý do, hoặc null nếu chạy tiếp.

@@ -112,3 +112,16 @@ test('preview: chấm thử trên trạng thái hiện tại, không kết thúc
   assert.equal(p.goals.length > 0, true)
   assert.equal(run.result, null)
 })
+
+test('chương trình lỗi giữa lần chạy ⇒ fail() chấm ngay "error", không đạt; chấm một lần', () => {
+  const m = byN(5)
+  const v = field(m.start)
+  const run = new MissionRun(m, { blocks: { blocks: [] } }, v)
+  drive(run, v, 0.5, () => (v.pose.x += 0.2 * DT))
+  const r = run.fail(v, 'Chương trình dừng vì lỗi: chia một số nguyên cho 0')
+  assert.ok(r && !r.done && r.stars === 0)
+  assert.equal(run.reason, 'error')
+  assert.equal(run.record?.error, 'Chương trình dừng vì lỗi: chia một số nguyên cho 0')
+  assert.equal(run.fail(v, 'x'), null)
+  assert.equal(run.press(v), null)
+})

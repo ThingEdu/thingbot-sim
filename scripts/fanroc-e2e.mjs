@@ -21,6 +21,7 @@ import { mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { ZONES } from '../src/fanroc/layout.ts'
 import { straight, turtle } from '../src/fanroc/missions/solutions.ts'
+import { MISSIONS } from '../src/fanroc/missions/data.ts'
 import { newTournament, playersIn, played, seatIds } from '../src/fanroc/ui/tournament.ts'
 import { record } from '../src/fanroc/tournament.ts'
 
@@ -654,11 +655,14 @@ async function missionTests() {
     await page.evaluate(() => window.__fanroc.go('mission', { id: 'hinh-vuong' }))
     await page.waitForFunction(() => window.__fanroc.mission?.id === 'hinh-vuong')
     expect(await page.locator('.mi-meas').isVisible(), 'nhiệm vụ 7 không có ô số đo')
-    await page.locator('.mi button[data-role="guide"]').click()
+    // Vào nhiệm vụ: HƯỚNG DẪN mở sẵn ở trang Mục tiêu (câu mục tiêu), Tiếp ⇒ bước hướng dẫn đầu.
+    await page.locator('.mi-guide').waitFor()
+    const g0 = await page.locator('.mi-guide h3').innerText()
     const g1 = await page.locator('.mi-guide p').innerText()
+    expect(g0 === 'Mục tiêu · Nhiệm vụ 7' && g1 === MISSIONS[6].goal, `HƯỚNG DẪN không mở ở Mục tiêu: "${g0}" "${g1}"`)
     await page.locator('.mi-guide button', { hasText: 'Tiếp' }).click()
     const g2 = await page.locator('.mi-guide p').innerText()
-    expect(g1 && g2 && g1 !== g2, 'HƯỚNG DẪN không trượt sang bước 2')
+    expect(g2 === MISSIONS[6].guide[0], 'HƯỚNG DẪN không trượt sang bước hướng dẫn đầu')
     await page.locator('.mi-guide button', { hasText: 'Đóng' }).click()
     await page.evaluate((state) => window.__fanroc.editors.load(0, state), turtle(0.72, 131))
     await runBtn(page, 'Chạy').click()
@@ -686,6 +690,41 @@ async function missionTests() {
     const lit = await c7.locator('.ml-stars svg[data-on="true"]').count()
     expect(lit === stars, `thẻ 7 sáng ${lit} sao`)
     return `${r.result.stars} sao (${r.reason}) · ô số đo "${meas.replace(/\n/g, ' ')}" · sau tải lại thẻ 7: ✓ ${stars} sao`
+  })
+
+  await test('N8b nhiệm vụ 2: chương trình chia cho 0 ⇒ CHƯA ĐẠT, 0 sao, báo lỗi; "Nhiệm vụ tiếp" ⇒ nhiệm vụ 3 mở sẵn Mục tiêu; thẻ thử thách không che robot', async (page) => {
+    await open(page)
+    await page.evaluate(() => window.__fanroc.go('mission', { id: 'di-thang' }))
+    await page.waitForFunction(() => window.__fanroc.mission?.id === 'di-thang')
+    await page.evaluate(() => {
+      const n = (v) => ({ shadow: { type: 'math_number', fields: { NUM: v } } })
+      const motor = (m, v, next) => ({ type: 'thingBotC3_setMotor', fields: { MOTOR: String(m), DIRECTION: 'forward' }, inputs: { SPEED: v }, ...(next ? { next: { block: next } } : {}) })
+      const wait = (s, next) => ({ type: 'control_wait', inputs: { DURATION: { shadow: { type: 'math_positive_number', fields: { NUM: s } } } }, next: { block: next } })
+      const div0 = { ...n(0), block: { type: 'operator_divide', inputs: { NUM1: n(100), NUM2: n(0) } } }
+      window.__fanroc.editors.load(0, { blocks: { languageVersion: 0, blocks: [
+        { type: 'event_whenarduinobegin', x: 30, y: 30, next: { block: { type: 'thingBotC3_init', next: { block: motor(1, n(60), motor(2, n(60), wait(1, motor(1, div0)))) } } } },
+        { type: 'event_whenarduinoloop', x: 30, y: 400 },
+      ] } })
+    })
+    // Thẻ thử thách ở góc trên phải, không đè lên robot (thân robot chiếu ra màn hình nằm ngoài thẻ).
+    const card = await page.locator('.mi-card').boundingBox()
+    const stage = await page.locator('.mi').boundingBox()
+    expect(card && stage && card.y < stage.y + stage.height / 2 && card.x + card.width > stage.x + stage.width - 20, `thẻ thử thách ở ${JSON.stringify(card)}`)
+    await runBtn(page, 'Chạy').click()
+    await page.waitForFunction(() => window.__fanroc.mission?.result, null, { timeout: 15000 })
+    const r = await page.evaluate(() => ({ ...window.__fanroc.mission }))
+    expect(r.reason === 'error' && !r.result.done && r.result.stars === 0, `chia cho 0: ${r.reason}, done=${r.result.done}, ${r.result.stars} sao`)
+    const res = page.locator('.mi-res-card')
+    await res.waitFor()
+    const text = await res.innerText()
+    expect(/CHƯA ĐẠT/.test(text) && /chia một số nguyên cho 0/.test(text), `màn kết quả: ${text.replace(/\n/g, ' | ')}`)
+    await res.locator('button', { hasText: 'Nhiệm vụ tiếp' }).click()
+    await page.waitForFunction(() => window.__fanroc.mission?.id === 'cong-va-xoay')
+    await page.locator('.mi-guide').waitFor()
+    const h = await page.locator('.mi-guide h3').innerText()
+    const goal = await page.locator('.mi-guide p').innerText()
+    expect(h === 'Mục tiêu · Nhiệm vụ 3' && goal === MISSIONS[2].goal, `nhiệm vụ tiếp: "${h}" "${goal}"`)
+    return `chấm "${r.reason}" ${r.result.stars} sao · nhiệm vụ 3 mở sẵn "${h}"`
   })
 }
 

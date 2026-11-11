@@ -208,8 +208,8 @@ export const MISSIONS: Mission[] = [
     robot: MAKER, start: ALONG, balls: false, toolbox: TOOLBOX_TURTLE, starter: EMPTY, kind: 'program', maxTime: 40,
     path: [{ x: ALONG.x, z: ALONG.z }, { x: ALONG.x + 1, z: ALONG.z }],
     guide: [
-      'Mở mục "Khối của em", bấm "Tạo khối", đặt tên "tiến" và thêm một ô số tên "mét".',
-      'Trong khối định nghĩa: M1 = M2 = 60, đợi (mét ÷ quãng đi được trong 1 giây em đo ở nhiệm vụ 4), rồi dừng.',
+      'Bấm mục "Khối của em" (chấm hồng), bấm nút "Tạo một khối". Đặt tên "tiến", bấm "+ Thêm ô số", đổi tên ô thành "mét", rồi bấm "Tạo khối".',
+      'Vùng khối hiện khối hồng «định nghĩa tiến (mét)». Kéo khối vào ngay dưới nó: M1 = M2 = 60, đợi (mét ÷ quãng đi được trong 1 giây em đo ở nhiệm vụ 4), rồi dừng. Muốn có ô «mét», kéo ô tròn «mét» trên khối hồng xuống.',
       'Dưới «khởi động ThingBot», gọi «tiến (1)». Robot phải đi đúng 1 mét.',
       'Muốn ⭐⭐⭐: đi 1 mét bằng hai lần gọi, ví dụ «tiến (0.4)» rồi «tiến (0.6)».',
     ],
@@ -227,8 +227,8 @@ export const MISSIONS: Mission[] = [
     goal: 'Tạo khối của em «rẽ trái (độ)» và dùng nó cho robot quay trái đúng 90° tại chỗ.',
     robot: MAKER, start: CORNER, balls: false, toolbox: TOOLBOX_TURTLE, starter: EMPTY, kind: 'program', maxTime: 40,
     guide: [
-      'Tạo khối «rẽ trái» với một ô số tên "độ".',
-      'Trong khối định nghĩa: M1 lùi 60, M2 tiến 60, đợi (độ ÷ số độ xoay trong 1 giây em đo), rồi dừng.',
+      'Bấm mục "Khối của em", bấm "Tạo một khối", đặt tên "rẽ trái", bấm "+ Thêm ô số" và đổi tên ô thành "độ".',
+      'Kéo khối vào ngay dưới khối hồng «định nghĩa rẽ trái (độ)»: M1 lùi 60, M2 tiến 60, đợi (độ ÷ số độ xoay trong 1 giây em đo), rồi dừng.',
       'Gọi «rẽ trái (90)». Robot phải quay mặt sang trái, vẫn đứng tại chỗ.',
       'Muốn ⭐⭐⭐: quay 90° bằng hai lần gọi, ví dụ «rẽ trái (45)» hai lần. Thử làm thêm «rẽ phải (độ)» nhé.',
     ],

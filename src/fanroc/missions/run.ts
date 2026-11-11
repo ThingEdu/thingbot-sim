@@ -63,6 +63,11 @@ export class MissionRun {
     return this.result ? null : this.finish('pressed', v)
   }
 
+  /** Chương trình dừng vì lỗi `error` (câu tiếng Việt): chấm ngay, lần chạy không đạt. */
+  fail(v: RunView, error: string): GradeResult | null {
+    return this.result ? null : this.finish('error', v, error)
+  }
+
   /** Chấm thử trên trạng thái hiện tại (thẻ thử thách tự tích ✓ trong lúc chạy); không kết thúc lần chạy. */
   preview(v: RunView): GradeResult {
     return grade(this.mission, this.snapshot(v))
@@ -88,8 +93,8 @@ export class MissionRun {
     return this.cache.rec
   }
 
-  private finish(why: GradeReason, v: RunView): GradeResult {
-    this.record = this.snapshot(v)
+  private finish(why: GradeReason, v: RunView, error: string | null = null): GradeResult {
+    this.record = { ...this.snapshot(v), error }
     this.reason = why
     this.result = grade(this.mission, this.record)
     return this.result

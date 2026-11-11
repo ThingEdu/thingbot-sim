@@ -96,6 +96,9 @@ export type RunRecord = {
   tally?: FieldTally
   /** Chương trình (serialization JSON của vùng khối) đã chạy, hoặc null khi lái tay. */
   program: object | null
+  /** Chương trình dừng vì lỗi (câu tiếng Việt của RobotLink, vd. "Chương trình dừng vì lỗi: chia một số nguyên cho 0"):
+   *  lần chạy không đạt dù robot đã tới đâu (anh Tuấn 12/11: chia cho 0 vẫn được 1 sao). */
+  error?: string | null
 }
 
 export type GradeResult = { done: boolean; stars: 0 | 1 | 2 | 3; goals: { text: string; ok: boolean }[]; hint: string | null }

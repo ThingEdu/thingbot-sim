@@ -532,3 +532,14 @@ test('nhiệm vụ 9 (R96): sân MISSION_SEED có 38 bóng xanh trong Khu Chữa
     g.dispose()
   }
 })
+
+test('chương trình dừng vì lỗi (chia cho 0) ⇒ không đạt, 0 sao, gợi ý là câu lỗi — dù robot đã tới đích', () => {
+  for (const m of MISSIONS.filter((x) => x.kind === 'program')) {
+    assert.equal(grade(m, ideal(m)).stars, 3, m.id)
+    const err = 'Chương trình dừng vì lỗi: chia một số nguyên cho 0'
+    const r = grade(m, { ...ideal(m), error: err })
+    assert.equal(r.done, false, m.id)
+    assert.equal(r.stars, 0, m.id)
+    assert.ok(r.hint?.startsWith(err) && /chạy lại/.test(r.hint), `${m.id}: ${r.hint}`)
+  }
+})

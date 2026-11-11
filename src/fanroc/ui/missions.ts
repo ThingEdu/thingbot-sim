@@ -1,7 +1,8 @@
 // Màn nhiệm vụ con rùa (spec §6.1 ① ②, §6.3): ① danh sách 12 nhiệm vụ theo 4 chặng (thẻ "N – Tên", một câu mục tiêu,
 // thanh độ khó 5 ô, ✓, số ⭐; không khoá cứng), ② phần phủ trên sân khi làm nhiệm vụ — dòng tên + HƯỚNG DẪN (trượt
-// từng bước) + Chấm, thẻ thử thách góc dưới trái (mục tiêu tự tích ✓ theo bộ chấm, gợi ý gỡ lỗi), ô số đo góc dưới
-// phải (khi nhiệm vụ có điều kiện đo), màn sao khi chấm xong. Trang (main.ts) dựng phiên chơi, vệt, lúc chấm.
+// từng bước; vào nhiệm vụ là tự mở ở bước "Mục tiêu", anh Tuấn 12/11: bấm "Nhiệm vụ tiếp" xong phải thấy ngay việc cần
+// làm) + Chấm, thẻ thử thách góc trên phải, thu gọn được (mục tiêu tự tích ✓ theo bộ chấm, gợi ý gỡ lỗi; để ở góc
+// dưới thì che robot đang chạy), ô số đo góc dưới phải (khi nhiệm vụ có điều kiện đo), màn sao khi chấm xong. Trang (main.ts) dựng phiên chơi, vệt, lúc chấm.
 // Phần thuần (DIFFICULTY, measureText, mergeProgress, saveMissionVerified, missionCards) chạy được trong Node.
 import { MISSIONS } from '../missions/data.ts'
 import { grade } from '../missions/grade.ts'
@@ -43,6 +44,11 @@ export function saveMissionVerified(store: Pick<Store, 'saveMission' | 'mission'
 export function pendingGoals(m: Mission): { text: string; ok: null }[] {
   const none = { start: m.start, end: m.start, trail: { distance: 0, turned: 0, time: 0 }, touchedMountain: false, events: [], program: null }
   return grade(m, none).goals.map((g) => ({ text: g.text, ok: null }))
+}
+
+/** Các trang của bảng HƯỚNG DẪN: trang đầu là câu mục tiêu, sau đó các bước hướng dẫn. */
+export function guideSteps(m: Pick<Mission, 'goal' | 'guide'>): string[] {
+  return [m.goal, ...m.guide]
 }
 
 export interface MissionCard {
@@ -110,10 +116,16 @@ const CSS = `
 .mi-guide button { background: #f2efe6; color: #221; border-color: #d8d2c2; }
 .mi-guide button.main { background: #1fa860; color: #fff; border-color: #1fa860; }
 .mi-guide button:disabled { opacity: .4; cursor: default; }
-.mi-foot { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; flex-wrap: wrap-reverse; gap: 8px; align-items: flex-end; justify-content: space-between; pointer-events: none; }
+.mi-foot { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 8px; align-items: flex-end; pointer-events: none; }
 .mi-foot > * { pointer-events: auto; }
-.mi-card { flex: 0 1 340px; min-width: 0; box-sizing: border-box; background: #0b1440e6; border-radius: 12px; padding: 10px 12px; box-shadow: 0 4px 14px #0007; display: grid; gap: 6px; }
-.mi-card h4 { margin: 0; font-size: 12px; letter-spacing: .6px; text-transform: uppercase; color: #ffcf5a; }
+.mi-card { position: absolute; right: 10px; top: 104px; width: min(300px, calc(100% - 20px)); max-height: calc(100% - 170px); overflow: auto; box-sizing: border-box; background: #0b1440e6; border-radius: 12px; padding: 8px 12px; box-shadow: 0 4px 14px #0007; display: grid; gap: 6px; }
+.mi .mi-card h4 button { all: unset; box-sizing: border-box; width: 100%; display: flex; gap: 6px; align-items: center; cursor: pointer; font-size: 12px; letter-spacing: .6px; text-transform: uppercase; color: #ffcf5a; }
+.mi .mi-card h4 button:focus-visible { outline: 2px solid #ffcf5a; outline-offset: 2px; border-radius: 4px; }
+.mi-card h4 { margin: 0; }
+.mi-card h4 .n { margin-left: auto; color: #c8d0ea; letter-spacing: 0; text-transform: none; font-variant-numeric: tabular-nums; }
+.mi-card h4 .car { transition: transform .15s; }
+.mi-card[data-open="false"] h4 .car { transform: rotate(-90deg); }
+.mi-card[data-open="false"] > :not(h4) { display: none; }
 .mi-card ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; font-size: 13px; }
 .mi-card li { display: flex; gap: 6px; align-items: flex-start; line-height: 1.35; }
 .mi-card li i { flex: none; width: 16px; height: 16px; margin-top: 1px; border-radius: 50%; border: 2px solid #6b7396; box-sizing: border-box; display: grid; place-items: center; }
@@ -146,7 +158,7 @@ const CSS = `
 @media (max-width: 600px) {
   .mi-head { top: 52px; padding: 5px 6px 5px 10px; }
   .mi-head b { font-size: 12.5px; }
-  .mi-card { flex-basis: 100%; padding: 8px 10px; }
+  .mi-card { top: 96px; padding: 8px 10px; }
   .mi-card ul { font-size: 12px; }
 }
 `
@@ -337,10 +349,24 @@ export function createMissionHud(stage: HTMLElement, on: { grade(): void; list()
   const foot = el('div', 'mi-foot')
   const card = el('div', 'mi-card')
   card.dataset.role = 'challenge'
+  card.dataset.open = 'true'
   const list = el('ul')
   const hint = el('div', 'mi-hint')
   hint.dataset.role = 'hint'
-  card.append(el('h4', undefined, 'Thử thách'), list, hint)
+  const count = el('span', 'n')
+  const fold = el('button')
+  fold.type = 'button'
+  fold.setAttribute('aria-expanded', 'true')
+  fold.title = 'Thu gọn / mở thẻ thử thách'
+  fold.append(el('span', 'car', '▾'), 'Thử thách', count)
+  fold.onclick = () => {
+    const open = card.dataset.open !== 'true'
+    card.dataset.open = String(open)
+    fold.setAttribute('aria-expanded', String(open))
+  }
+  const h4 = el('h4')
+  h4.append(fold)
+  card.append(h4, list, hint)
   const meas = el('div', 'mi-meas')
   meas.dataset.role = 'measure'
   const mDist = el('b')
@@ -352,16 +378,18 @@ export function createMissionHud(stage: HTMLElement, on: { grade(): void; list()
     return d
   }
   meas.append(mrow('Quãng đã đi', mDist), mrow('Góc đã quay', mTurn), mrow('Thời gian', mTime))
-  foot.append(card, meas)
+  foot.append(meas)
 
   const res = el('div', 'mi-res')
   res.hidden = true
-  root.append(head, guide, foot, res)
+  root.append(head, guide, card, foot, res)
   stage.append(root)
 
   let steps: string[] = []
   let at = 0
+  let n = 0
   const showStep = () => {
+    gTitle.textContent = at === 0 ? `Mục tiêu · Nhiệm vụ ${n}` : `Hướng dẫn · Nhiệm vụ ${n}`
     gText.textContent = steps[at] ?? ''
     gPos.textContent = `Bước ${at + 1}/${steps.length}`
     prev.disabled = at === 0
@@ -390,9 +418,10 @@ export function createMissionHud(stage: HTMLElement, on: { grade(): void; list()
     show(m, b) {
       title.textContent = `Chặng ${m.stage} · Nhiệm vụ ${m.n} · ${m.title}`
       setBest(b)
-      steps = m.guide
-      gTitle.textContent = `Hướng dẫn · Nhiệm vụ ${m.n}`
-      toggleGuide(false)
+      // Bước đầu là câu mục tiêu của nhiệm vụ; vào nhiệm vụ là mở sẵn.
+      steps = guideSteps(m)
+      n = m.n
+      toggleGuide(true)
       meas.hidden = !hasMeasure(m)
       lastRows = ''
       lastMeas = ''
@@ -424,6 +453,7 @@ export function createMissionHud(stage: HTMLElement, on: { grade(): void; list()
         }),
       )
       hint.textContent = h ?? ''
+      count.textContent = `${rows.filter((r) => r.ok).length}/${rows.length}`
     },
     measure(t) {
       const x = measureText(t)

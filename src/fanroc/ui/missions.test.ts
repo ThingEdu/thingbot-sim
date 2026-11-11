@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { DIFFICULTY, hasMeasure, measureText, mergeProgress, missionCards, PROGRESS_FAILED, saveMissionVerified, totalStars } from './missions.ts'
+import { DIFFICULTY, guideSteps, hasMeasure, measureText, mergeProgress, missionCards, PROGRESS_FAILED, saveMissionVerified, totalStars } from './missions.ts'
 import { MISSIONS } from '../missions/data.ts'
 import { createStore, type KV } from '../store.ts'
 
@@ -55,4 +55,8 @@ test('missionCards / totalStars đọc tiến độ đã lưu', () => {
   assert.deepEqual([c7.done, c7.stars, c7.title, c7.stage], [true, 2, 'Hình vuông', 2])
   assert.equal(cards.find((c) => c.n === 1)!.done, false)
   assert.equal(totalStars(s), 5)
+})
+
+test('bảng HƯỚNG DẪN: trang đầu là câu mục tiêu của nhiệm vụ, rồi tới các bước', () => {
+  for (const m of MISSIONS) assert.deepEqual(guideSteps(m), [m.goal, ...m.guide], m.id)
 })

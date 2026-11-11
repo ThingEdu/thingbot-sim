@@ -801,6 +801,12 @@ async function start(): Promise<void> {
     const waiting = mission.kind === 'program' && restWaits(editors.blockType(0, link.block), link.phase, mEmptyLoop)
     if (mrun.step(missionView, PHYSICS_DT, waiting)) finishMission()
   }
+  /** Chương trình của nhiệm vụ dừng vì lỗi (chia cho 0…): chấm ngay, không đạt — robot đứng yên vì lỗi không được sao. */
+  editors.onError((i, msg) => {
+    if (i !== 0 || screen !== 'mission' || !mission || mission.kind === 'drive' || !mrun || mrun.done || !missionView) return
+    mrun.fail(missionView, msg)
+    finishMission()
+  })
   /** Bấm Chấm / Dừng giữa lần chạy: chấm ngay. */
   const pressMission = () => {
     if (screen !== 'mission' || !mission) return

@@ -265,14 +265,23 @@ export function installMakeBlockDialog(
       if (!d) return done()
       const el = mutation.ownerDocument.createElement('mutation')
       for (const [k, v] of Object.entries(draftMutation(d))) el.setAttribute(k, v)
+      madeAt = Date.now()
       done(el)
     })
   }
 
   // Danh sách "Khối của em" dựng lại khi có khối mới / bị xoá / bị sửa (scratch-gui làm việc này qua VM).
   let pending = false
-  workspace.addChangeListener((e: { type: string; json?: Json; oldJson?: Json; element?: string }) => {
+  workspace.addChangeListener((e: { type: string; json?: Json; oldJson?: Json; element?: string; blockId?: string }) => {
     const proc = (j?: Json) => typeof j?.type === 'string' && (j.type as string).startsWith('procedures_')
+    if (e.type === S.Events.BLOCK_CREATE && e.json?.type === 'procedures_definition' && e.blockId && Date.now() - madeAt < MADE_MS) {
+      madeAt = 0
+      const id = e.blockId
+      // scratch-blocks đặt khối định nghĩa mới ở góc trên trái vùng khối (khuất sau khay khối, đè chồng khối đang có —
+      // anh Tuấn 12/11: học sinh không biết "khối định nghĩa" ở đâu). Đợi nó đặt xong rồi dời xuống dưới mọi chồng khối,
+      // cuộn tới và chọn sẵn.
+      void S.renderManagement.finishQueuedRenders().then(() => setTimeout(() => placeNewDefinition(workspace, id), PLACE_DELAY_MS))
+    }
     const relevant =
       (e.type === S.Events.BLOCK_CREATE && proc(e.json)) ||
       (e.type === S.Events.BLOCK_DELETE && proc(e.oldJson)) ||
@@ -285,6 +294,31 @@ export function installMakeBlockDialog(
     })
   })
   ;(workspace.getToolbox() as unknown as { forceRerender?: () => void } | null)?.forceRerender?.()
+}
+
+/** Lúc hộp thoại vừa trả khối mới (ms); khối định nghĩa đầu tiên tạo ra trong MADE_MS sau đó là của hộp thoại, không phải
+ *  nạp tệp (sự kiện tạo khối tới chậm cả giây sau khi hộp thoại đóng, đo 12/11). */
+let madeAt = 0
+const MADE_MS = 5000
+/** Chờ scratch-blocks đặt khối mới và đẩy khối chồng lên nhau ra (bumpDelay của Blockly ~250 ms) rồi mới dời. */
+const PLACE_DELAY_MS = 300
+/** Khoảng cách (đơn vị vùng khối) giữa khối định nghĩa mới và chồng khối thấp nhất. */
+const PLACE_GAP = 48
+
+/** Dời khối định nghĩa `id` xuống dưới mọi chồng khối khác (thẳng cột với chồng trái nhất), cuộn tới và chọn nó. */
+function placeNewDefinition(workspace: ScratchBlocksModule.WorkspaceSvg, id: string): void {
+  const def = workspace.getBlockById(id)
+  if (!def) return
+  const others = workspace.getTopBlocks(false).filter((b) => b.id !== id)
+  if (others.length) {
+    const boxes = others.map((b) => b.getBoundingRectangle())
+    const left = Math.min(...boxes.map((r) => r.left))
+    const bottom = Math.max(...boxes.map((r) => r.bottom))
+    const at = def.getRelativeToSurfaceXY()
+    def.moveBy(left - at.x, bottom + PLACE_GAP - at.y)
+  }
+  workspace.centerOnBlock(id)
+  def.select()
 }
 
 const DIALOG_CSS = `
