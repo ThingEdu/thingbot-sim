@@ -73,6 +73,8 @@ jobs:
 
             Giấy phép AGPL-3.0. Mã nguồn đúng của bản này: https://github.com/${{ github.repository }}/tree/${{ github.ref_name }} (cùng khối ThingBlock https://github.com/ThingEdu/thingblock-editor/tree/${{ env.THINGBLOCK_REF }}). Bộ cài kèm `LICENSE`, `NGUON.md` (nguồn từng phần) và `THIRD_PARTY_LICENSES.txt` (MIT / Apache-2.0 của three.js, Rapier, JSZip, scratch-blocks, UrSimulator).
 
+            Hướng dẫn cho học sinh (chơi thi đấu → nhiệm vụ lập trình từng bước → chia sẻ tệp .tb): https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/fanroc/huong-dan-hoc-sinh.md
+
             - macOS: tải `.dmg`, kéo TiFa vào Applications. Ứng dụng chưa ký với Apple: lần đầu bấm chuột phải › Mở (Open) › Mở.
             - Windows: tải `.msi` hoặc `-setup.exe`. Ứng dụng chưa ký: nếu SmartScreen chặn, bấm "More info" › "Run anyway".
           releaseDraft: false

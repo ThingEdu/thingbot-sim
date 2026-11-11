@@ -19,6 +19,14 @@ Siêu âm và PS2 chưa có bản mô phỏng trong ThingBlock: `src/sim-extra.t
 
 Không nạp xuống mạch thật, không có tài khoản, không có backend.
 
+## ThingBot FanRoc Challenge (bộ cài TiFa)
+
+Game mô phỏng sân FANROC trên nhánh `feat/fanroc`: thi đấu, 12 nhiệm vụ lập trình robot, Xưởng lập trình, tải chương
+trình về tệp `.tb`. Bộ cài macOS / Windows ở trang [Releases](https://github.com/ThingEdu/thingbot-sim/releases).
+
+- Hướng dẫn cho học sinh: [`docs/fanroc/huong-dan-hoc-sinh.md`](docs/fanroc/huong-dan-hoc-sinh.md)
+- Phát hành bản mới: [`docs/fanroc/phat-hanh.md`](docs/fanroc/phat-hanh.md)
+
 ## Chạy thử tự động
 
 `npm run smoke` (cần `npm run dev` đang chạy, hoặc đặt `SIM_URL`): mở từng bài 2–10 trên Chromium không giao diện, nạp lời giải mẫu và làm thao tác của trẻ — bước đang mở phải ✓; rồi chạy khung trống — không bước nào được ✓.
