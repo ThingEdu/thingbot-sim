@@ -1004,7 +1004,7 @@ async function gameTests() {
     return `"${msg}"`
   })
 
-  await test('N6d chương trình Mẫu Maker lưu từ 0.8 (không dấu luật) ⇒ Xưởng + Trước trận báo luật cũ; Về mặc định ⇒ hết báo', async (page) => {
+  await test('N6e chương trình Mẫu Maker lưu từ 0.8 (không dấu luật) ⇒ Xưởng + Trước trận báo luật cũ; Về mặc định ⇒ hết báo', async (page) => {
     await open(page)
     // Bản ghi đúng dạng 0.8 lưu (cùng khoá fanroc.v1., không có trường rules): lấy chương trình mẫu hiện có làm nội dung.
     await page.evaluate(() => {
