@@ -131,7 +131,7 @@ Robot không mô phỏng khớp bằng vật lý. Leo là một trạng thái c�
 
 ## Nhiệm vụ 11: Leo Thang Cứu Hỏa (thay "Về Vùng Bảo Vệ")
 
-- id `leo-thang`, chặng 3, nhiệm vụ lập trình. Robot xuất phát trong Khu Xuất Phát; robot mẫu có móc ở S4.
+- id `leo-thang`, chặng 3, nhiệm vụ lập trình. Robot xuất phát trong Khu Xuất Phát; robot mẫu (Mẫu Maker) có móc ở S2.
 - Ba sao:
   - ⭐ chạm xà;
   - ⭐⭐ treo ở Đất;
@@ -140,8 +140,8 @@ Robot không mô phỏng khớp bằng vật lý. Leo là một trạng thái c�
 - Hướng dẫn từng bước:
   1. lái tới ô vàng;
   2. quay mặt theo thanh;
-  3. đặt servo S4 = 180° (giơ móc), tiến cho chạm thanh;
-  4. đặt S4 = 0° (kéo lên);
+  3. đặt servo S2 = 180° (giơ móc), tiến cho chạm thanh;
+  4. đặt S2 = 0° (kéo lên);
   5. chạy tiến để trượt qua vạch.
 - Có lời giải mẫu trong `solutions.ts`, có test chạy lời giải đạt 3 sao.
 - Tiến độ đã lưu của id cũ `ve-vung-bao-ve` bỏ qua, không lỗi.

@@ -23,8 +23,8 @@ có hai mục **Luật chơi** và **Robot mẫu**. Dùng chuột hoặc phím m
 
 ## 1. Chơi thi đấu
 
-Bắt đầu từ **Luật chơi** để biết sân có gì (Khu Chữa Cháy, bốn núi, cờ, Vùng Bảo Vệ) và cách ghi điểm. Mở **Robot mẫu**
-để xem các mẫu robot và cơ cấu của chúng.
+Game theo luật FANROC 2026–2027 **bản V4 (cập nhật 07/11/2026)**. Bắt đầu từ **Luật chơi** để biết sân có gì (Khu
+Chữa Cháy, bốn núi, cờ, Thang Cứu Hỏa) và cách ghi điểm. Mở **Robot mẫu** để xem các mẫu robot và cơ cấu của chúng.
 
 Rồi vào **Trận lẻ · Đấu tập**:
 
@@ -39,6 +39,7 @@ Bàn phím là tay cầm PS2 ảo. Bảng đầy đủ nằm ở ⚙ › Phím �
 | Q / E | đi ngang (chỉ đế 4 bánh omni / mecanum) |
 | I J K L (hoặc 1 2 3 4) | nút △ □ ✕ ○ — hút, xả, nâng, cắm cờ… tuỳ robot |
 | U O Y P | nút L1 R1 L2 R2 |
+| giữ J (□), nhả ra | móc leo xà: giữ là giơ móc, nhả là kéo robot lên xà. Xe Cắm Cờ dùng O (R1) vì □ là kẹp cờ |
 
 Có tay cầm thật (gamepad) thì cắm vào máy là dùng được. Hai bạn chơi chung một máy: bật ⚙ › Hai bạn chơi, bàn phím
 chia đôi, mỗi bạn một nửa.
@@ -49,8 +50,22 @@ Trong trận:
   các dòng trôi lần lượt để em kịp đọc.
 - Thẻ robot bên trái nhắc khi robot sắp phạm luật (vươn ra ngoài rào, leo núi…).
 
+**Leo Thang Cứu Hỏa.** Mỗi liên minh có một thanh xà trên ô vàng ở góc sân. Vạch màu chia thanh làm hai đoạn: **Khu vực
+Đất** (gần rào) và **Khu vực Nước** (gần Khu Chữa Cháy). Lái robot tới ô vàng, quay theo thanh, giữ nút móc cho móc
+chạm thanh rồi nhả ra: robot được kéo lên và treo. Đang treo thì đẩy cần tiến / lùi để trượt dọc thanh. Phải bám ở đoạn
+Đất trước rồi mới trượt sang Nước; giơ móc lần nữa là robot rơi xuống. Mỗi thanh treo được 2 robot; leo thanh của liên
+minh kia không được tính.
+
+Leo không cộng điểm thẳng mà tăng **Hệ số nhân** của cả trận (hai liên minh chung điểm). Hệ số bắt đầu từ 1, lúc
+hết giờ mỗi robot cộng thêm: chạm thanh +0,05, treo ở Đất +0,10, treo ở Nước +0,20 — cả 4 robot treo ở Nước là × 1,80.
+Điểm nhiệm vụ là điểm bóng và cờ (trừ bóng sai). Điểm trận = **điểm nhiệm vụ × hệ số, làm tròn lên**, tức
+⌈điểm nhiệm vụ × hệ số⌉. Ví dụ 205 điểm nhiệm vụ, hệ số 1,55: 205 × 1,55 = 317,75, làm tròn lên thành 318. Bảng điểm
+ghi dạng "205 × 1,55" dưới điểm trận. Không còn đỗ xe hay pha cuối trận riêng: hết giờ robot đang treo ở đâu thì tính ở đó.
+
 Lái quen rồi thì thử **Giải đấu**: 8 đội, đúng luật FANROC, 1–2 bạn chơi. Giữa các trận em ở **Pit**, xem bảng xếp
-hạng, xem nhanh trận của máy, hoặc vào Xưởng sửa chương trình. Giải tự lưu, tắt app mở lại vẫn đấu tiếp được.
+hạng, xem nhanh trận của máy, hoặc vào Xưởng sửa chương trình. Hai đội bằng điểm thì đội có **Tổng Hệ số nhân** (cột
+"Hệ số") cao hơn xếp trên. Giải tự lưu, tắt app mở lại vẫn đấu tiếp được. Giải lưu từ bản cũ (trước luật V4) không đấu
+tiếp được — game báo và cho tạo giải mới.
 
 ## 2. Nhiệm vụ con rùa: lập trình robot từng bước
 
@@ -61,7 +76,7 @@ vụ chia 4 chặng. Làm theo thứ tự hay nhảy cóc đều được.
 |---|---|
 | 1 · Hai bánh xe | 1 Làm quen robot · 2 Đi thẳng · 3 Cong và xoay · 4 Đo robot |
 | 2 · Con rùa robot | 5 Khối "tiến (m)" · 6 Khối "rẽ phải/trái (độ)" · 7 Hình vuông · 8 Gỡ lỗi |
-| 3 · Việc trên sân | 9 Dọn Khu Chữa Cháy · 10 Cắm cờ · 11 Về Vùng Bảo Vệ |
+| 3 · Việc trên sân | 9 Dọn Khu Chữa Cháy · 10 Cắm cờ (Xe Cắm Cờ) · 11 Leo Thang Cứu Hỏa |
 | 4 · Thi đấu | 12 Trận đầu tiên |
 
 Mỗi nhiệm vụ diễn ra như sau:

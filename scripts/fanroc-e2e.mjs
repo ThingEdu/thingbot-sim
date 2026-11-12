@@ -4,7 +4,7 @@
  *
  *   npm run e2e:fanroc                 # tự bật Vite dev trên một cổng trống rồi chạy hết, tắt Vite:
  *     N3–N6, N6b–N6d, N2c (màn chính / ⚙ / Xưởng, Task 13) · N11, N11b, N11c (Luật chơi + Robot mẫu, Task 17) ·
- *     N7, N7b, N8 (nhiệm vụ, Task 14) · N8c (nhiệm vụ 11 Leo Thang Cứu Hỏa, luật V4) · N9, N9b–N9h, N10 (giải đấu, Task 15) · N1, N1b, N1c (vỏ, Task 11) ·
+ *     N7, N7b, N8 (nhiệm vụ, Task 14) · N8c (nhiệm vụ 11 Leo Thang Cứu Hỏa, luật V4) · N9, N9b–N9i, N10 (giải đấu, Task 15; N9i luật V4) · N1, N1b, N1c (vỏ, Task 11) ·
  *     N2, N2b (bảng điểm, Task 12) · E1–E4, E6–E11 (ý cũ của sân, viết lại theo giao diện mới ở Task 16; E5 Human
  *     Player bấm phím đã xoá cùng tính năng)
  *   FANROC_URL=http://localhost:5191/mo-phong/fanroc.html npm run e2e:fanroc   # dùng trang đang chạy sẵn
@@ -19,7 +19,7 @@ import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
 import { mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { ZONES } from '../src/fanroc/layout.ts'
+import { barYaw, pointAt } from '../src/fanroc/ladder.ts'
 import { climb, straight, turtle } from '../src/fanroc/missions/solutions.ts'
 import { MISSIONS } from '../src/fanroc/missions/data.ts'
 import { newTournament, playersIn, played, seatIds } from '../src/fanroc/ui/tournament.ts'
@@ -376,7 +376,7 @@ async function main() {
   // Không có E5: phép thử Human Player bấm phím Q/A/S/D đã xoá cùng tính năng (Task 10 bỏ KEYMAP, Human Player luôn
   // tự động — chốt 04/11). Luật nạp bóng P04–P07 có phép thử Node ở human.test.ts.
 
-  await test('E6 trận ×40 với 4 agent ⇒ HẾT GIỜ, bảng đội 4 dòng, màn kết quả: điểm trận = tổng các mục', async (page) => {
+  await test('E6 trận ×40 với 4 agent ⇒ HẾT GIỜ, bảng đội 4 dòng, màn kết quả: Điểm nhiệm vụ = tổng 6 mục, điểm trận = ⌈nhiệm vụ × hệ số⌉, 4 dòng leo xà', async (page) => {
     await open(page)
     await go(page, 'match')
     await seat(page, 0, 'agent-medium')
@@ -392,14 +392,26 @@ async function main() {
     const phase = await page.locator('.sb-phase').innerText()
     const rows = await page.locator('.fr-teams .fr-chk').count() // bảng đội (lỗi nhẹ / thẻ) ở thẻ Sự kiện trận
     const total = Number(await page.locator('.sb-result .sb-big').innerText())
-    // Bảng mục của màn kết quả: "+15", "−6", "0" (dấu trừ U+2212).
-    const items = (await page.locator('.sb-result [data-side="total"] .sb-row b').allInnerTexts()).map((t) => Number(t.replace('−', '-')))
+    // Luật V4: 6 mục cộng ("+15", "−6", "0"; dấu trừ U+2212) ra Điểm nhiệm vụ; rồi "Hệ số nhân × 1,55", (nếu nhân)
+    // "Điểm trận ⌈205 × 1,55⌉ = 318", rồi 4 dòng LEO XÀ "+0,20"… — không phải mọi dòng đều là số cộng.
+    const rowsOf = await page.locator('.sb-result [data-side="total"] .sb-row').evaluateAll((es) =>
+      es.map((e) => [e.querySelector('span')?.textContent ?? '', e.querySelector('b')?.textContent ?? '']),
+    )
+    const num = (t) => Number(t.replace('−', '-'))
+    const val = (label) => rowsOf.find(([l]) => l === label)?.[1]
+    const items = rowsOf.slice(0, 6).map(([, v]) => num(v))
     const sum = items.reduce((s, v) => s + v, 0)
-    const model = await page.evaluate(() => window.__fanroc.match.result().score.total)
+    const mission = num(val('Điểm nhiệm vụ') ?? 'NaN')
+    const pct = Math.round(Number((val('Hệ số nhân') ?? '').replace('× ', '').replace(',', '.')) * 100)
+    const want = mission > 0 ? Math.ceil((mission * pct) / 100) : mission
+    const climbRows = rowsOf.length - 8 - (val('Điểm trận') ? 1 : 0)
+    const model = await page.evaluate(() => window.__fanroc.match.result().score)
     expect(phase === 'HẾT GIỜ', `pha "${phase}"`)
     expect(rows === 4, `bảng đội ${rows} dòng`)
-    expect(items.length === 7 && total === sum && total === model, `điểm ${total}, tổng mục ${sum} (${items.join(' ')}), mô hình ${model}`)
-    return `190 s trận trong ${wall.toFixed(1)} s · điểm ${total} = ${items.join(' + ')}`
+    expect(sum === mission && mission === model.mission && pct === model.multPct, `mục ${items.join(' ')} = ${sum}, Điểm nhiệm vụ ${mission}, hệ số ${pct} (mô hình ${model.mission} × ${model.multPct})`)
+    expect(total === want && total === model.total, `điểm ${total}, ⌈${mission} × ${pct}%⌉ = ${want}, mô hình ${model.total}`)
+    expect(climbRows === 4, `${climbRows} dòng leo xà: ${rowsOf.map((r) => r.join(' ')).join(' | ')}`)
+    return `190 s trận trong ${wall.toFixed(1)} s · ${items.join(' + ')} = ${mission} × ${pct}% ⇒ ${total}`
   })
 
   await test('E7 "Tải về để nạp" tải tệp .tb giải nén ra project.json', async (page) => {
@@ -1079,10 +1091,16 @@ async function gameTests() {
     const rules = page.locator('.hm[data-screen="rules"]')
     await rules.waitFor()
     const cards = await rules.locator('.rl-card').evaluateAll((es) => es.map((e) => e.dataset.card))
-    expect(cards.join() === 'field,match,score,faults,tournament', `thẻ: ${cards.join()}`)
+    // Luật V4: thêm thẻ Leo Thang Cứu Hỏa (climb) sau thẻ Tính điểm.
+    expect(cards.join() === 'field,match,score,climb,faults,tournament', `thẻ: ${cards.join()}`)
     const r3 = await rules.locator('[data-card="score"] tr', { hasText: 'Rãnh 3' }).locator('td.v').innerText()
     expect(r3 === '+15', `Rãnh 3: "${r3}"`)
-    expect((await rules.locator('.rl-card svg').count()) === 5, 'thiếu hình SVG trên thẻ')
+    expect((await rules.locator('.rl-card svg').count()) === 6, 'thiếu hình SVG trên thẻ')
+    const climbCard = rules.locator('[data-card="climb"]')
+    const climbText = await climbCard.innerText()
+    expect(/Leo Thang Cứu Hỏa/.test(climbText) && /Nước/.test(climbText) && /Đất/.test(climbText), `thẻ leo: ${climbText.slice(0, 120)}`)
+    await climbCard.scrollIntoViewIfNeeded()
+    if (SHOTS) await climbCard.screenshot({ path: resolve(SHOTS, 'v4-rules-climb.png') })
     const faults = await rules.locator('[data-card="faults"]').innerText()
     expect(['P12', 'S02', 'P10', 'G15'].every((c) => faults.includes(c)), `thẻ lỗi: ${faults.slice(0, 80)}`)
     await shot(page, 't17-rules.png')
@@ -1116,7 +1134,8 @@ async function gameTests() {
     const info = await gal.locator('[data-role="info"]').innerText()
     expect(/Xe Cắm Cờ/.test(info) && /185 × 280 × 250 mm/.test(info) && /Vươn tay cờ/.test(info), `thông tin: ${info.slice(0, 120)}`)
     const ports = await gal.locator('[data-role="ports"] td:first-child').allInnerTexts()
-    expect(ports.join() === 'M1,M2,M4,S1,S2,S3', `cổng Xe Cắm Cờ: ${ports.join()}`)
+    // Luật V4: Xe Cắm Cờ có thêm móc leo xà ở S4 (□ vẫn là kẹp cờ).
+    expect(ports.join() === 'M1,M2,M4,S1,S2,S3,S4', `cổng Xe Cắm Cờ: ${ports.join()}`)
     // Vùng khối chỉ xem: kéo khối không được, không có hộp công cụ.
     const ro = await page.evaluate(() => document.querySelectorAll('.rg-ws .blocklyToolboxDiv, .rg-ws .blocklyFlyout').length === 0)
     expect(ro, 'vùng khối Robot mẫu có hộp công cụ')
@@ -1427,7 +1446,7 @@ async function tournamentTests() {
     t.schedule.forEach((slot, i) => {
       const ids = seatIds(slot)
       const score = 100 + ((i * 37) % 90)
-      t = record(t, i, played(ids, ids.map((id) => ({ score: id === 'p0' ? score + 40 : score, penalty: 0 })), score))
+      t = record(t, i, played(ids, ids.map((id) => ({ score: id === 'p0' ? score + 40 : score, penalty: 0 })), score, 140))
     })
     await open(page)
     await page.evaluate((v) => window.__fanroc.store.saveTournament(v), t)
@@ -1448,11 +1467,49 @@ async function tournamentTests() {
     return `bục ${steps.join(' · ')} · bảng ${rows} dòng · Giải mới ⇒ ghi danh`
   })
 
+  await test('N9i luật V4: giải lưu từ bản 0.8 (không có hệ số) ⇒ "Giải này đấu theo luật cũ (trước V4)." + Giải mới; Pit có cột "Hệ số" (1,20 cho đội đã đấu một trận × 1,20)', async (page) => {
+    const seed = findSeed(1, (t) => playersIn(t, 0).length === 0)
+    let t = newTournament({ names: ['Bạn 1', 'Bạn 2'], cfgs: [MAKER, MAKER], players: 1, perTeam: 4, seed })
+    const ids = seatIds(t.schedule[0])
+    t = record(t, 0, played(ids, ids.map(() => ({ score: 222, penalty: 0 })), 222, 120))
+    const reloadHome = async () => {
+      await page.reload()
+      await page.waitForFunction(() => window.__fanroc?.editors && window.__fanroc.screen === 'home', null, { timeout: 60000 })
+    }
+    // Giải lưu từ bản 0.8: kết quả trận không có multPct (ghi qua store của game, khoá fanroc.v1.). Làm trước Pit để
+    // không đua với trận máy chạy ngầm.
+    const old = { ...t, results: t.results.map((r) => (r ? { teams: r.teams, matchScore: r.matchScore } : null)) }
+    await open(page)
+    await page.evaluate((v) => window.__fanroc.store.saveTournament(v), old)
+    await reloadHome()
+    await page.locator('.hm-tile[data-tile="tournament"]').click()
+    await page.waitForFunction(() => window.__fanroc.tour.view === 'old')
+    const note = await tn(page).locator('[data-role="old-rules"]').innerText()
+    expect(note === 'Giải này đấu theo luật cũ (trước V4).', `màn giải cũ: "${note}"`)
+    await shot(page, 'v4-giai-luat-cu.png')
+    await tn(page).locator('button', { hasText: 'Giải mới' }).click()
+    await page.waitForFunction(() => window.__fanroc.tour.view === 'register')
+    expect((await page.evaluate(() => window.__fanroc.store.tournament())) === null, 'Giải mới mà giải luật cũ còn lưu')
+    // Giải luật V4 đã đấu trận 1 với hệ số 1,20 ⇒ Pit, cột Hệ số.
+    await page.evaluate((v) => window.__fanroc.store.saveTournament(v), t)
+    await reloadHome()
+    await page.locator('.hm-tile[data-tile="tournament"]').click()
+    await page.waitForFunction(() => window.__fanroc.tour.view === 'pit')
+    const table = tn(page).locator('[data-role="standings"]')
+    const heads = await table.locator('th').allInnerTexts()
+    const col = heads.indexOf('Hệ số')
+    const mults = await table.locator('tr[data-id]').evaluateAll((trs, c) => trs.map((tr) => [tr.dataset.id, tr.children[c]?.textContent]), col)
+    const played4 = mults.filter(([id]) => ids.includes(id))
+    expect(col >= 0 && played4.length === 4 && played4.every(([, m]) => m === '1,20'), `cột: ${heads.join(' | ')} · hệ số ${mults.map((m) => m.join(':')).join(' ')}`)
+    await shot(page, 'v4-pit-he-so.png')
+    return `giải 0.8 ⇒ "${note}" · Giải mới ⇒ ghi danh · cột Hệ số: ${played4.map(([id, m]) => `${id} ${m}`).join(', ')}`
+  })
+
   await test('N9d Pit: Xem nhanh trận máy ×40 (không ghi thêm) ⇒ Về Pit; Vào Xưởng (robot giữ nguyên) ⇒ Lưu ⇒ tự về Pit, nhãn "Của em v1"', async (page) => {
     const seed = findSeed(1, (t) => playersIn(t, 0).length === 0)
     let t = newTournament({ names: ['Bạn 1', 'Bạn 2'], cfgs: [MAKER, MAKER], players: 1, perTeam: 4, seed })
     const ids = seatIds(t.schedule[0])
-    t = record(t, 0, played(ids, ids.map(() => ({ score: 222, penalty: 0 })), 222))
+    t = record(t, 0, played(ids, ids.map(() => ({ score: 222, penalty: 0 })), 222, 120))
     await open(page)
     await page.evaluate((v) => window.__fanroc.store.saveTournament(v), t)
     await page.reload()
@@ -1491,7 +1548,7 @@ async function tournamentTests() {
     const seed = findSeed(1, (t) => playersIn(t, 0).length === 1 && !playersIn(t, 1).length && !playersIn(t, 2).length)
     let t = newTournament({ names: ['Bạn 1', 'Bạn 2'], cfgs: [MAKER, MAKER], players: 1, perTeam: 4, seed })
     const ids = seatIds(t.schedule[0])
-    t = record(t, 0, played(ids, ids.map(() => ({ score: 150, penalty: 0 })), 150))
+    t = record(t, 0, played(ids, ids.map(() => ({ score: 150, penalty: 0 })), 150, 110))
     await open(page)
     await page.evaluate((v) => window.__fanroc.store.saveTournament(v), t)
     await page.reload()
@@ -1842,22 +1899,46 @@ async function shellTests() {
     return `đếm ngược ${counts.join(' · ')} · tổng ${shown} · đỏ ${red.join('/')} · xanh ${blue.join('/')}`
   })
 
-  await test('N2b vào Vùng Bảo Vệ: bảng điểm lên "Đỗ 10", không hiện chữ báo điểm nổi; thanh chạy nằm dưới bảng điểm', async (page) => {
+  await test('N2b leo Thang Cứu Hỏa bằng bàn phím (luật V4): giữ J ⇒ Chạm "× 1,05"; nhả ⇒ treo Đất "× 1,10"; giữ W ⇒ trượt sang Nước "× 1,20"; không chữ nổi; thanh chạy dưới bảng điểm', async (page) => {
     await open(page)
     await go(page, 'match')
     await quietOthers(page)
     await skipRelease(page)
-    const s = ZONES.safe.red
-    await page.evaluate((p) => window.__fanroc.robots[0].setPose(p), { x: (s.x0 + s.x1) / 2, z: (s.z0 + s.z1) / 2, yaw: 0 })
-    await page.locator('.sb [data-side="red"] .sb-hd span', { hasText: 'Đỗ 10' }).waitFor({ timeout: 3000 })
-    await page.waitForTimeout(300)
+    // Robot 1 (Mẫu Maker, móc S2 / nút □ = phím J) đứng dưới thanh Đỏ ở đoạn Đất, mũi xe hướng dọc thanh sang Nước.
+    const at = pointAt('red', 0.4)
+    await page.evaluate((p) => window.__fanroc.robots[0].setPose(p), { x: at.x, z: at.z, yaw: barYaw('red') })
+    await page.waitForTimeout(200)
+    const mult = () => page.locator('.sb .sb-mult').evaluate((e) => (e.hidden ? '' : e.textContent))
+    const level = () => page.evaluate(() => window.__fanroc.robots[0].climbLevel.level)
+    const until = async (want, label) => {
+      const t0 = Date.now()
+      while (Date.now() - t0 < 5000) {
+        if ((await level()) === want) return
+        await page.waitForTimeout(100)
+      }
+      throw new Error(`${label}: mức leo "${await level()}", bảng điểm "${await mult()}"`)
+    }
+    await page.keyboard.down('KeyJ')
+    await until('contact', 'giữ J')
+    await page.waitForTimeout(400)
+    const m1 = await mult()
+    await page.keyboard.up('KeyJ')
+    await until('ground', 'nhả J')
+    await page.waitForTimeout(400)
+    const m2 = await mult()
+    await page.keyboard.down('KeyW')
+    await until('water', 'giữ W khi treo')
+    await page.keyboard.up('KeyW')
+    await page.waitForTimeout(400)
+    const m3 = await mult()
+    expect(/× 1,05$/.test(m1) && /× 1,10$/.test(m2) && /× 1,20$/.test(m3), `dòng hệ số: "${m1}" → "${m2}" → "${m3}"`)
     const pops = await page.locator('.sb-pop').count()
     expect(pops === 0, `còn ${pops} chữ báo điểm nổi (anh Tuấn 10/11: bỏ)`)
     const sb = await page.locator('.sb').boundingBox()
     const run = await page.locator('.sh-run').boundingBox()
     expect(run.y >= sb.y + sb.height, `thanh chạy y=${run.y} đè bảng điểm (đáy ${sb.y + sb.height})`)
     if (SHOTS) await page.screenshot({ path: resolve(SHOTS, 't12-match.png') })
-    return `bảng điểm đáy ${Math.round(sb.y + sb.height)} px, thanh chạy ${Math.round(run.y)} px · không chữ nổi`
+    return `"${m1}" → "${m2}" → "${m3}" · bảng điểm đáy ${Math.round(sb.y + sb.height)} px, thanh chạy ${Math.round(run.y)} px · không chữ nổi`
   })
 }
 

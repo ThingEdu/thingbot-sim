@@ -1,9 +1,12 @@
-# FANROC Thanh Hỏa / ThingBot FanRoc Game — các điều đã tự quyết khi thi công (R1–R139)
+# FANROC Thanh Hỏa / ThingBot FanRoc Game — các điều đã tự quyết khi thi công (R1–R154)
 
 Đợt 1 (R1–R34) thi công ngày 03/11/2026 theo kế hoạch `docs/superpowers/plans/2026-11-03-fanroc-sim.md`
 và đặc tả `docs/superpowers/specs/2026-11-03-fanroc-sim-design.md`; đợt 2 — giao diện game "ThingBot FanRoc Game"
 (R35–R124, sửa sau rà soát tổng R125–R133) — ngày 04/11/2026 theo kế hoạch `docs/superpowers/plans/2026-11-04-fanroc-game.md` và đặc tả
-`docs/superpowers/specs/2026-11-03-fanroc-ui-nhiem-vu-design.md` (xem mục cuối). Nhánh `feat/fanroc`.
+`docs/superpowers/specs/2026-11-03-fanroc-ui-nhiem-vu-design.md` (xem mục cuối); đợt 3 — luật V4 (R143–R154) ngày
+12/11/2026 theo kế hoạch `docs/superpowers/plans/2026-11-12-fanroc-luat-v4.md` và đặc tả
+`docs/superpowers/specs/2026-11-12-fanroc-luat-v4-design.md` (mục "Luật V4" gần cuối). Nhánh `feat/fanroc`.
+Các mục cũ nói về Vùng Bảo Vệ / đỗ xe / End Game / Mẫu Maker cắm cờ (R2, R11, R19, R137…) là lịch sử: luật V4 đã bỏ.
 Khi đặc tả và kế hoạch không trả lời, em tự quyết và ghi lại ở đây kèm cái giá nếu quyết sai,
 để anh duyệt lại và đổi được.
 
@@ -251,6 +254,26 @@ Mục nên xem trước: **R37, R57/R59, R96, R56, R83, R94, R103, R106, R115/R1
 | R141 | Anh chốt 06/11: bóng của Mẫu Maker nằm trong lồng ống và đi theo đường cong của ống (ống đứng x 58 / z 43 cong xuống vòng cửa ra trước thân, cadModel.ts BALL_CHUTE); servo S3 là nút xả ở cửa ra; robot mẫu không có cơ cấu nâng hạ lồng nên chỉ tới Rãnh 1. Bóng xả ra ở vòng cửa ra (RobotDef.chute: 100 mm trước tâm, cao 93 mm) thay cho điểm xả cũ trên mũi thanh răng. Điểm 4 Mẫu Maker: Dễ 211 / Vừa 224 / Khó 246; Nhiệm vụ 12: ⭐⭐ ≥ 180, ⭐⭐⭐ ≥ 230 | Đường giữa ống em đo trên lưới CAD đã giản lược (ước ±10 mm) |
 | R142 | Anh chọn 06/11: làm mẫu cải tiến Maker chỉ từ linh kiện trong CAD "Bộ thingbot mới", khắc phục cả 4 điểm yếu. Ba mẫu mới (robots.ts): **Maker Nâng** — servo MG996R ở S1 (thay "nâng tay") nâng vòng cửa ra từ cao 93 mm trong thân tới 210 mm, vượt mũi 130 mm (RobotDef.chuteLift) ⇒ Rãnh 1 / 2 / 3 ở S1 = 0 / 120 / 180°; **Maker Hút** — con lăn hút động cơ TT ở M3 trước mũi + ống lồng nối dài lên 350 mm (8 bóng); **Maker Pro** — cả hai, mặc định đế 4 bánh omni (M1–M4 bánh, con lăn S4 và thanh răng S5 servo 360, đủ 4 động cơ + 5 servo). Mẫu Maker gốc: vòng cửa ra đứng yên (bỏ "thanh răng kéo dây nhấc vòng" vì anh nói robot mẫu không có cơ cấu nâng hạ). Một trận Khó, 4 robot cùng mẫu, seed 1: Mẫu Maker 235 / Maker Nâng 451 / Maker Hút 421 / Maker Pro 637 | Phần cải tiến vẽ bằng khối đơn giản (servo, cần nâng, máng hai thanh, con lăn, ống nối dài), chưa có CAD thật; thanh răng lùi hết + cửa lồng nâng hết cùng lúc quá trần mở rộng 500 mm (bảng luật báo đỏ, robot máy không làm vậy) |
 
+### Luật V4 — Thang Cứu Hỏa, Hệ số nhân (12/11)
+
+Luật FANROC 2026–2027 bản V4 (cập nhật 07/11/2026): bỏ Vùng Bảo Vệ, đỗ xe và End Game; thêm Thang Cứu Hỏa (leo xà)
+và Hệ số nhân; bóng cam ở tầng trang trí bị trừ. Anh chốt 12/11: họ Maker bỏ cắm cờ, cổng S2 thành móc leo xà.
+
+| # | Đã quyết | Nếu sai thì |
+|---|---|---|
+| R143 | Thanh xà theo CAD "Full sân Fanroc" của ThingEdu (anh gửi 12/11): Part 38 ống Ø20 dài 1,400 m giữa tâm hai cột, trục cao 0,6575; Part 34 cột nhôm hộp 20×20 cao 0,638; Part 37 kẹp trụ Ø35 cao 65 mm (y 0,608…0,673). CAD là chi tiết rời không có vị trí lắp, nên đặt theo Hình 1 của luật: cột phía Hộp Phân Phối ở (∓0,202; −1,19), cột phía rào bên ở (∓1,19; −0,198). Vạch Đất / Nước đặt ở chỗ thanh cắt mép Khu Chữa Cháy (z −0,6088), cách đầu rào ≈ 0,580 m, vì luật nói vạch "ngay trên ranh giới Khu Chữa Cháy" và chỉ gọi 430 / 870 là số tham khảo. Thay cho số 1,300 / 0,430 em chọn lúc đầu | Đoạn Đất dài hơn số tham khảo (0,58 so với 0,43); đổi một hằng trong `layout.ts` |
+| R144 | Thanh răng M4 của họ Maker vẫn là cơ cấu thật: phần răng trượt (không còn giá cờ) vẫn tính vào trần mở rộng, footprint và S02 như bản 0.8 — đặc tả giữ hình CAD và luật mở rộng 500 mm áp cho mọi phần trượt | Maker vẫn có thể bị S02 khi dùng thanh răng sai (như bản 0.8) |
+| R145 | `RobotBody.peers` mặc định rỗng; trận đấu nối danh sách robot cùng thanh khi dựng trận | — |
+| R146 | Ngưỡng ⭐ nhiệm vụ 9 (bóng xanh còn trong Khu Chữa Cháy) 28 → 33: cột thanh xà mới làm bóng xả rơi khác với cùng seed (47 bóng xanh lúc đầu thay vì 38; một lượt quét còn 29 thay vì 24), giữ biên +4 như cũ | ⭐ nhiệm vụ 9 dễ hơn chút; một con số |
+| R147 | Phép thử nhật ký leo trong `match.test` lái 3,5 s thay 2,5 s để vượt vạch mới ≈ 0,58 — do hình học đổi, không phải nới phép thử | — |
+| R148 | Robot máy leo cuối trận bám ở s = 0,565 / 0,265 (dọc thanh, tính từ đầu rào), không theo thứ tự cố định; thứ tự chỉ ép khi đang trượt. Khó trượt sang Nước (s 1,05 / 0,70), Vừa dừng ở 0,58 (vừa dưới vạch, Đất), Dễ chỉ chạm. Bám ở 0,15–0,2 bị thẻ vàng S02 ngay vì sát rào, và ép thứ tự bám thì hai robot chờ nhau mãi — kế hoạch ghi "Vừa cả hai ở 0,2" là không làm được vì hai robot cách nhau ≥ 0,3 | Chỉnh lại vài con số trong `agent.ts` |
+| R149 | Robot máy lùi ở chỗ chật (hành lang giữa các núi) cho mọi việc, không chỉ lúc đi leo — giới hạn chỉ cho lúc leo làm Mẫu Maker Dễ kẹt giữa núi, seed 1 tụt từ 237 xuống −9 | Mọi trận có robot máy đổi điểm so với bản 0.8 |
+| R150 | Auto mẫu của mọi robot phải leo tới Nước (không chấp nhận chỉ Đất), thời gian trượt tăng để qua vạch ≥ ~0,15 m mà chưa chạm cuối thanh — biên 0,06 m làm phép thử chặt hơn dễ gãy | Một con số trong `programs.ts` |
+| R151 | Nhiệm vụ 11: "treo và đứng yên ≥ 1 s cũng tính là dừng hẳn" chỉ áp khi đã ở Nước (không tiến thêm được). Ở Đất thì theo luật dừng thường: chương trình còn chạy (còn «đợi») là chạy tiếp, để không cắt ngang lúc em đang chờ rồi mới trượt | Chương trình dừng ở Đất kèm «đợi» dài thì chấm muộn hơn (≤ maxTime 60 s) |
+| R152 | Điểm âm: chỉ nhân hệ số khi điểm nhiệm vụ > 0; điểm đội thấp nhất vẫn là 0. Hệ số lưu số nguyên phần trăm (100…180), điểm = ⌈nhiệm vụ × % / 100⌉ | Luật không nói điểm âm nhân thế nào |
+| R153 | Giải: hoà điểm xét Tổng Hệ số nhân các trận được tính, rồi trận cao nhất, ít phạt, bốc thăm. Giải lưu từ bản trước V4 (không có hệ số) báo "Giải này đấu theo luật cũ (trước V4)." và cho tạo giải mới, không chuyển đổi; giải cũ đã xong cũng mất bục trao giải | Mất giải đang đấu dở của bản 0.8 |
+| R154 | Số đo robot máy sau luật V4 (commit 3faaf9c, headless, 4 robot cùng mẫu, seed 1–3; điểm = nhiệm vụ × hệ số). Mẫu Maker: Dễ 237 / 89 / 240 (TB 188,7; 6 seed 118,2), Vừa 89 / 189 / 261 (TB 179,7; 6 seed 151,2), Khó 290 (161 × 1,80) / 141 / 252 (TB 227,7; 6 seed 228,5). Maker Pro omni Khó 1331 (739 × 1,80) / 1316 / 1120. Leo đúng mức seed 1–3: Mẫu Maker 12/12 mỗi mức, Maker Pro 11/12 Nước. Nhiệm vụ 12: Dễ seed 1–12 TB 106 (từ 4 tới 238) ⇒ ⭐⭐ ≥ 90, ⭐⭐⭐ ≥ 120 (trước 180 / 230) | Ngưỡng nhiệm vụ 12 phụ thuộc seed sân nhiều; Vừa seed 5 cả 4 robot kẹt làn bên, không leo được |
+
 ### Việc còn chờ anh
 
 - Mở thử 4 tệp `.tb` xuất ra trong ThingBlock desktop (kiểm bằng mắt, R41).
@@ -262,4 +285,6 @@ Mục nên xem trước: **R37, R57/R59, R96, R56, R83, R94, R103, R106, R115/R1
 - Chưa hiện cờ theo liên minh (R83).
 - Lỗi chung ở `src/blocks.ts` (`setToolbox` dùng lại khối cũ của khay khối khi đổi hộp công cụ) ảnh hưởng bài học robot.edu.vn — game đã tự tránh trong `editor.ts`, tệp chung chưa sửa.
 - Mã Arduino của khối của em có ô số chưa đúng trên ThingBot thật (R37) — cần sửa ở ThingBlock gốc.
+- Luật V4: ngưỡng sao nhiệm vụ 12 (90 / 120) lệ thuộc seed sân (Dễ 4…238) — anh xem có cần cố định seed (R154).
+- Luật V4: robot máy Vừa đôi khi kẹt cả 4 ở làn bên rào nên không leo (seed 5), chưa sửa (R154).
 - Push nhánh `feat/fanroc` trước khi phát hành công khai, để đường dẫn mã nguồn AGPL trong game trỏ tới đúng mã đang chạy.
