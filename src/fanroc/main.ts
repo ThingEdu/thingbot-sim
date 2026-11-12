@@ -35,7 +35,7 @@ import { createScene, defaultQuality, type CameraView, type Quality } from './vi
 import { createHud, deadZoneLines } from './view/hud.ts'
 import { countdownCue, createScoreboard, MULT_POP, programLabel, resultView, ScoreTicker } from './ui/scoreboard.ts'
 import { createSound } from './ui/sound.ts'
-import { createStore } from './store.ts'
+import { createStore, OLD_PROGRAM_TEXT, oldRulesProgram } from './store.ts'
 import { FANROC_2026 } from './season.ts'
 import { createShell, highlightCpp, serialNews, serialPatch, type InputKind, type SerialMark } from './ui/shell.ts'
 import { chrome, defaultCamera, type Screen } from './ui/router.ts'
@@ -170,6 +170,8 @@ async function start(): Promise<void> {
     const e = tourEntrant(p)
     return programText(e ? store.program(p, e.robot) : null)
   }
+  /** Cảnh báo luật cũ cho chương trình đã lưu của bạn p ở robot cfg (bản lưu 0.8 của họ Maker: S2 nay là móc). */
+  const oldWarn = (p: Player, cfg: RobotConfig): string | null => (oldRulesProgram(store.program(p, cfg), cfg) ? OLD_PROGRAM_TEXT : null)
   const tourProgram = (p: Player) => {
     const e = tourEntrant(p)
     const cfg = e?.robot ?? cfgOf(p)
@@ -585,6 +587,7 @@ async function start(): Promise<void> {
       alliance: settings.alliance, skill: settings.skill, runMine,
       draft: (p, cfg) => drafts.has(p, cfg),
       draftMsg: pickMsg,
+      warn: (p, cfg) => (runMine ? oldWarn(p, cfg) : null),
     }),
     {
       saveDraft(p, cfg) {
@@ -722,7 +725,10 @@ async function start(): Promise<void> {
   let shownDirty = false
   const showWorkshop = () => {
     shownDirty = wsDirty()
-    wsBar.show({ player: wsPlayer, players: players(), names, label: shownDirty ? 'Chưa lưu' : programText(saved(wsPlayer), true), tournament: wsReturn === 'tournament' })
+    wsBar.show({
+      player: wsPlayer, players: players(), names, label: shownDirty ? 'Chưa lưu' : programText(saved(wsPlayer), true), tournament: wsReturn === 'tournament',
+      warn: oldWarn(wsPlayer, cfgOf(wsPlayer)),
+    })
   }
   // Nhãn Xưởng đổi "Chưa lưu" ⇄ "Của em vN / Mặc định" khi vùng khối đổi (chờ 200 ms, chỉ vẽ lại khi trạng thái đổi).
   let dirtyTimer = 0
@@ -1108,6 +1114,10 @@ async function start(): Promise<void> {
       ...(tourSaveFailed ? [{ text: SAVE_TOUR_FAILED, ok: false }] : []),
       ...(machineError ? [{ text: `Không chơi được trận máy: ${machineError}`, ok: false, retry: { label: 'Thử lại', run: retryMachines } }] : []),
       ...(tourNote ? [tourNote] : []),
+      ...t.entrants.flatMap((e) => {
+        const w = e.kind === 'player' ? oldWarn(e.player ?? 0, e.robot) : null
+        return w ? [{ text: `${e.name}: ${w}`, ok: false }] : []
+      }),
     ],
     players: t.entrants.flatMap((e) => (e.kind === 'player' ? [{ player: e.player ?? 0, name: e.name }] : [])),
   })
@@ -1120,7 +1130,7 @@ async function start(): Promise<void> {
     if (tour && v === 'pit' && nextMatch(tour) === null) v = 'podium'
     setPlayersCount(tour ? tourPlayers(tour) : reg.players)
     if (v === 'register')
-      tScreen.register({ players: reg.players, perTeam: reg.perTeam, names, cfg: cfgOf, program: (p) => programText(saved(p)), controls: (p) => tControls[p] })
+      tScreen.register({ players: reg.players, perTeam: reg.perTeam, names, cfg: cfgOf, program: (p) => programText(saved(p)), warn: (p) => oldWarn(p, cfgOf(p)), controls: (p) => tControls[p] })
     else if (v === 'keytest') {
       const st = seats.read().status
       tScreen.keytest(names, [padText(st[0], 1), padText(st[1], 2)])

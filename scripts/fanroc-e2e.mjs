@@ -1004,6 +1004,34 @@ async function gameTests() {
     return `"${msg}"`
   })
 
+  await test('N6d chương trình Mẫu Maker lưu từ 0.8 (không dấu luật) ⇒ Xưởng + Trước trận báo luật cũ; Về mặc định ⇒ hết báo', async (page) => {
+    await open(page)
+    // Bản ghi đúng dạng 0.8 lưu (cùng khoá fanroc.v1., không có trường rules): lấy chương trình mẫu hiện có làm nội dung.
+    await page.evaluate(() => {
+      const state = window.__fanroc.editors.program(0)
+      localStorage.setItem('fanroc.v1.fanroc-2026.workshop', JSON.stringify({ '0:maker/diff2/tt': { version: 2, state } }))
+    })
+    await go(page, 'workshop')
+    const ws = page.locator('.ws-bar')
+    await ws.waitFor()
+    const warn = ws.locator('[data-role="old-program"]')
+    expect(await warn.isVisible(), 'Xưởng không báo luật cũ')
+    const text = await warn.innerText()
+    expect(/luật cũ/.test(text) && /Về mặc định/.test(text) && /S2/.test(text), `báo: "${text}"`)
+    await go(page, 'home')
+    await page.locator('.hm-tile[data-tile="match"]').click()
+    const pk = page.locator('.hm[data-screen="pick"] [data-role="old-program"]')
+    expect(await pk.isVisible(), 'Trước trận không báo luật cũ')
+    await go(page, 'workshop')
+    await ws.locator('button', { hasText: 'Về mặc định' }).click()
+    expect((await ws.locator('[data-role="old-program"]').count()) === 0, 'Về mặc định rồi vẫn báo luật cũ')
+    await ws.locator('button', { hasText: 'Lưu cho robot của em' }).click()
+    expect((await ws.locator('[data-role="old-program"]').count()) === 0, 'lưu lại (có dấu V4) vẫn báo luật cũ')
+    const rec = await page.evaluate(() => JSON.parse(localStorage.getItem('fanroc.v1.fanroc-2026.workshop'))['0:maker/diff2/tt'])
+    expect(rec?.rules === 4, `bản lưu mới: ${JSON.stringify(rec && { version: rec.version, rules: rec.rules })}`)
+    return `"${text}" · Về mặc định / lưu lại ⇒ hết báo, rules ${rec.rules}`
+  })
+
   await test('N6c Xưởng: bản đang sửa chưa lưu được giữ; Trước trận nhắc "chưa lưu" + Lưu / Bỏ; vào lại Xưởng ⇒ "Chưa lưu"', async (page) => {
     await open(page)
     await page.locator('.hm-tile[data-tile="workshop"]').click()

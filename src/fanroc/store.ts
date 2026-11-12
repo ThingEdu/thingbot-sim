@@ -21,7 +21,26 @@ export const keys = (season: string) => ({
 export type Settings = { quality?: Quality; sound: boolean; skill: Skill; alliance: Alliance; robot: RobotConfig; robot2: RobotConfig; layout2p: boolean; teacher: boolean }
 export type MissionProgress = { done: boolean; stars: 0 | 1 | 2 | 3; program: object | null }
 export type Profile = { names: [string, string]; stars: number }
-type ProgramRec = { version: number; state: object }
+/**
+ * Chương trình lưu ở Xưởng. `rules` = luật lúc lưu (PROGRAM_RULES); bản lưu trước luật V4 không có trường này.
+ * Khoá / tiền tố `fanroc.v1.` giữ nguyên: bản cũ vẫn đọc được, chỉ được nhận ra là "luật cũ" (oldRulesProgram).
+ */
+export type ProgramRec = { version: number; state: object; rules?: number }
+
+/** Dấu luật ghi vào mỗi chương trình lưu ở Xưởng (luật V4). */
+export const PROGRAM_RULES = 4
+
+/** Dòng báo khi chương trình họ Maker lưu theo luật cũ (anh Tuấn chốt: báo, KHÔNG tự đổi chương trình). */
+export const OLD_PROGRAM_TEXT =
+  'Chương trình lưu theo luật cũ: S2 nay là móc leo xà (180° = giơ móc). Ở Xưởng lập trình bấm Về mặc định để lấy chương trình mẫu mới.'
+
+/**
+ * Chương trình đã lưu của họ Maker từ trước luật V4 (không có dấu `rules`): khi đó S2 là kẹp cờ, TeleOp mẫu để S2 = 180
+ * lúc chờ — nay S2 là móc leo xà nên chương trình cũ chạy móc ngược. Robot khác không đổi nghĩa cổng nào ⇒ false.
+ */
+export function oldRulesProgram(rec: ProgramRec | null, cfg: RobotConfig): boolean {
+  return rec !== null && ROBOTS[cfg.type].cad === 'maker' && !(typeof rec.rules === 'number' && rec.rules >= PROGRAM_RULES)
+}
 
 export interface Store {
   settings(): Settings
@@ -150,14 +169,14 @@ export function createStore(season: string, kvArg?: KV | null): Store {
     program(player, cfg) {
       const r = record(K.workshop)[programKey(player, cfg)]
       if (!isObj(r) || typeof r.version !== 'number' || !isObj(r.state)) return null
-      return { version: r.version, state: r.state }
+      return typeof r.rules === 'number' ? { version: r.version, state: r.state, rules: r.rules } : { version: r.version, state: r.state }
     },
     saveProgram(player, cfg, state) {
       const all = record(K.workshop)
       const key = programKey(player, cfg)
       const prev = all[key]
       const version = (isObj(prev) && typeof prev.version === 'number' ? prev.version : 0) + 1
-      writeJSON(K.workshop, { ...all, [key]: { version, state } })
+      writeJSON(K.workshop, { ...all, [key]: { version, state, rules: PROGRAM_RULES } })
       return version
     },
     resetProgram(player, cfg) {

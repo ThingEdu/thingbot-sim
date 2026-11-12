@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createStore, defaultSettings, keys, type KV } from './store.ts'
+import { createStore, defaultSettings, keys, oldRulesProgram, PROGRAM_RULES, type KV } from './store.ts'
 import { defaultConfig } from './programs.ts'
 import { FANROC_2026 } from './season.ts'
 import { createTournament, isOldRules, record, type TournamentState } from './tournament.ts'
@@ -120,14 +120,40 @@ test('chương trình: version tăng, tách người chơi và loại robot, res
   const s = createStore('s', fake())
   assert.equal(s.saveProgram(0, maker, { a: 1 }), 1)
   assert.equal(s.saveProgram(0, maker, { a: 2 }), 2)
-  assert.deepEqual(s.program(0, maker), { version: 2, state: { a: 2 } })
+  assert.deepEqual(s.program(0, maker), { version: 2, state: { a: 2 }, rules: PROGRAM_RULES })
   assert.equal(s.program(0, ui), null)
   assert.equal(s.program(1, maker), null)
   s.saveProgram(1, maker, { b: 1 })
   s.resetProgram(0, maker)
   assert.equal(s.program(0, maker), null)
-  assert.deepEqual(s.program(1, maker), { version: 1, state: { b: 1 } })
+  assert.deepEqual(s.program(1, maker), { version: 1, state: { b: 1 }, rules: PROGRAM_RULES })
   assert.equal(s.saveProgram(0, maker, {}), 1)
+})
+
+test('dấu luật: bản lưu từ 0.8 (không có rules) vẫn đọc được, nhận ra là luật cũ với họ Maker; lưu lại thì có dấu V4', () => {
+  const kv = fake()
+  const k = keys('s').workshop
+  // Bản ghi đúng như 0.8 lưu (cùng khoá fanroc.v1., không có trường rules).
+  kv.m.set(k, JSON.stringify({ '0:maker/diff2/tt': { version: 3, state: { old: 1 } }, '0:ui/diff2/tt': { version: 1, state: { u: 1 } } }))
+  const s = createStore('s', kv)
+  const old = s.program(0, maker)
+  assert.deepEqual(old, { version: 3, state: { old: 1 } })
+  assert.equal(oldRulesProgram(old, maker), true)
+  assert.equal(oldRulesProgram(s.program(0, ui), ui), false, 'Xe Ủi không đổi nghĩa cổng nào')
+  assert.equal(s.saveProgram(0, maker, { fixed: 1 }), 4)
+  assert.equal(oldRulesProgram(s.program(0, maker), maker), false)
+  assert.deepEqual(JSON.parse(kv.m.get(k)!)['0:maker/diff2/tt'], { version: 4, state: { fixed: 1 }, rules: 4 })
+})
+
+test('oldRulesProgram: họ Maker (Mẫu Maker / Nâng / Hút / Pro) không dấu ⇒ true; có dấu ≥ 4, chưa lưu, hay robot khác ⇒ false', () => {
+  for (const type of ['maker', 'makerLift', 'makerIntake', 'makerPro'] as const) {
+    const cfg = { type, drive: 'diff2', actuator: 'tt' } as const
+    assert.equal(oldRulesProgram({ version: 1, state: {} }, cfg), true, type)
+    assert.equal(oldRulesProgram({ version: 1, state: {}, rules: 3 }, cfg), true, `${type} luật 3`)
+    assert.equal(oldRulesProgram({ version: 1, state: {}, rules: 4 }, cfg), false, type)
+    assert.equal(oldRulesProgram(null, cfg), false, type)
+  }
+  for (const type of ['ui', 'co', 'sort'] as const) assert.equal(oldRulesProgram({ version: 1, state: {} }, { type, drive: 'diff2', actuator: 'tt' }), false, type)
 })
 
 test('chỉ ghi khoá có tiền tố fanroc.v1.', () => {

@@ -361,6 +361,8 @@ export interface PickState {
   draft(p: 0 | 1, cfg: RobotConfig): boolean
   /** Dòng báo sau khi bấm Lưu bản nháp (null = không có). */
   draftMsg: { text: string; ok: boolean } | null
+  /** Cảnh báo cho chương trình đã lưu của bạn p với robot cfg (vd. lưu theo luật cũ); null = không có. */
+  warn?(p: 0 | 1, cfg: RobotConfig): string | null
 }
 
 export interface PickActions {
@@ -457,6 +459,13 @@ export function createPick(root: HTMLElement, get: () => PickState, act: PickAct
     if (v !== null) {
       rows.push(row('Robot của em chạy', segment([['mine', `Của em v${v}`], ['default', 'Mặc định']], s.runMine ? 'mine' : 'default', (m) => act.setRunMine(m === 'mine'))))
     } else rows.push(el('div', 'pk-note', 'Robot của em chạy chương trình mặc định. Vào Xưởng lập trình để sửa và lưu chương trình của em.'))
+    const warn = s.warn?.(p, chosen)
+    if (warn) {
+      const w = el('div', 'pk-note', warn)
+      w.dataset.role = 'old-program'
+      w.dataset.ok = 'false'
+      rows.push(w)
+    }
     if (s.draft(p, chosen)) {
       // Trận chạy bản đã lưu (hoặc Mặc định); bản đang sửa ở Xưởng chỉ vào trận khi em lưu.
       const note = el('div', 'pk-row pk-draft')

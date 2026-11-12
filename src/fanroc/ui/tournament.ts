@@ -128,6 +128,8 @@ export interface RegisterView {
   cfg(p: 0 | 1): RobotConfig
   /** Nhãn chương trình bạn p sẽ chạy: "Của em vN" (có bản lưu ở Xưởng cho robot đó) / "Mặc định". */
   program(p: 0 | 1): string
+  /** Cảnh báo cho chương trình bạn p sẽ chạy (vd. lưu theo luật cũ); null = không có. */
+  warn?(p: 0 | 1): string | null
   /** Ô chọn robot / đế / cơ cấu của bạn p (editor.configControls). */
   controls(p: 0 | 1): { el: HTMLElement; refresh(): void }
 }
@@ -388,6 +390,13 @@ export function createTournamentScreen(root: HTMLElement, act: TourActions): Tou
         prog.dataset.role = 'program'
         card.append(el('h3', undefined, `Bạn ${p + 1}`), name, row('Robot', c.el), row('Chương trình', prog))
         if (v.program(p) === 'Mặc định') card.append(el('div', 'pk-note', 'Chưa lưu chương trình ở Xưởng cho robot này — robot chạy chương trình mặc định.'))
+        const warn = v.warn?.(p)
+        if (warn) {
+          const w = el('div', 'pk-note', warn)
+          w.dataset.role = 'old-program'
+          w.dataset.ok = 'false'
+          card.append(w)
+        }
         players.append(card)
       }
       const per = el('select')

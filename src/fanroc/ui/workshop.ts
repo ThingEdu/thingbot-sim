@@ -73,6 +73,8 @@ export interface WorkshopView {
   label: string
   /** Vào từ Pit của giải: robot giữ nguyên suốt giải (ẩn ô đổi robot), có nút quay lại Pit. */
   tournament?: boolean
+  /** Dòng cảnh báo cố định (vd. chương trình lưu theo luật cũ); null / bỏ trống = không có. */
+  warn?: string | null
 }
 
 export interface WorkshopBar {
@@ -98,6 +100,7 @@ const CSS = `
 .ws-msg[data-ok="true"] { color: #12804a; }
 .ws-msg[data-ok="false"] { color: #c0392b; }
 .ws-msg:empty { display: none; }
+.ws-warn { font-weight: 700; font-size: 12.5px; color: #8a4b00; background: #ffe2b0; border: 1px solid #f2a516; border-radius: 6px; padding: 6px 8px; }
 `
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] => {
@@ -147,6 +150,12 @@ export function createWorkshopBar(
       prog.dataset.mine = String(v.label !== 'Mặc định')
       hd.append(el('h2', undefined, `Xưởng lập trình · ${v.names[v.player]}`), prog)
       const rows: HTMLElement[] = [hd]
+      if (v.warn) {
+        const w = el('div', 'ws-warn', v.warn)
+        w.dataset.role = 'old-program'
+        w.setAttribute('role', 'status')
+        rows.push(w)
+      }
       if (v.players === 2) {
         const who = el('div', 'ws-row')
         who.setAttribute('aria-label', 'Chương trình của bạn nào')
