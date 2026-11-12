@@ -181,5 +181,7 @@ Robot không mô phỏng khớp bằng vật lý. Leo là một trạng thái c�
 ## Đã chốt / còn chờ
 
 1. Đã chốt (12/11): họ Maker bỏ cờ, S2 làm móc (xem mục Leo xà).
-2. Chưa trả lời, tạm theo đề xuất: hướng thanh trong Hình 1 là của hình vẽ. Em giải số đo để đúng 1,3 m và đúng đoạn Đất 0,43 m. Vì vậy đầu phía Hộp
-   Phân Phối nằm ở x = ±0,246, gần hộp hơn hình vẽ một chút. Anh xem có chấp nhận không.
+2. **Đã thay bằng R143 (docs/fanroc/quyet-dinh.md):** thanh lấy theo CAD "Full sân Fanroc" (dài 1,400 m giữa tâm hai cột,
+   vạch Đất/Nước tính từ hình học ≈ 0,580). Đoạn dưới đây (1,3 m / 0,43 / x = ±0,246) là đề xuất cũ, không còn dùng.
+   ~~Chưa trả lời, tạm theo đề xuất: hướng thanh trong Hình 1 là của hình vẽ. Em giải số đo để đúng 1,3 m và đúng đoạn Đất 0,43 m. Vì vậy đầu phía Hộp
+   Phân Phối nằm ở x = ±0,246, gần hộp hơn hình vẽ một chút. Anh xem có chấp nhận không.~~

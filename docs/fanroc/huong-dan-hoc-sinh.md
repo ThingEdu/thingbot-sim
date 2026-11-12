@@ -52,7 +52,8 @@ Trong trận:
 
 **Leo Thang Cứu Hỏa.** Mỗi liên minh có một thanh xà trên ô vàng ở góc sân. Vạch màu chia thanh làm hai đoạn: **Khu vực
 Đất** (gần rào) và **Khu vực Nước** (gần Khu Chữa Cháy). Lái robot tới ô vàng, quay theo thanh, giữ nút móc cho móc
-chạm thanh rồi nhả ra: robot được kéo lên và treo. Đang treo thì đẩy cần tiến / lùi để trượt dọc thanh. Phải bám ở đoạn
+chạm thanh rồi nhả ra: robot được kéo lên và treo. Đang treo thì đẩy cần tiến / lùi để trượt dọc thanh; tới gần rào hay
+Hộp Phân Phối thì robot dừng lại (thân treo không trượt ra ngoài sân). Phải bám ở đoạn
 Đất trước rồi mới trượt sang Nước; giơ móc lần nữa là robot rơi xuống. Mỗi thanh treo được 2 robot; leo thanh của liên
 minh kia không được tính.
 
@@ -109,6 +110,9 @@ Tiến độ, số sao tốt nhất và chương trình của từng nhiệm v�
 - Viết chương trình lái tay cầm hoặc tự chạy, bấm ▶ để thử ngay trên sân.
 - Bấm **Lưu**. Mỗi lần lưu là một bản mới ("Đã lưu v1", "v2"…).
 - Vào **Trận lẻ** hay **Giải đấu**, robot của em chạy bản đã lưu. Nhãn chương trình ghi "Của em v…".
+- Chương trình họ Maker lưu từ bản cũ (trước luật V4) được báo "Chương trình lưu theo luật cũ": khi đó S2 là kẹp cờ, nay
+  S2 là móc leo xà (180° = giơ móc) nên robot sẽ giơ / hạ móc ngược. Bấm **Về mặc định** để lấy chương trình mẫu mới
+  (hoặc tự sửa S2 rồi Lưu lại). Mẫu Maker không còn nút L1 / L2 "nâng tay".
 
 ## 4. Chia sẻ tệp .tb
 
