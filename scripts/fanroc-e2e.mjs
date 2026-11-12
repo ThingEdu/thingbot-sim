@@ -825,6 +825,9 @@ async function gameTests() {
     const me = await page.evaluate(() => window.__fanroc.mySeat())
     const kind = await page.evaluate((i) => window.__fanroc.session.driver(i).kind, me)
     expect(me === 0 && kind === 'program', `robot của em ghế ${me}, người lái ${kind}`)
+    // Robot 2–4 đứng yên: đo trôi của robot em, không để robot máy đồng đội húc vào (thanh xà theo CAD lắp sân 12/11 làm
+    // bóng xả rơi khác, robot máy Đỏ 2 đi Khu Tiếp Tế sượt vào robot em đúng lúc nhả W — trôi 0,010…0,013 m).
+    await quietOthers(page)
     // Chương trình Mặc định nạp sẵn, chạy khi hết 10 s xả bóng (tốc độ khoá ×1).
     await page.waitForFunction(() => window.__fanroc.editors.state(0) === 'running', null, { timeout: 25000 })
     await page.waitForTimeout(300)
