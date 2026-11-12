@@ -10,7 +10,7 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import type { FanrocWorld } from './world.ts'
 import { HOLE, PEAK_Y, START_POSES, type Alliance, type Pose } from './layout.ts'
 import { servo360, type PortValues } from './ports.ts'
-import { chuteExit, LIFT_AXIS, rackExtent, rackOverhang, ROBOTS, portMap, type PortMap, type RobotConfig, type RobotDef } from './robots.ts'
+import { armOverhang, chuteExit, LIFT_AXIS, rackExtent, rackOverhang, ROBOTS, portMap, type PortMap, type RobotConfig, type RobotDef } from './robots.ts'
 import { barYaw, climbOf, HOOK, pointAt, slideRange, stepClimb, type Climb, type ClimbState, type SlideRange } from './ladder.ts'
 
 export type Vec2 = { x: number; z: number }
@@ -164,7 +164,7 @@ export class RobotBody {
   /** Phần nhô ra trước mũi xe (vươn + tay kẹp, hoặc cửa lồng nâng bằng servo vượt mũi khung), m. */
   get forwardExtension(): number {
     const rack = this.def.rack?.forward ? this.rackOver : 0
-    return this.forwardExtend + rack + this.armReach + (this.def.chuteBehind ? 0 : Math.max(0, chuteExit(this.def, this.armFrac)?.reach ?? 0))
+    return this.forwardExtend + rack + armOverhang(this.def, this.armFrac) + (this.def.chuteBehind ? 0 : Math.max(0, chuteExit(this.def, this.armFrac)?.reach ?? 0))
   }
 
   /** Phần nhô ra sau đuôi xe (thanh răng lùi ra sau của Maker Nâng / Hút / Pro), m. */
@@ -202,11 +202,11 @@ export class RobotBody {
     return this.ahead(this.def.release.reach + this.forwardExtend, this.def.release.y + this.liftUp)
   }
 
-  /** Điểm kẹp cờ: như điểm xả, cộng phần tay kẹp S1 (R17). */
+  /** Điểm kẹp cờ: `flagGrip` (lúc tay thu, trong thân — R166) hay như điểm xả, cộng phần tay kẹp S1 (R17). */
   gripPoint(): { x: number; y: number; z: number } {
     const up = this.armFrac * (this.def.arm?.up ?? 0)
     const y = this.def.release.y + this.liftUp + up
-    return this.ahead(this.def.release.reach + this.forwardExtend + this.armReach, y)
+    return this.ahead((this.def.flagGrip ?? this.def.release.reach) + this.forwardExtend + this.armReach, y)
   }
 
   /** 4 góc hình chữ nhật thân xe (gồm phần vươn / tay kẹp tới trước và ra sau): trước trái, trước phải, sau phải, sau trái. */

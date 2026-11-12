@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { CLIMB_PCT, HOOK, HOOK_LABEL, HOOK_TIP, barYaw, hookTop, stepHook, type HookState, climbOf, ladderLen, pointAt, project, slideRange, stepClimb, type ClimbState } from './ladder.ts'
 import { FIELD, LADDER } from './layout.ts'
-import { ROBOTS, ruleChecks } from './robots.ts'
+import { flagEnvelope, ROBOTS, ruleChecks } from './robots.ts'
 
 const FLOOR: ClimbState = { mode: 'floor', bar: null, s: 0 }
 type Inp = Parameters<typeof stepClimb>[1]
@@ -186,7 +186,7 @@ test('ruleChecks R01 tính cả móc đã thu: mọi mẫu vẫn ≤ 300 × 300 
     const r01 = ruleChecks({ type: d.type, drive: d.drives[0], actuator: 'tt' }, 0).find((c) => /^R01/.test(c.text))
     assert.ok(r01 && r01.ok === true && /móc đã thu/.test(r01.text), `${d.type}: ${JSON.stringify(r01)}`)
     const mm = (m: number) => Math.round(m * 1000)
-    assert.ok(r01.text.includes(`× ${mm(Math.max(d.size.h, hookTop(d, 0, false)))} mm`), r01.text)
+    assert.ok(r01.text.includes(`× ${mm(Math.max(d.size.h, hookTop(d, 0, false), d.flag ? flagEnvelope(d, 0, 0).y1 : 0))} mm`), r01.text)
   }
 })
 

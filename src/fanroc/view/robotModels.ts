@@ -6,7 +6,7 @@
 // vì yaw 0 của vật lý là mũi hướng −z.
 import * as THREE from 'three'
 import type { Alliance } from '../layout.ts'
-import { ROBOTS, type RobotConfig } from '../robots.ts'
+import { FLAG_SHAPE, ROBOTS, type RobotConfig } from '../robots.ts'
 import { BALL_CHUTE, CAD_WHEELS, cadFlipped, cadPart, chuteExitModel, makerCad, TALL_TOP } from './cadModel.ts'
 
 const mat = (color: number, o: THREE.MeshStandardMaterialParameters = {}) =>
@@ -62,12 +62,13 @@ export const FLAG_LEN = 0.18
 export function makeFlag(): THREE.Group {
   flagMat ??= new THREE.MeshStandardMaterial({ map: flagTexture(), side: THREE.DoubleSide, roughness: 0.8 })
   const g = new THREE.Group()
-  const base = cyl(0.021, 0.045, M.flagBase, 20)
-  base.position.y = 0.0225
-  const pole = cyl(0.0025, 0.135, M.alu, 8)
-  pole.position.y = 0.045 + 0.0675
-  const f = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 0.06), flagMat)
-  f.position.set(0.045, 0.045 + 0.105, 0)
+  const F = FLAG_SHAPE
+  const base = cyl(F.baseR, F.baseH, M.flagBase, 20)
+  base.position.y = F.baseH / 2
+  const pole = cyl(0.0025, F.pole, M.alu, 8)
+  pole.position.y = F.baseH + F.pole / 2
+  const f = new THREE.Mesh(new THREE.PlaneGeometry(F.clothW, F.clothH), flagMat)
+  f.position.set(F.clothW / 2, F.baseH + F.pole - F.clothH / 2, 0)
   g.add(base, pole, f)
   return g
 }
@@ -180,7 +181,7 @@ function claw(g: THREE.Group, jawH: number): { claw: THREE.Group; flag: THREE.Gr
   const jR = box(4, jawH, 16, M.grey, 8, 0, 0)
   const flag = makeFlag()
   flag.scale.setScalar(1000)
-  flag.position.y = -jawH / 2 // đáy đế cờ ngang điểm kẹp
+  flag.position.y = -FLAG_SHAPE.gripDrop * 1000 // đáy đế cờ dưới điểm kẹp nửa má kẹp (flagEnvelope tính như vậy)
   c.add(jL, jR, flag)
   g.add(c)
   return {
@@ -225,7 +226,8 @@ function buildCo(cfg: RobotConfig, g: THREE.Group): Omit<Parts, 'wheels'> {
   g.add(lift, actBox(cfg, 0, 170, -40))
   // S1 tay kẹp vươn tới trước, S2 kẹp cờ.
   const arm = new THREE.Group()
-  arm.position.set(70, 80, 110)
+  // Gốc tay lùi vào thân (R166): tay thu thì đầu tay (z 125) và cờ (≤ 136) đều trong mũi khung (140).
+  arm.position.set(70, 80, 80)
   arm.add(box(6, 6, 50, M.grey, 0, 0, 20), cadPart('servo', 0, 0, -8))
   g.add(arm)
   const k = claw(g, 18)

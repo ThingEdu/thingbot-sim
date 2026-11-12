@@ -40,6 +40,12 @@ export interface RobotDef {
    */
   arm?: { reach: number; up: number }
   /**
+   * Điểm kẹp cờ cách mũi khung lúc tay thu (S1 = 0), m; âm = lùi vào trong thân (R166, anh Tuấn 12/11: lúc xuất phát không
+   * cơ cấu nào thò khỏi khung — cả lá cờ đang kẹp: đế Ø42, lá 90 mm). Tay S1 vươn thêm `arm.reach` từ đây. Bỏ trống:
+   * dùng `release.reach` (điểm xả bóng).
+   */
+  flagGrip?: number
+  /**
    * Bóng ra ở cửa máng thay cho `release` (Mẫu Maker: lồng ống cong xuống vòng cửa ra trước thân, servo S3 chặn cửa; không
    * có cơ cấu nâng hạ nên chỉ tới Rãnh 1). `reach` tính từ mũi khung (âm = lùi vào trong thân), `y` là tâm bóng so với sàn.
    */
@@ -134,7 +140,9 @@ export const ROBOTS: Record<RobotType, RobotDef> = {
     // S1–S3 đã dùng cho cờ / thùng: móc ở S4 (bảng cổng ghi "S4: Móc leo xà (lò xo bật móc)"), nút R1 (□ vẫn là kẹp cờ).
     hook: { port: 'S4', button: 'R1' },
     release: { y: 0.2, reach: 0.05 }, maxExtend: 0.08,
-    arm: { reach: 0.14, up: 0 },
+    // Tay S1 vươn 0,215 m từ chỗ kẹp lúc thu (0,025 trong mũi) ⇒ duỗi hết, điểm kẹp ở mũi + 0,19 như trước R166.
+    arm: { reach: 0.215, up: 0 },
+    flagGrip: -0.025,
   },
   sort: {
     type: 'sort', name: 'Xe Phân Loại',
@@ -195,9 +203,10 @@ export function ruleChecks(cfg: RobotConfig, extendNow: number, armFrac = 0): { 
   // R01 tính cả móc đã thu (0°): cần ống lồng đứng ở tâm nóc, thanh ngang chữ J vươn HOOK_TIP.reach khỏi tâm.
   const w = Math.max(def.size.w, 2 * HOOK_TIP.reach)
   const l = Math.max(def.size.l, 2 * HOOK_TIP.reach)
-  const h = Math.max(def.size.h, hookTop(def, 0, false))
+  // …và cả lá cờ đang kẹp (R166: lúc xuất phát cờ nằm trong khung, chỉ đỉnh cột cờ cao hơn nóc).
+  const h = Math.max(def.size.h, hookTop(def, 0, false), def.flag ? flagEnvelope(def, 0, 0).y1 : 0)
   const startOk = Math.max(w, l) <= 0.3 + 1e-9 && h <= 0.85 + 1e-9
-  const extent = Math.max(w, l) + extendNow + armFrac * (def.arm?.reach ?? 0) + Math.max(0, chuteExit(def, armFrac)?.reach ?? 0)
+  const extent = Math.max(w, l) + extendNow + armOverhang(def, armFrac) + Math.max(0, chuteExit(def, armFrac)?.reach ?? 0)
   const out: { ok: boolean | 'note'; text: string }[] = [
     { ok: startOk, text: `R01 kích thước xuất phát (cả móc đã thu): ${mm(w)} × ${mm(l)} × ${mm(h)} mm (giới hạn 300 × 300 × 850 mm)` },
     { ok: extent <= 0.5 + 1e-9, text: `Mở rộng một chiều: ${mm(extent)} mm / 500 mm` },
@@ -227,13 +236,41 @@ export function chuteExit(def: RobotDef, frac: number): { reach: number; y: numb
   return { reach: c.reach + (t.reach - c.reach) * f, y: c.y + (t.y - c.y) * f }
 }
 
+/**
+ * Phần tay kẹp cờ nhô khỏi mũi khung ở S1 = `armFrac` × 180°, m (R166): điểm kẹp bắt đầu trong thân (`flagGrip` < 0) nên
+ * tay thu hay mới vươn một đoạn thì chưa thò ra; duỗi hết Xe Cắm Cờ nhô 0,19.
+ */
+export function armOverhang(def: RobotDef, armFrac: number): number {
+  return def.arm ? Math.max(0, (def.flagGrip ?? 0) + armFrac * def.arm.reach) : 0
+}
+
+/**
+ * Lá Cờ vẽ trên hình (view/robotModels.ts makeFlag dùng chung số này), m: đế trụ bán kính `baseR` cao `baseH`, cột `pole`,
+ * lá `clothW` × `clothH` treo về phía +x của cột. Đang kẹp: đáy đế dưới điểm kẹp `gripDrop` (nửa má kẹp 18 mm).
+ */
+export const FLAG_SHAPE = { baseR: 0.021, baseH: 0.045, pole: 0.135, clothW: 0.09, clothH: 0.06, gripDrop: 0.009 }
+
+/**
+ * Hộp bao lá cờ đang kẹp (đế + cột + lá) trong hệ toạ độ hình robot (gốc tâm xe trên sàn, mũi +z, ngang x), m — R166:
+ * lúc xuất phát (tay thu, thùng hạ) hộp này phải nằm trọn trong khung w × l; R01 tính cả đỉnh cờ.
+ */
+export function flagEnvelope(def: RobotDef, extend: number, armFrac: number): { x0: number; x1: number; z0: number; z1: number; y1: number } {
+  const g = localGripPoint(def, extend, armFrac)
+  const F = FLAG_SHAPE
+  return {
+    x0: g.x - F.baseR, x1: g.x + Math.max(F.baseR, F.clothW),
+    z0: g.z - F.baseR, z1: g.z + F.baseR,
+    y1: g.y - F.gripDrop + F.baseH + F.pole,
+  }
+}
+
 /** Điểm kẹp cờ trong hệ toạ độ của hình robot (gốc tâm xe trên sàn, mũi +z), m — như RobotBody.gripPoint. */
 export function localGripPoint(def: RobotDef, extend: number, armFrac: number): { x: number; y: number; z: number } {
   const axis = LIFT_AXIS[def.type]
   const up = axis === 'up' ? extend : 0
   const arm = armFrac * (def.arm?.reach ?? 0)
   const y = def.release.y + up + armFrac * (def.arm?.up ?? 0)
-  return { x: 0, y, z: def.size.l / 2 + def.release.reach + (axis === 'forward' ? extend : 0) + arm }
+  return { x: 0, y, z: def.size.l / 2 + (def.flagGrip ?? def.release.reach) + (axis === 'forward' ? extend : 0) + arm }
 }
 
 /** Phần thanh răng M4 nhô khỏi mép khung (ra trước mũi với `rack.forward`, còn lại ra sau đuôi), m; robot không có thanh 0. */

@@ -250,13 +250,14 @@ for (const type of ['co'] as const) {
   })
 }
 
-test('Tay S1 của Xe Cắm Cờ vươn tới trước: footprint dài thêm arm.reach, S1 null giữ nguyên', async () => {
+test('Tay S1 của Xe Cắm Cờ vươn tới trước: footprint dài thêm phần điểm kẹp nhô khỏi mũi (flagGrip + arm.reach = 0,19, R166), S1 null giữ nguyên', async () => {
   const { w, r } = await corridor({ type: 'co', drive: 'diff2', actuator: 'tt' })
   drive(w, r, { S1: 180 }, 0.05)
   drive(w, r, {}, 0.05)
   const zs = r.footprint().map((c) => c.z)
   const len = Math.max(...zs) - Math.min(...zs)
-  assert.ok(Math.abs(len - (ROBOTS.co.size.l + ROBOTS.co.arm!.reach)) < 0.005, `dài ${len}`)
+  assert.ok(Math.abs(len - (ROBOTS.co.size.l + ROBOTS.co.flagGrip! + ROBOTS.co.arm!.reach)) < 0.005, `dài ${len}`)
+  assert.ok(Math.abs(ROBOTS.co.flagGrip! + ROBOTS.co.arm!.reach - 0.19) < 1e-9, 'duỗi hết điểm kẹp phải ở mũi + 0,19 như trước')
 })
 
 test('Khoá lật: đâm chéo vào cạnh núi, thân không nghiêng (quaternion x, z ≈ 0)', async () => {

@@ -80,10 +80,10 @@ test('ROBOTS: kích thước và kho theo spec 4.3', () => {
   assert.equal(ROBOTS.maker.maxExtend, 0.2) // thanh răng CAD lùi ~200 mm
 })
 
-test('ruleChecks Xe Cắm Cờ: tay S1 vươn hết (armFrac 1) tính vào mở rộng: 280 + 140 = 420 mm đạt', () => {
+test('ruleChecks Xe Cắm Cờ: tay S1 vươn hết (armFrac 1) tính vào mở rộng: 280 + 190 (điểm kẹp nhô khỏi mũi, R166) = 470 mm đạt', () => {
   const r = ruleChecks({ type: 'co', drive: 'diff2', actuator: 'tt' }, 0, 1)
   const c = r.find((x) => /Mở rộng/.test(x.text))
-  assert.equal(c?.text, 'Mở rộng một chiều: 420 mm / 500 mm')
+  assert.equal(c?.text, 'Mở rộng một chiều: 470 mm / 500 mm')
   assert.equal(c?.ok, true)
 })
 
@@ -171,4 +171,22 @@ test('Thanh răng M4 họ Maker (không còn giá cờ): lúc thu không nhô; �
   assert.equal(ROBOTS.maker.rack!.forward, true)
   assert.equal(ROBOTS.makerLift.rack!.forward, false)
   for (const t of ['ui', 'co', 'sort'] as const) assert.equal(rackOverhang(ROBOTS[t], 0.08), 0, t)
+})
+
+test('R166: robot có cờ — lúc xuất phát (tay S1 thu, thùng hạ) cả lá cờ đang kẹp (đế + cột + lá) nằm trọn trong khung; duỗi hết tay thì điểm kẹp ra trước mũi; R01 tính đỉnh cột cờ', async () => {
+  const { flagEnvelope, localGripPoint } = await import('./robots.ts')
+  const flagged = Object.values(ROBOTS).filter((d) => d.flag)
+  assert.ok(flagged.length >= 1)
+  for (const d of flagged) {
+    const { w, l } = d.size
+    const e = flagEnvelope(d, 0, 0)
+    assert.ok(e.x0 >= -w / 2 - 1e-9 && e.x1 <= w / 2 + 1e-9, `${d.type}: cờ thò ngang ${e.x0}…${e.x1} (khung ±${w / 2})`)
+    assert.ok(e.z0 >= -l / 2 - 1e-9 && e.z1 <= l / 2 + 1e-9, `${d.type}: cờ thò dọc ${e.z0}…${e.z1} (khung ±${l / 2})`)
+    // Thùng nâng hết mà tay còn thu: cờ vẫn trong khung nhìn từ trên.
+    assert.ok(flagEnvelope(d, d.maxExtend, 0).z1 <= l / 2 + 1e-9, `${d.type}: thùng nâng thì cờ thò ra`)
+    // Tay duỗi hết: điểm kẹp ra trước mũi đủ xa để cắm cờ (như trước R166: mũi + 0,19).
+    assert.ok(Math.abs(localGripPoint(d, 0, 1).z - (l / 2 + 0.19)) < 1e-9, `${d.type}: duỗi hết ${localGripPoint(d, 0, 1).z}`)
+    const r01 = ruleChecks({ type: d.type, drive: d.drives[0], actuator: 'tt' }, 0).find((c) => /^R01/.test(c.text))!
+    assert.ok(r01.ok === true && r01.text.includes(`× ${Math.round(e.y1 * 1000)} mm`), r01.text)
+  }
 })

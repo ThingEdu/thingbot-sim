@@ -6,7 +6,7 @@
 import type { Skill } from '../agent.ts'
 import type { Alliance } from '../layout.ts'
 import { V_MAX } from '../robot.ts'
-import { ROBOTS, type Drive, type RobotConfig, type RobotType } from '../robots.ts'
+import { armOverhang, ROBOTS, type Drive, type RobotConfig, type RobotType } from '../robots.ts'
 import { icon } from './icons.ts'
 import { STATUS_H } from './shell.ts'
 
@@ -47,8 +47,8 @@ export function programText(saved: { version: number } | null, useMine = true): 
 const SPEED_SCALE = 0.6
 /** Thang của thanh Chứa bóng (spec: `storage` / 10). */
 const STORAGE_SCALE = 10
-/** Tay vươn dài nhất của các robot mẫu, m (Xe Cắm Cờ): thanh Cắm cờ đầy. */
-const REACH_SCALE = 0.14
+/** Tay vươn dài nhất của các robot mẫu (điểm kẹp cờ ra khỏi mũi khi duỗi hết, R166), m (Xe Cắm Cờ): thanh Cắm cờ đầy. */
+const REACH_SCALE = 0.19
 
 export interface RobotStats {
   speed: number
@@ -70,11 +70,12 @@ export function robotName(cfg: RobotConfig): string {
 
 /**
  * Ba thanh của thẻ robot (0…1) lấy từ thông số thật: Tốc độ = V_MAX mặt bánh (mọi đế cùng động cơ TT; đế 4 bánh đi
- * ngang được), Chứa bóng = `storage` / 10 (kẹp 1), Cắm cờ = có kẹp cờ (nửa thanh) + tầm vươn `arm.reach`.
+ * ngang được), Chứa bóng = `storage` / 10 (kẹp 1), Cắm cờ = có kẹp cờ (nửa thanh) + tầm vươn khỏi mũi (`armOverhang`).
  */
 export function robotStats(cfg: RobotConfig): RobotStats {
   const def = ROBOTS[cfg.type]
-  const reach = def.arm?.reach ?? 0
+  // Tay vươn = điểm kẹp cờ ra khỏi mũi khung khi duỗi hết (R166: lúc thu điểm kẹp nằm trong thân).
+  const reach = armOverhang(def, 1)
   return {
     speed: Math.min(1, V_MAX / SPEED_SCALE),
     storage: Math.min(1, def.storage / STORAGE_SCALE),
