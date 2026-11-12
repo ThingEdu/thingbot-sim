@@ -60,3 +60,12 @@ test('missionCards / totalStars đọc tiến độ đã lưu', () => {
 test('bảng HƯỚNG DẪN: trang đầu là câu mục tiêu của nhiệm vụ, rồi tới các bước', () => {
   for (const m of MISSIONS) assert.deepEqual(guideSteps(m), [m.goal, ...m.guide], m.id)
 })
+
+test('tiến độ đã lưu của nhiệm vụ 11 cũ "ve-vung-bao-ve" bị bỏ qua: thẻ 11 là Leo Thang Cứu Hỏa chưa làm, không cộng sao', () => {
+  const s = createStore('s', fake())
+  s.saveMission('ve-vung-bao-ve', { done: true, stars: 3, program: prog })
+  const c11 = missionCards(s).find((c) => c.n === 11)!
+  assert.deepEqual([c11.id, c11.title, c11.done, c11.stars], ['leo-thang', 'Leo Thang Cứu Hỏa', false, 0])
+  assert.equal(totalStars(s), 0)
+  assert.deepEqual(s.mission('leo-thang'), { done: false, stars: 0, program: null })
+})

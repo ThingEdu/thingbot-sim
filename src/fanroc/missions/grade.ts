@@ -11,6 +11,8 @@ import type { Goal, GradeResult, HintWhen, Mission, RunRecord } from './types.ts
 
 /** Thứ tự mức leo Thang Cứu Hỏa (luật V4) để so `climb.min`. */
 const CLIMB_ORDER: Climb[] = ['none', 'contact', 'ground', 'water']
+/** Câu gợi ý theo mức leo còn thiếu (không có câu riêng thì dùng câu `climb`). */
+const CLIMB_HINT: Record<Climb, HintWhen> = { none: 'climb', contact: 'climbContact', ground: 'climbGround', water: 'climbWater' }
 
 /** Robot đứng yên bao lâu (s) thì coi là đã dừng hẳn (R57 a). */
 export const REST_S = 1
@@ -122,7 +124,7 @@ function check(g: Goal, r: RunRecord): Check {
     }
     case 'climb': {
       const lv = r.tally?.climbs.red[0] ?? 'none'
-      return ok(CLIMB_ORDER.indexOf(lv) >= CLIMB_ORDER.indexOf(g.min))
+      return { ok: CLIMB_ORDER.indexOf(lv) >= CLIMB_ORDER.indexOf(g.min), when: CLIMB_HINT[g.min], d: null }
     }
     case 'fireClear':
       return ok(!!r.tally && r.tally.fire.g <= g.max)
@@ -201,17 +203,21 @@ export type RunState = {
   pressed: boolean
   /** R95: chương trình đang ở khối «đợi» (`restWaits`) — nhiệm vụ lập trình không chấm vì đứng yên. */
   waiting?: boolean
+  /** Robot của em đã treo liên tục trên Thang Cứu Hỏa bao lâu (s; 0 / thiếu = không treo). */
+  hangFor?: number
 }
 export type GradeReason = 'pressed' | 'maxTime' | 'rest' | 'error'
 
 /**
  * Đã tới lúc chấm chưa (R57 + R59 + R95; hợp đồng đầy đủ ở RunRecord, types.ts): trả lý do, hoặc null nếu chạy tiếp.
+ * Luật V4: nhiệm vụ lập trình mà robot đã treo ≥ REST_S và đứng yên ≥ REST_S thì chấm cả khi chương trình đang «đợi»
+ * (đứng yên từ trước lúc bám không tính: vừa bám chưa chấm, để còn kịp trượt sang Nước).
  * `record` chỉ được gọi khi cần (nhiệm vụ lái đứng yên: xét các điều kiện ⭐ trên trạng thái hiện tại).
  */
 export function shouldGrade(m: Mission, s: RunState, record: () => RunRecord): GradeReason | null {
   if (s.pressed) return 'pressed'
   if (s.elapsed >= m.maxTime - 1e-9) return 'maxTime'
   if (m.kind === 'match' || !s.hasMoved || s.elapsed - s.lastMoveTime < REST_S) return null
-  if (m.kind === 'program') return s.waiting ? null : 'rest'
+  if (m.kind === 'program') return s.waiting && (s.hangFor ?? 0) < REST_S - 1e-9 ? null : 'rest'
   return grade(m, record()).done ? 'rest' : null
 }

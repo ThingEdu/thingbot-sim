@@ -1,5 +1,5 @@
 // Trận đấu FANROC: 10 s xả bóng (robot đứng yên) → 180 s thi đấu → hết giờ (G12, robot đóng băng). Luật V4: không còn
-// End Game / đỗ Vùng Bảo Vệ; robot treo trên Thang Cứu Hỏa lúc hết giờ nâng hệ số nhân điểm trận.
+// End Game / khu đỗ cuối trận; robot treo trên Thang Cứu Hỏa lúc hết giờ nâng hệ số nhân điểm trận.
 // Luyện tập (ruling R31): 10 s xả bóng chạy tua ngay lúc tạo trận (không vẽ, robot đứng yên), trận bắt đầu ở t = 0, không hết giờ.
 // Chấm điểm một lần lúc t = 180 từ thế giới vật lý; trọng tài tự động chỉ ghi các lỗi máy thấy được (spec §4.5, §4.7, §5).
 // Không đồ hoạ: chạy được trong Node.

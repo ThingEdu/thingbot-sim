@@ -41,10 +41,11 @@ export type Goal =
 
 /**
  * Tình huống chọn câu gợi ý: loại của điều kiện đầu tiên chưa đạt (xét ⭐ trước, rồi ⭐⭐, ⭐⭐⭐), hoặc dạng chi tiết:
- * `short` / `long` (chưa tới / quá vùng `reach`, theo hướng xuất phát), `turnOver` / `turnUnder` (quay quá / chưa đủ).
+ * `short` / `long` (chưa tới / quá vùng `reach`, theo hướng xuất phát), `turnOver` / `turnUnder` (quay quá / chưa đủ),
+ * `climbContact` / `climbGround` / `climbWater` (điều kiện `climb` chưa đạt mức chạm / treo Đất / treo Nước).
  * Câu có `{d}` được thay số: cm (reach, return) hoặc độ (turn).
  */
-export type HintWhen = Goal['type'] | 'short' | 'long' | 'turnOver' | 'turnUnder'
+export type HintWhen = Goal['type'] | 'short' | 'long' | 'turnOver' | 'turnUnder' | 'climbContact' | 'climbGround' | 'climbWater'
 
 export interface Mission {
   id: string
@@ -80,7 +81,8 @@ export interface Mission {
  *   (a) robot đứng yên — trong 1,0 s vừa qua tâm dời < 5 mm và hướng đổi < 2° — sau khi đã chạy ít nhất một lần
  *       (`Trail.hasMoved` và `Trail.time − Trail.lastMoveTime ≥ 1`; ngưỡng ở trail.ts MOVE_STEP / MOVE_TURN_DEG,
  *       "hướng đổi" để quay tại chỗ không bị coi là đứng yên, R58):
- *         - `kind: 'program'`: chấm ngay;
+ *         - `kind: 'program'`: chấm ngay — trừ khi chương trình đang ở khối «đợi» (R95), riêng robot đã treo trên Thang
+ *           Cứu Hỏa ≥ 1 s và đứng yên ≥ 1 s thì vẫn chấm (luật V4: treo xong là xong việc, dù chương trình còn đợi);
  *         - `kind: 'drive'` (lái bàn phím): chỉ chấm khi mọi điều kiện ⭐ đã đạt — em dừng lại suy nghĩ không bị chấm;
  *         - `kind: 'match'`: không dùng.
  * Mọi trường dưới đây lấy ĐÚNG lúc chấm đó (`end`, `tally`, `events`, `touchedMountain` gộp từ ▶ tới lúc chấm),

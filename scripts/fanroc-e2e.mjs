@@ -4,7 +4,7 @@
  *
  *   npm run e2e:fanroc                 # tự bật Vite dev trên một cổng trống rồi chạy hết, tắt Vite:
  *     N3–N6, N6b–N6d, N2c (màn chính / ⚙ / Xưởng, Task 13) · N11, N11b, N11c (Luật chơi + Robot mẫu, Task 17) ·
- *     N7, N7b, N8 (nhiệm vụ, Task 14) · N9, N9b–N9h, N10 (giải đấu, Task 15) · N1, N1b, N1c (vỏ, Task 11) ·
+ *     N7, N7b, N8 (nhiệm vụ, Task 14) · N8c (nhiệm vụ 11 Leo Thang Cứu Hỏa, luật V4) · N9, N9b–N9h, N10 (giải đấu, Task 15) · N1, N1b, N1c (vỏ, Task 11) ·
  *     N2, N2b (bảng điểm, Task 12) · E1–E4, E6–E11 (ý cũ của sân, viết lại theo giao diện mới ở Task 16; E5 Human
  *     Player bấm phím đã xoá cùng tính năng)
  *   FANROC_URL=http://localhost:5191/mo-phong/fanroc.html npm run e2e:fanroc   # dùng trang đang chạy sẵn
@@ -20,7 +20,7 @@ import { createServer } from 'node:net'
 import { mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { ZONES } from '../src/fanroc/layout.ts'
-import { straight, turtle } from '../src/fanroc/missions/solutions.ts'
+import { climb, straight, turtle } from '../src/fanroc/missions/solutions.ts'
 import { MISSIONS } from '../src/fanroc/missions/data.ts'
 import { newTournament, playersIn, played, seatIds } from '../src/fanroc/ui/tournament.ts'
 import { record } from '../src/fanroc/tournament.ts'
@@ -690,6 +690,42 @@ async function missionTests() {
     const lit = await c7.locator('.ml-stars svg[data-on="true"]').count()
     expect(lit === stars, `thẻ 7 sáng ${lit} sao`)
     return `${r.result.stars} sao (${r.reason}) · ô số đo "${meas.replace(/\n/g, ' ')}" · sau tải lại thẻ 7: ✓ ${stars} sao`
+  })
+
+  await test('N8c nhiệm vụ 11 Leo Thang Cứu Hỏa: mở ở Mục tiêu · Nhiệm vụ 11, mục tiêu ba mức leo; lời giải mẫu treo ở Nước ⇒ 3 sao', async (page) => {
+    await open(page)
+    const m11 = MISSIONS[10]
+    await page.evaluate(() => window.__fanroc.go('mission', { id: 'leo-thang' }))
+    await page.waitForFunction(() => window.__fanroc.mission?.id === 'leo-thang')
+    await page.locator('.mi-guide').waitFor()
+    const g0 = await page.locator('.mi-guide h3').innerText()
+    const g1 = await page.locator('.mi-guide p').innerText()
+    expect(g0 === 'Mục tiêu · Nhiệm vụ 11' && g1 === m11.goal, `HƯỚNG DẪN không mở ở Mục tiêu: "${g0}" "${g1}"`)
+    await page.locator('.mi-guide button', { hasText: 'Đóng' }).click()
+    expect((await page.evaluate(() => window.__fanroc.robots.length)) === 1, 'nhiệm vụ: không phải 1 robot')
+    const goals = await page.locator('.mi-card li').allInnerTexts()
+    expect(goals.some((t) => /Chạm Thang Cứu Hỏa/.test(t)) && goals.some((t) => /Khu vực Nước/.test(t)), `mục tiêu: ${goals.join(' | ')}`)
+    await page.evaluate((state) => window.__fanroc.editors.load(0, state), climb())
+    await runBtn(page, 'Chạy').click()
+    await page.waitForFunction(() => window.__fanroc.mission?.result, null, { timeout: 90000 })
+    const r = await page.evaluate(() => ({ ...window.__fanroc.mission }))
+    expect(r.result.stars === 3, `${r.result.stars} sao (${r.reason}): ${JSON.stringify(r.result.goals)}`)
+    await page.locator('.mi-res-card').waitFor()
+    await shot(page, 'v4-nv11.png')
+    return `"${g0}" · ${r.result.stars} sao (${r.reason})`
+  })
+
+  await test('N8d nhiệm vụ 11: treo tới cuối thanh rồi đứng yên trong lúc chương trình còn «đợi» (60 s, quá maxTime) ⇒ chấm "rest" chứ không phải hết giờ (luật V4), 3 sao', async (page) => {
+    await open(page)
+    await page.evaluate(() => window.__fanroc.go('mission', { id: 'leo-thang' }))
+    await page.waitForFunction(() => window.__fanroc.mission?.id === 'leo-thang')
+    await page.locator('.mi-guide button', { hasText: 'Đóng' }).click()
+    await page.evaluate((state) => window.__fanroc.editors.load(0, state), climb(60))
+    await runBtn(page, 'Chạy').click()
+    await page.waitForFunction(() => window.__fanroc.mission?.result, null, { timeout: 120000 })
+    const r = await page.evaluate(() => ({ ...window.__fanroc.mission }))
+    expect(r.reason === 'rest' && r.result.stars === 3, `${r.result.stars} sao (${r.reason})`)
+    return `${r.result.stars} sao (${r.reason})`
   })
 
   await test('N8b nhiệm vụ 2: chương trình chia cho 0 ⇒ CHƯA ĐẠT, 0 sao, báo lỗi; "Nhiệm vụ tiếp" ⇒ nhiệm vụ 3 mở sẵn Mục tiêu; thẻ thử thách không che robot', async (page) => {

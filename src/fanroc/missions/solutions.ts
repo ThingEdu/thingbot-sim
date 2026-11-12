@@ -1,6 +1,8 @@
 // Lời giải mẫu của vài nhiệm vụ (serialization JSON của vùng khối), dùng chung cho phép thử giải được trên sân
-// (grade.test.ts) và phép thử trình duyệt (scripts/fanroc-e2e.mjs N7, N8). Không phải dữ liệu cho học sinh.
+// (grade.test.ts) và phép thử trình duyệt (scripts/fanroc-e2e.mjs N7, N8, N8c). Không phải dữ liệu cho học sinh.
 import { argumentReporter, procedureCall, procedureState } from '../procedures.ts'
+import { AUTO_TIMES } from '../programs.ts'
+import { ROBOTS } from '../robots.ts'
 
 type B = Record<string, unknown>
 const num = (v: number) => ({ shadow: { type: 'math_number', fields: { NUM: v } } })
@@ -32,3 +34,39 @@ export const turtle = (side: number, degPerS: number) =>
       procedureState('rẽ trái', ['độ'], [motor(1, 'backward', 60), motor(2, 'forward', 60), wait(div(argumentReporter('độ') as B, degPerS)), motor(1, 'forward', 0), motor(2, 'forward', 0), wait(0.3)]),
     ),
   )
+
+const servo = (port: string, angle: number): B => ({ type: 'thingBotC3_setServoAngle', fields: { SERVO: port.slice(1) }, inputs: { ANGLE: num(angle) } })
+/** Hai bánh Mẫu Maker (−1…1 × tốc độ Auto): trái, phải. */
+const wheels = (l: number, r: number): B[] => [
+  motor(1, l < 0 ? 'backward' : 'forward', Math.abs(l) * 60),
+  motor(2, r < 0 ? 'backward' : 'forward', Math.abs(r) * 60),
+]
+const leg = (l: number, r: number, s: number): B[] => [...wheels(l, r), wait(s)]
+
+/**
+ * Lùi khỏi rào trái lần đầu (s). Auto dùng AUTO_TIMES.offWall = 0,3 s nhưng ở đó xe vừa chạm Núi A; không chạm núi thì góc
+ * quay phải sau đó lệch khác, 0,3 s để xe trôi sát rào, tới ô vàng không quay được (đo 12/11: 0,3 s 0 sao; 0,4–0,6 s với
+ * chặng đầu 0,6–0,8 s đều 3 sao).
+ */
+const OFF_WALL = 0.5
+
+/**
+ * Nhiệm vụ 11 (luật V4): leo Thang Cứu Hỏa đỏ từ ô Robot 1 rồi trượt sang Nước — cùng đường và số giây với Auto mẫu của
+ * Mẫu Maker (programs.ts AUTO_TIMES, đo trên sân), bỏ đoạn tới Núi A xả bóng (chỉ tiến 1,3 − 0,6 s), lùi khỏi rào lâu
+ * hơn (OFF_WALL): tiến ra một đoạn, sang rào trái ép cho thẳng, xuôi theo rào tới ô vàng, ép rào lần nữa, quay theo
+ * thanh, giơ móc, tiến chạm thanh, hạ móc, tiến để trượt qua vạch sang Nước. `slide` = số giây «đợi» cho trượt (dài
+ * quá thì robot trượt tới cuối thanh rồi treo đứng yên trong lúc chương trình còn đợi — phép thử N8d).
+ */
+export const climb = (slide: number = AUTO_TIMES.slide) => {
+  const T = AUTO_TIMES
+  const turn = Math.round(T.turnPerWidth * ROBOTS.maker.size.w * 100) / 100
+  const hook = ROBOTS.maker.hook.port
+  return prog([
+    ...leg(1, 1, T.toMountain - T.back), ...leg(0, 0, 0.3),
+    ...leg(-1, 1, turn), ...leg(1, 1, T.toWall), ...leg(-1, -1, OFF_WALL), ...leg(1, -1, turn),
+    ...leg(1, 1, T.toLadder), ...leg(-1, 1, turn), ...leg(1, 1, T.press), ...leg(-1, -1, T.settle),
+    ...leg(1, -1, Math.round((turn + T.align * ROBOTS.maker.size.w) * 100) / 100),
+    servo(hook, 180), ...leg(1, 1, T.hookUp), servo(hook, 0), wait(slide),
+    ...wheels(0, 0),
+  ])
+}

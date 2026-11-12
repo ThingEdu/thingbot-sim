@@ -69,6 +69,20 @@ test('R95: đang ở khối «đợi» thì đứng yên không chấm — chỉ
   assert.equal(run.reason, 'maxTime')
 })
 
+test('luật V4: robot đang treo trên Thang Cứu Hỏa (RunView.hanging) và đứng yên 1 s ⇒ chấm "rest" dù đang ở khối «đợi»', () => {
+  const m = byN(11)
+  const v = Object.assign(field(m.start), { hanging: false })
+  const run = new MissionRun(m, { blocks: { blocks: [] } }, v)
+  drive(run, v, 0.5, () => (v.pose.x -= 0.2 * DT))
+  assert.equal(drive(run, v, 2, () => {}, true), null, 'đứng sàn, đang đợi: không chấm (R95)')
+  v.hanging = true // vừa bám (tư thế gần như không đổi): đã đứng yên lâu nhưng chưa treo đủ 1 s ⇒ chưa chấm
+  assert.equal(drive(run, v, 0.5, () => {}, true), null, 'vừa bám đã chấm, chưa kịp trượt sang Nước')
+  const out = drive(run, v, 3, () => {}, true)
+  assert.ok(out, 'treo đứng yên mà không được chấm')
+  assert.equal(run.reason, 'rest')
+  assert.ok(out.t > 3.4 && out.t < 3.6, `chấm lúc ${out.t} (bám lúc 2,5 s)`)
+})
+
 test('bấm Chấm: chấm ngay, một lần; chưa chạy cũng chấm được', () => {
   const m = byN(2)
   const v = field(m.start)

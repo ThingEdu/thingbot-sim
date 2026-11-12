@@ -767,6 +767,9 @@ async function start(): Promise<void> {
     get events() {
       return g.match.events
     },
+    get hanging() {
+      return g.robots[0].climb.mode === 'hang'
+    },
     footprint: () => g.robots[0].footprint(),
     tally: () => g.match.tally(),
   })

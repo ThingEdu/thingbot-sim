@@ -10,12 +10,14 @@ import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
 import { MISSION_SEED, MISSIONS } from './data.ts'
-import { straight, turtle } from './solutions.ts'
+import { climb, straight, turtle } from './solutions.ts'
 import { grade, loopEmpty, restWaits, shouldGrade, touchesMountain, type RunState } from './grade.ts'
 import type { Goal, Mission, RunRecord } from './types.ts'
-import { TOOLBOX_OPCODES } from '../programs.ts'
+import { defaultConfig, sample, teleopButtons, TOOLBOX_OPCODES } from '../programs.ts'
+import { ROBOTS } from '../robots.ts'
+import { MissionRun } from './run.ts'
 import { argumentReporter, procedureCall, procedureState } from '../procedures.ts'
-import { holeCentres, mountainAt, type Pose } from '../layout.ts'
+import { holeCentres, mountainAt, START_POSES, type Pose } from '../layout.ts'
 import { scoreTally, type FieldTally } from '../scoring.ts'
 import type { Climb } from '../ladder.ts'
 import { RobotLink } from '../link.ts'
@@ -183,7 +185,7 @@ test('12 nhiệm vụ, id duy nhất, n = 1..12, chặng và tên đúng bảng 
   assert.deepEqual(MISSIONS.map((m) => m.stage), [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 4])
   assert.deepEqual(MISSIONS.map((m) => m.title), [
     'Làm quen robot', 'Đi thẳng', 'Cong và xoay', 'Đo robot', 'Khối "tiến (m)"', 'Khối "rẽ phải/trái (độ)"', 'Hình vuông', 'Gỡ lỗi',
-    'Dọn Khu Chữa Cháy', 'Cắm cờ', 'Về Vùng Bảo Vệ', 'Trận đầu tiên',
+    'Dọn Khu Chữa Cháy', 'Cắm cờ', 'Leo Thang Cứu Hỏa', 'Trận đầu tiên',
   ])
   assert.equal(byN(12).kind, 'match')
 })
@@ -329,6 +331,74 @@ test('leo Thang Cứu Hỏa (nhiệm vụ 11, luật V4): chạm ⇒ 1 sao, treo
   assert.deepEqual(grade(m, record(m, { tally: t('water') })).goals.map((g) => g.text), ['Chạm Thang Cứu Hỏa', '⭐⭐ Treo ở Khu vực Đất', '⭐⭐⭐ Treo ở Khu vực Nước'])
 })
 
+test('nhiệm vụ 11 Leo Thang Cứu Hỏa: Mẫu Maker từ ô Robot 1, sân không bóng, 60 s; 5 bước hướng dẫn nói đúng cổng móc', () => {
+  const m = byN(11)
+  assert.deepEqual([m.id, m.stage, m.kind, m.balls, m.maxTime], ['leo-thang', 3, 'program', false, 60])
+  assert.deepEqual(m.robot, defaultConfig('maker'))
+  assert.deepEqual(m.start, START_POSES.red[0])
+  assert.deepEqual(m.goals, [{ type: 'climb', min: 'contact' }])
+  assert.deepEqual(m.stars, { two: [{ type: 'climb', min: 'ground' }], three: [{ type: 'climb', min: 'water' }] })
+  assert.equal(m.guide.length, 5)
+  const hook = ROBOTS[m.robot.type].hook.port
+  assert.equal(hook, 'S2', 'Mẫu Maker: móc leo xà ở S2')
+  assert.ok(m.guide[2].includes(`${hook} = 180°`), m.guide[2])
+  assert.ok(m.guide[3].includes(`${hook} = 0°`), m.guide[3])
+  const text = [m.goal, ...m.guide, ...m.hints.map((h) => h.text)].join(' ')
+  assert.ok(!/\bS[13-5]\b/.test(text), `chỉ nói cổng móc ${hook}: ${text}`)
+  assert.ok(opcodes(m.toolbox).has('thingBotC3_setServoAngle'), 'hộp công cụ cần khối servo để giơ / hạ móc')
+  assert.match(JSON.stringify(m.toolbox), new RegExp(`"SERVO":"${hook.slice(1)}"`), 'khối servo trong hộp đặt sẵn cổng móc')
+})
+
+test('nhiệm vụ 11: gợi ý theo mức leo còn thiếu — chưa chạm ⇒ giơ móc, chạm ⇒ hạ móc, treo Đất ⇒ tiến tiếp', () => {
+  const m = byN(11)
+  const hook = ROBOTS[m.robot.type].hook.port
+  const hint = (c: Climb) => grade(m, record(m, { tally: { ...emptyTally(), climbs: { red: [c, 'none'], blue: ['none', 'none'] } } })).hint
+  const [none, contact, ground] = (['none', 'contact', 'ground'] as Climb[]).map(hint)
+  assert.ok(none?.includes(`${hook} = 180°`), `chưa chạm: ${none}`)
+  assert.ok(contact?.includes(`${hook} = 0°`), `chạm: ${contact}`)
+  assert.ok(ground && /tiến/.test(ground) && /Nước/.test(ground), `treo Đất: ${ground}`)
+  assert.equal(new Set([none, contact, ground]).size, 3)
+  assert.equal(hint('water'), null)
+})
+
+test('nhiệm vụ 10 dùng Xe Cắm Cờ và TeleOp mẫu của nó; hướng dẫn nói đúng nút của mẫu (teleopButtons)', () => {
+  const m = byN(10)
+  const co = defaultConfig('co')
+  assert.deepEqual(m.robot, co)
+  assert.deepEqual(m.starter, sample(co, 'teleop'))
+  const b = teleopButtons(co)
+  assert.match(b.SQUARE ?? '', /mở kẹp cờ/)
+  assert.match(b.L1 ?? '', /Vươn tay cờ/)
+  assert.match(b.L2 ?? '', /Thu tay cờ/)
+  const text = [m.goal, ...m.guide, ...m.hints.map((h) => h.text)].join(' ')
+  assert.match(text, /Xe Cắm Cờ/)
+  for (const s of ['□', 'L1', 'L2']) assert.ok(text.includes(s), `thiếu nút ${s}`)
+  assert.ok(!text.includes('△') && !/răng/.test(text), 'Xe Cắm Cờ: △ là nâng thùng, không có thanh răng')
+})
+
+test('luật V4: không nhiệm vụ nào còn nói Vùng Bảo Vệ / End Game / đỗ xe; nhiệm vụ 12 nhắc leo Thang Cứu Hỏa', () => {
+  for (const m of MISSIONS) {
+    for (const s of [m.title, m.goal, ...m.guide, ...m.hints.map((h) => h.text)]) assert.ok(!/Vùng Bảo Vệ|End Game|đỗ/i.test(s), `nhiệm vụ ${m.n}: "${s}"`)
+  }
+  const m12 = byN(12)
+  assert.ok(m12.guide.some((s) => /Thang Cứu Hỏa/.test(s)), 'nhiệm vụ 12: hướng dẫn chưa nói leo xà')
+  assert.ok(m12.hints.some((h) => h.when === 'score' && /Thang Cứu Hỏa/.test(h.text)))
+})
+
+test('shouldGrade (luật V4): nhiệm vụ lập trình đang treo trên Thang Cứu Hỏa và đứng yên ≥ 1 s ⇒ chấm, kể cả đang ở khối «đợi»', () => {
+  const st = (o: Partial<RunState>): RunState => ({ elapsed: 20, hasMoved: true, lastMoveTime: 10, pressed: false, ...o })
+  const never = () => {
+    throw new Error('không được dựng bản ghi')
+  }
+  const p = byN(11)
+  assert.equal(shouldGrade(p, st({ waiting: true }), never), null, 'đứng sàn mà đang đợi: R95 không chấm')
+  assert.equal(shouldGrade(p, st({ waiting: true, hangFor: 5 }), never), 'rest')
+  assert.equal(shouldGrade(p, st({ waiting: true, hangFor: 5, lastMoveTime: 19.5 }), never), null, 'mới đứng 0,5 s')
+  assert.equal(shouldGrade(p, st({ waiting: true, hangFor: 0.5 }), never), null, 'mới bám 0,5 s (đứng yên từ trước khi bám)')
+  const m10 = byN(10)
+  assert.equal(shouldGrade(m10, st({ hangFor: 5 }), () => record(m10)), null, 'nhiệm vụ lái chưa đạt ⭐ thì đang treo cũng không chấm')
+})
+
 test('dọn Khu Chữa Cháy (nhiệm vụ 9) và trận đầu (nhiệm vụ 12) đọc tally', () => {
   const m9 = byN(9)
   const dirty = { ...emptyTally(), fire: { o: 3, g: 34 } }
@@ -336,12 +406,12 @@ test('dọn Khu Chữa Cháy (nhiệm vụ 9) và trận đầu (nhiệm vụ 12
   assert.equal(grade(m9, record(m9, { tally: { ...dirty, fire: { o: 3, g: 33 } }, trail: { distance: 3, turned: 0, time: 40 } })).stars, 3)
   const m12 = byN(12)
   const end = [{ t: 180, robot: null, text: 'Hết giờ — điểm trận 200' }]
-  const tally = { ...emptyTally(), fire: { o: 40, g: 0 } } // 200: giữa ⭐⭐ 180 và ⭐⭐⭐ 230 (R141)
-  assert.equal(scoreTally(tally).total, 200)
+  const tally = { ...emptyTally(), fire: { o: 20, g: 0 } } // 100: giữa ⭐⭐ 90 và ⭐⭐⭐ 120 (đo lại 12/11, luật V4)
+  assert.equal(scoreTally(tally).total, 100)
   assert.equal(grade(m12, record(m12, { tally })).done, false, 'chưa hết giờ')
   const r = grade(m12, record(m12, { tally, events: end }))
   assert.deepEqual([r.done, r.stars], [true, 2])
-  assert.match(r.hint ?? '', /200 điểm/)
+  assert.match(r.hint ?? '', /100 điểm/)
 })
 
 // ---------- Giải được trên sân thật ----------
@@ -367,6 +437,77 @@ test('nhiệm vụ 8: chương trình có sẵn chạy trên sân cho vệt khô
   const gg = grade(m, good)
   t.diagnostic(`đã sửa: sai số cuối ${(err(good) * 100).toFixed(1)} cm, chạm núi ${good.touchedMountain}, chấm lúc ${good.gradedAt.toFixed(2)} s (${good.why}), ${gg.stars} sao`)
   assert.ok(gg.stars >= 2, `${gg.stars} sao`)
+})
+
+/** Bản sao chương trình có `id` cho mọi khối (kể cả bóng) và bảng id → loại khối, như vùng khối của trang. */
+function withIds(state: object): { state: object; types: Map<string, string> } {
+  const types = new Map<string, string>()
+  const visit = (o: unknown): unknown => {
+    if (Array.isArray(o)) return o.map(visit)
+    if (!o || typeof o !== 'object') return o
+    const r = Object.fromEntries(Object.entries(o).map(([k, v]) => [k, k === 'fields' || k === 'extraState' ? v : visit(v)])) as Record<string, unknown>
+    if (typeof r.type === 'string' && !('kind' in r)) {
+      r.id = `k${types.size}`
+      types.set(r.id as string, r.type)
+    }
+    return r
+  }
+  return { state: visit(state) as object, types }
+}
+
+/**
+ * Chạy chương trình trên phiên nhiệm vụ như trang (GameSession 'mission', sân MISSION_SEED, robot đặt ở `m.start`): bo
+ * ảo một nhịp, Match một bước, MissionRun chấm đúng lúc shouldGrade quyết — cả R95 (đang ở khối «đợi» thì không chấm vì
+ * đứng yên, như main.ts) — bản ghi có tally thật (mức leo của Match).
+ */
+async function runMission(m: Mission, program: object) {
+  const { state, types } = withIds(program)
+  const emptyLoop = loopEmpty(state)
+  const code = H.generate(state)
+  assert.equal(code.error, undefined, `sinh mã lỗi: ${code.error}`)
+  let session: SessionLike | null = null
+  let run = 0
+  const link = new RobotLink((c: Command) => {
+    if (c.type === 'load') ((session = new H.Session(c.code, { now: () => 0 })), (run = c.run))
+    else if (c.type === 'run' && session) session.running = true
+    else if (c.type === 'stop') session = null
+  })
+  const g = await GameSession.create({ mode: 'mission', seed: MISSION_SEED, seats: [{ cfg: m.robot, team: 'Em', driver: { kind: 'program', link } }], balls: m.balls, start: m.start })
+  try {
+    link.load(code.sim)
+    link.start()
+    const robot = g.robots[0]
+    let ports = NEUTRAL
+    const view = {
+      get pose() { return robot.pose },
+      get ports() { return ports },
+      get events() { return g.match.events },
+      get hanging() { return robot.climb.mode === 'hang' },
+      footprint: () => robot.footprint(),
+      tally: () => g.match.tally(),
+    }
+    const mr = new MissionRun(m, state, view)
+    while (!mr.done) {
+      if (session) link.receive({ type: 'snapshot', run, snapshot: (session as SessionLike).tick(PHYSICS_DT * 1000), bus: {} } as unknown as Message)
+      ports = link.ports()
+      g.match.step(PHYSICS_DT, [ports])
+      mr.step(view, PHYSICS_DT, restWaits(link.block ? (types.get(link.block) ?? null) : null, link.phase, emptyLoop))
+    }
+    assert.notEqual(link.state, 'error', `chương trình lỗi: ${link.error}`)
+    return { rec: mr.record!, result: mr.result!, why: mr.reason!, at: mr.trail.time, s: robot.climb.s }
+  } finally {
+    g.dispose()
+  }
+}
+
+test('nhiệm vụ 11 có lời giải: tới ô vàng, quay theo thanh, giơ móc, hạ móc, tiến trượt sang Nước ⇒ 3 sao, chấm khi đứng yên', async (t) => {
+  const m = byN(11)
+  const ops = H.blockTypes(climb())
+  for (const op of ops) assert.ok(opcodes(m.toolbox).has(op) || ['math_number', 'math_positive_number'].includes(op), `lời giải dùng khối "${op}" ngoài hộp công cụ nhiệm vụ 11`)
+  const r = await runMission(m, climb())
+  t.diagnostic(`chấm lúc ${r.at.toFixed(2)} s (${r.why}), mức ${r.rec.tally?.climbs.red[0]}, chỗ bám s = ${r.s.toFixed(3)} m, ${r.result.stars} sao`)
+  assert.equal(r.why, 'rest', 'chương trình xong thì robot đứng yên và được chấm trước maxTime')
+  assert.deepEqual([r.result.done, r.result.stars], [true, 3], JSON.stringify(r.result.goals))
 })
 
 // ---------- Hợp đồng với match.ts và thời điểm chấm (R57) ----------
