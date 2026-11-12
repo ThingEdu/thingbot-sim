@@ -399,6 +399,15 @@ test('shouldGrade (luật V4): nhiệm vụ lập trình đang treo ở Nước 
   assert.equal(shouldGrade(m10, st({ waterFor: 5 }), () => record(m10)), null, 'nhiệm vụ lái chưa đạt ⭐ thì đang treo cũng không chấm')
 })
 
+test('nhiệm vụ 12 (R166): đội hình riêng 4 Mẫu Maker (không theo đội hình đa dạng của Trận lẻ), ngưỡng ⭐⭐ 80 / ⭐⭐⭐ 105', () => {
+  const m12 = byN(12)
+  assert.equal(m12.kind, 'match')
+  assert.deepEqual(m12.lineup?.map((c) => c.type), ['maker', 'maker', 'maker', 'maker'])
+  assert.deepEqual(m12.lineup?.map((c) => c.drive), ['diff2', 'diff2', 'diff2', 'diff2'])
+  assert.deepEqual([m12.stars.two, m12.stars.three], [[{ type: 'score', min: 80 }], [{ type: 'score', min: 105 }]])
+  for (const m of MISSIONS) if (m.n !== 12) assert.equal(m.lineup, undefined, `nhiệm vụ ${m.n} không phải trận`)
+})
+
 test('dọn Khu Chữa Cháy (nhiệm vụ 9) và trận đầu (nhiệm vụ 12) đọc tally', () => {
   const m9 = byN(9)
   const dirty = { ...emptyTally(), fire: { o: 3, g: 29 } }
@@ -406,12 +415,12 @@ test('dọn Khu Chữa Cháy (nhiệm vụ 9) và trận đầu (nhiệm vụ 12
   assert.equal(grade(m9, record(m9, { tally: { ...dirty, fire: { o: 3, g: 28 } }, trail: { distance: 3, turned: 0, time: 40 } })).stars, 3)
   const m12 = byN(12)
   const end = [{ t: 180, robot: null, text: 'Hết giờ — điểm trận 200' }]
-  const tally = { ...emptyTally(), fire: { o: 31, g: 0 } } // 155: giữa ⭐⭐ 135 và ⭐⭐⭐ 175 (đo lại 12/11, đội hình đa dạng R162)
-  assert.equal(scoreTally(tally).total, 155)
+  const tally = { ...emptyTally(), fire: { o: 20, g: 0 } } // 100: giữa ⭐⭐ 80 và ⭐⭐⭐ 105 (R166: 4 Mẫu Maker, R141)
+  assert.equal(scoreTally(tally).total, 100)
   assert.equal(grade(m12, record(m12, { tally })).done, false, 'chưa hết giờ')
   const r = grade(m12, record(m12, { tally, events: end }))
   assert.deepEqual([r.done, r.stars], [true, 2])
-  assert.match(r.hint ?? '', /155 điểm/)
+  assert.match(r.hint ?? '', /100 điểm/)
 })
 
 // ---------- Giải được trên sân thật ----------

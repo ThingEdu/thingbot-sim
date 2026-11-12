@@ -20,8 +20,8 @@ export const SEATS: Seat[] = [['red', 0], ['blue', 0], ['red', 1], ['blue', 1]]
 /**
  * Đội hình robot mặc định theo ghế SEATS (R162, anh Tuấn 12/11: "robot lúc xuất phát đa dạng"): Đỏ 1 Mẫu Maker (ghế của
  * em — em chọn robot khác thì robot của em thay), Xanh 1 Chuồn Chuồn Maker Hút, Đỏ 2 Kiến Lửa Xe Cắm Cờ, Xanh 2 Ong Vàng
- * Maker Nâng. Robot máy của cả bốn mẫu đều ghi điểm và leo xà ở mọi mức (agent.test.ts). Trận lẻ, Đấu tập, nhiệm vụ 12
- * và sân nền màn chính dùng chung.
+ * Maker Nâng. Robot máy của cả bốn mẫu đều ghi điểm và leo xà ở mọi mức (agent.test.ts). Trận lẻ, Đấu tập và sân nền màn
+ * chính dùng chung; nhiệm vụ 12 có đội hình riêng 4 Mẫu Maker (Mission.lineup).
  */
 export const DEFAULT_LINEUP: readonly RobotType[] = ['maker', 'makerIntake', 'co', 'makerLift']
 /** Cấu hình mặc định (đế đầu tiên của mẫu) của robot ở ghế `i` trong đội hình mặc định. */

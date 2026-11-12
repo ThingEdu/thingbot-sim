@@ -210,7 +210,9 @@ async function start(): Promise<void> {
   const modeOwner = (m: SeatMode): Player | null => (m.startsWith('player-') || m.startsWith('copy-') ? (Number(m.slice(-1)) as Player) : null)
   const seatCfg = (i: number): RobotConfig => {
     const p = modeOwner(modes[i])
-    return p === null ? lineupConfig(i) : cfgOf(p)
+    if (p !== null) return cfgOf(p)
+    // Nhiệm vụ trận có đội hình riêng (nhiệm vụ 12: 4 Mẫu Maker, R166); Trận lẻ thường: đội hình đa dạng (R162).
+    return matchMission?.lineup?.[i] ?? lineupConfig(i)
   }
   const seatDriver = (i: number): Driver => {
     const m = modes[i]

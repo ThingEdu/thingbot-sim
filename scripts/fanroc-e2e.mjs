@@ -778,7 +778,7 @@ async function missionTests() {
 
 // ---------- Phép thử màn chính, Trước trận, ⚙, Xưởng (Task 13) ----------
 async function gameTests() {
-  await test('N3c Trận lẻ đội hình đa dạng (R162): Đỏ 1 Mẫu Maker, Xanh 1 Maker Hút, Đỏ 2 Xe Cắm Cờ, Xanh 2 Maker Nâng; em chọn robot khác thì ghế của em đổi, ghế máy giữ nguyên', async (page) => {
+  await test('N3c Trận lẻ đội hình đa dạng (R162): Đỏ 1 Mẫu Maker, Xanh 1 Maker Hút, Đỏ 2 Xe Cắm Cờ, Xanh 2 Maker Nâng; em chọn robot khác thì ghế của em đổi, ghế máy giữ nguyên; nhiệm vụ 12 là 4 Mẫu Maker (R166)', async (page) => {
     await open(page)
     const types = () => page.evaluate(() => window.__fanroc.robots.map((r) => r.def.type))
     await go(page, 'match')
@@ -791,7 +791,16 @@ async function gameTests() {
     await go(page, 'match')
     const t1 = await types()
     expect(JSON.stringify(t1) === JSON.stringify(['sort', 'makerIntake', 'co', 'makerLift']), `em chọn Xe Phân Loại: ${t1.join(', ')}`)
-    return `${t0.join(' · ')} → em chọn Xe Phân Loại: ${t1.join(' · ')}`
+    // Nhiệm vụ 12 (R166): đội hình riêng 4 Mẫu Maker (ghế của em vẫn là robot em chọn); vào lại Trận lẻ thường thì đa dạng.
+    await page.evaluate(() => window.__fanroc.editors.setConfig(0, { type: 'maker', drive: 'diff2', actuator: 'tt' }))
+    await page.evaluate(() => window.__fanroc.go('mission', { id: 'tran-dau-tien' }))
+    const t2 = await types()
+    expect(JSON.stringify(t2) === JSON.stringify(['maker', 'maker', 'maker', 'maker']), `nhiệm vụ 12: ${t2.join(', ')}`)
+    await page.evaluate(() => window.__fanroc.go('home'))
+    await go(page, 'match')
+    const t3 = await types()
+    expect(JSON.stringify(t3) === JSON.stringify(t0), `Trận lẻ sau nhiệm vụ 12: ${t3.join(', ')}`)
+    return `${t0.join(' · ')} → em chọn Xe Phân Loại: ${t1.join(' · ')} · nhiệm vụ 12: ${t2.join(' · ')}`
   })
 
   await test('N3 màn chính: 4 ô, Giải đấu chọn sẵn, phím mũi tên đổi ô, Enter ⇒ Giải đấu (màn ghi danh)', async (page) => {

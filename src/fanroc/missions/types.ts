@@ -54,6 +54,11 @@ export interface Mission {
   title: string
   goal: string
   robot: RobotConfig
+  /**
+   * Nhiệm vụ trận (kind 'match'): robot của 4 ghế khi ghế đó là máy, theo ghế SEATS (R166: nhiệm vụ 12 là 4 Mẫu Maker để
+   * ngưỡng sao so em với robot máy cùng mẫu, R141). Bỏ trống: đội hình mặc định của Trận lẻ (DEFAULT_LINEUP).
+   */
+  lineup?: readonly RobotConfig[]
   start: Pose
   balls: boolean
   toolbox: object
