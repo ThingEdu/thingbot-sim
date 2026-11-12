@@ -24,18 +24,21 @@ Ban tổ chức đổi đề: bỏ Vùng Bảo Vệ Xanh và End Game, thêm nhi
 
 Không ảnh hưởng game: Human Player, kiểm tra robot 2 đợt, mạch Chung kết, bảng chỉ THCS.
 
-## Sân: thanh xà (anh chọn: chỉ theo số trong luật, đặt theo Hình 1)
+## Sân: thanh xà (kích thước theo CAD sân mới 12/11, vị trí theo Hình 1)
 
 Hình 1 của luật: mỗi thanh nối từ cột ở đầu Hộp Phân Phối, chạy chéo qua Khu Chữa Cháy và ô vàng, tới cột trên rào cạnh
 của phía liên minh đó (thanh Đỏ bên x < 0, thanh Xanh bên x > 0, đối xứng).
 
-Số trong luật: dài 1,300 m, cao 0,650 m, đoạn Đất khoảng 0,43 m tính từ đầu phía rào; vạch nằm ngay trên mép Khu Chữa Cháy.
-Giải ra (tính trong `layout.ts`, kiểm bằng test):
+Chốt (controller): kích thước lấy từ CAD "Full sân Fanroc" (các chi tiết rời, không có vị trí lắp); vị trí đặt theo Hình 1;
+vạch = chỗ thanh cắt mép Khu Chữa Cháy (tính ra, không gõ tay). Số "khoảng 430 / 870 mm" trong luật chỉ để tham khảo.
+Các số 1,300 / 0,650 / 0,43 / Ø25 cũ bị thay hết.
 
-- Đầu rào: (∓1,200; −0,317). Đầu Hộp Phân Phối: (∓0,246; −1,200). Dài 1,300.
-- Vạch: chỗ thanh cắt mép z = −0,6088 của Khu Chữa Cháy, cách đầu rào 0,430.
-- Ô vàng: dùng lại đúng hình chữ nhật `ZONES.safe` cũ (375×375, CAD); đổi tên thành `ZONES.ladder`. Thanh đi qua phía trên ô.
-- Cột đỡ hai đầu vẽ như trụ tròn, có va chạm (robot không đi xuyên). Thanh xà Ø 25 mm (luật không ghi; em chọn).
+- Thanh (Part 38): ống Ø20 dày 2 mm, dài 1,400 m giữa tâm hai cột, trục cao 0,6575 m.
+- Cột (Part 34): nhôm hộp 20×20, cao 0,638 m. Kẹp đầu cột (Part 37): trụ Ø35 cao 65 mm (y 0,608…0,673) đón ống.
+- Đầu rào: (∓1,19; −0,198). Đầu Hộp Phân Phối: (∓0,202; −1,19), sát mép hộp. Dài 1,4001.
+- Vạch: thanh cắt mép z = −0,6088 của Khu Chữa Cháy, cách đầu rào 0,580 m (x ≈ ∓0,781), trong Khu Chữa Cháy.
+- Ô vàng `ZONES.ladder` (375×375): thanh đi qua tâm ô, lệch 9 mm.
+- Cột và kẹp có va chạm (robot không đi xuyên); vẽ đúng hộp 20×20 và trụ Ø35.
 - Vạch là một khoanh băng keo cùng màu liên minh.
 
 Thanh xà vẽ trên bản đồ thẻ Luật chơi (SVG) và sân 3D.

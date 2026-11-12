@@ -120,16 +120,34 @@ test('holeCentres(): một lỗ cờ mỗi núi (A..D), lệch đúng HOLE (lx, 
   })
 })
 
-test('thanh xà Thang Cứu Hỏa: dài 1,300 m, vạch chia cách đầu rào 0,43 m ngay mép Khu Chữa Cháy', () => {
-  near(ladderLen('red'), 1.3, 0.002)
-  // điểm thanh cắt z = -0.6088 (mép Khu Chữa Cháy): cách a 0,43 m, nằm trong Khu Chữa Cháy
+test('thanh xà Thang Cứu Hỏa (CAD sân mới): dài 1,400 m, vạch cách đầu rào 0,580 m ngay mép Khu Chữa Cháy', () => {
+  near(ladderLen('red'), 1.4, 0.002)
+  // điểm thanh cắt z = -0.6088 (mép Khu Chữa Cháy): cách a 0,580 m, nằm trong Khu Chữa Cháy
   const a = LADDERS.red.a
   const b = LADDERS.red.b
   const t = (-0.6088 - a.z) / (b.z - a.z)
   const x = a.x + t * (b.x - a.x)
-  near(Math.hypot(x - a.x, -0.6088 - a.z), 0.43, 0.005)
+  near(Math.hypot(x - a.x, -0.6088 - a.z), 0.58, 0.005)
   assert.ok(x >= ZONES.fire[0].x0 && x <= ZONES.fire[0].x1)
-  near(LADDER.divider, 0.43, 0.005)
+  near(LADDER.divider, 0.58, 0.005)
+  // vạch tính từ hình học: nằm đúng mép Khu Chữa Cháy
+  near(pointAt('red', LADDER.divider).z, ZONES.fire[0].z1, 1e-9)
+})
+
+test('thanh xà CAD: ống Ø20 trục cao 0,6575, cột 20×20 cao 0,638, kẹp Ø35 cao 65 mm phủ y 0,608…0,673', () => {
+  near(LADDER.y, 0.6575, 1e-9); near(LADDER.rodR, 0.01, 1e-9)
+  near(LADDER.post, 0.02, 1e-9); near(LADDER.postH, 0.638, 1e-9)
+  near(LADDER.clampR, 0.0175, 1e-9); near(LADDER.clampH, 0.065, 1e-9)
+  near(LADDER.clampY0, 0.608, 1e-9); near(LADDER.clampY0 + LADDER.clampH, 0.673, 1e-9)
+  assert.ok(LADDER.y - LADDER.rodR >= LADDER.clampY0 && LADDER.y + LADDER.rodR <= LADDER.clampY0 + LADDER.clampH, 'ống nằm trọn trong kẹp')
+})
+
+test('thanh xà theo Hình 1: đầu b sát mép Hộp Phân Phối (x = ±0,202), đầu a cạnh rào, thanh đi qua tâm ô vàng (< 0,02)', () => {
+  near(Math.abs(LADDERS.red.b.x), 0.202, 0.005); near(Math.abs(LADDERS.blue.b.x), 0.202, 0.005)
+  for (const al of ['red', 'blue'] as const) {
+    const z = ZONES.ladder[al]
+    assert.ok(project(al, (z.x0 + z.x1) / 2, (z.z0 + z.z1) / 2).d < 0.02)
+  }
 })
 
 test('hai thanh xà đối xứng qua x = 0', () => {

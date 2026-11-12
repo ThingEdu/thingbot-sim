@@ -261,7 +261,7 @@ interface RobotView {
 const Y_UP = new THREE.Vector3(0, 1, 0)
 
 /**
- * Thang Cứu Hỏa (luật V4): mỗi liên minh một thanh xà Ø 25 mm cao LADDER.y trên hai cột tròn (đúng collider của
+ * Thang Cứu Hỏa (luật V4): mỗi liên minh một thanh xà Ø 20 mm cao LADDER.y trên hai cột hộp 20×20 có kẹp Ø35 (đúng collider của
  * world.ts), vạch Đất / Nước là khoanh băng keo màu liên minh ở `LADDER.divider` tính từ đầu rào.
  */
 function buildLadders(): THREE.Group {
@@ -276,9 +276,12 @@ function buildLadders(): THREE.Group {
     rod.quaternion.setFromUnitVectors(Y_UP, dir)
     g.add(rod)
     for (const p of [a, b]) {
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(LADDER.postR, LADDER.postR, LADDER.y, 16), metal)
-      post.position.set(p.x, LADDER.y / 2, p.z)
+      const post = new THREE.Mesh(new THREE.BoxGeometry(LADDER.post, LADDER.postH, LADDER.post), metal)
+      post.position.set(p.x, LADDER.postH / 2, p.z)
       g.add(post)
+      const clamp = new THREE.Mesh(new THREE.CylinderGeometry(LADDER.clampR, LADDER.clampR, LADDER.clampH, 20), metal)
+      clamp.position.set(p.x, LADDER.clampY0 + LADDER.clampH / 2, p.z)
+      g.add(clamp)
     }
     const d = pointAt(al, LADDER.divider)
     const tape = new THREE.Mesh(new THREE.CylinderGeometry(LADDER.rodR + 0.002, LADDER.rodR + 0.002, 0.02, 16), mat(new THREE.Color(COLORS[al]).getHex()))

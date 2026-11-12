@@ -165,7 +165,7 @@ test('nhật ký leo: chỉ báo khi mức leo giữ ≥ 0,5 s (chạm 1 bước
   assert.equal(climbLog(m).length, 0, 'chưa đủ 0,5 s')
   run(m, all({}), 0.2)
   assert.deepEqual(climbLog(m).map((e) => [e.robot, e.text]), [[0, 'Robot 1 treo ở Khu vực Đất (+0,10)']])
-  run(m, only(0, { M1: 255, M2: 255 }), 2.5)
+  run(m, only(0, { M1: 255, M2: 255 }), 3.5)
   run(m, all({}), 0.6)
   assert.equal(climbLog(m).at(-1)?.text, 'Robot 1 treo ở Khu vực Nước (+0,20)')
   run(m, only(0, { S2: 180 }), 0.6) // giơ móc: rơi xuống sàn, móc vẫn chạm xà

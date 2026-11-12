@@ -14,7 +14,7 @@ import type { Goal, Mission } from './types.ts'
 
 /**
  * Hạt giống sân của mọi nhiệm vụ (R96): cố định để mỗi lần làm lại, bóng xả xuống đúng như lần trước (nhiệm vụ 9–11
- * có bóng) — ngưỡng ⭐ của nhiệm vụ 9 đo trên chính sân này: 38 bóng xanh trong Khu Chữa Cháy khi chạy trong Node, 40–41
+ * có bóng) — ngưỡng ⭐ của nhiệm vụ 9 đo trên chính sân này: 47 bóng xanh trong Khu Chữa Cháy khi chạy trong Node (thanh xà/cột CAD mới 12/11 làm bóng xả lệch: trước đó 38), 40–41
  * trên trình duyệt (bóng còn lăn vài khung trước khi em bấm ▶).
  */
 export const MISSION_SEED = 2
@@ -291,9 +291,9 @@ export const MISSIONS: Mission[] = [
       'Em dừng lại suy nghĩ bao lâu cũng được. Làm xong việc thì robot đứng yên 1 giây là được chấm, hoặc em bấm Chấm.',
     ],
     // R96: sân đầy 300 bóng, quét dọc rào hai khu (đặt robot thẳng vào từng làn, không tính lúc quay xe) mất 21 s lái
-    // mà mới bớt từ 38 còn 24 quả (trình duyệt: 40 → 17…27); ba lượt (64 s) còn 13 — "không còn quả nào" trong 90 s là
-    // không làm được. ⭐ = còn ≤ 28: khoảng một lượt quét dọc rào.
-    goals: [{ type: 'fireClear', max: 28 }, { type: 'measure', what: 'distance', min: 1 }],
+    // mà mới bớt từ 47 còn 29 quả (trước CAD sân mới 12/11: 38 còn 24) (trình duyệt: 40 → 17…27); ba lượt (64 s) còn 13 — "không còn quả nào" trong 90 s là
+    // không làm được. ⭐ = còn ≤ 33: khoảng một lượt quét dọc rào.
+    goals: [{ type: 'fireClear', max: 33 }, { type: 'measure', what: 'distance', min: 1 }],
     stars: { two: [{ type: 'time', max: 60 }], three: [{ type: 'time', max: 40 }, { type: 'noMountain' }] },
     hints: [
       { when: 'fireClear', text: 'Khu Chữa Cháy còn nhiều bóng xanh quá — đi sát rào, đẩy cả hàng ra ngoài vạch nhé.' },

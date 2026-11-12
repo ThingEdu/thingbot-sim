@@ -242,7 +242,7 @@ test('world.holeCentres() là holeCentres() của layout ở cao độ đỉnh n
   }
 })
 
-test('Thang Cứu Hỏa: tia dọc từ trên xuống dọc thanh Xanh trúng thanh ở y ≈ 0,65; lệch ngang 5 cm thì không trúng thanh', async () => {
+test('Thang Cứu Hỏa: tia dọc từ trên xuống dọc thanh Xanh trúng thanh ở y ≈ 0,6675; lệch ngang 5 cm thì không trúng thanh', async () => {
   const { pointAt, ladderLen } = await import('./ladder.ts')
   const { LADDER } = await import('./layout.ts')
   const w = await FanrocWorld.create(1, { balls: false })
@@ -262,16 +262,26 @@ test('Thang Cứu Hỏa: tia dọc từ trên xuống dọc thanh Xanh trúng th
   assert.ok(hit && 1 - hit.timeOfImpact < 0.01, `lệch 5 cm vẫn trúng ở y = ${hit ? 1 - hit.timeOfImpact : '—'}`)
 })
 
-test('Thang Cứu Hỏa: cột hai đầu thanh cao 0,65 m chắn tia ngang ở độ cao 0,3 m', async () => {
-  const { LADDERS } = await import('./layout.ts')
+test('Thang Cứu Hỏa: cột hộp 20×20 cao 0,638 chắn tia ngang ở y = 0,3; kẹp Ø35 chắn tia ở y = 0,64', async () => {
+  const { LADDERS, LADDER } = await import('./layout.ts')
   const w = await FanrocWorld.create(1, { balls: false })
-  for (const { b } of Object.values(LADDERS)) {
-    // Đầu b (gần Hộp Phân Phối, xa rào cạnh): tia từ tâm sân về phía cột.
-    // Tia lệch 1 cm vào trong sân so với tâm cột (tâm cột nằm sát mặt rào phía xa).
-    const o = { x: 0, y: 0.3, z: b.z + 0.01 }
-    const dir = { x: Math.sign(b.x), y: 0, z: 0 }
-    const hit = w.rapier.castRay(new RAPIER.Ray(o, dir), 2, true)
-    const want = Math.abs(b.x) - Math.sqrt(0.02 ** 2 - 0.01 ** 2)
-    assert.ok(hit && Math.abs(hit.timeOfImpact - want) < 0.003, `cột ở x = ${b.x}: toi ${hit?.timeOfImpact}, mong ${want}`)
+  try {
+    for (const { b } of Object.values(LADDERS)) {
+      // Đầu b (gần Hộp Phân Phối): tia từ tâm sân về phía cột, lệch 5 mm vào trong sân so với tâm cột.
+      const dz = 0.005
+      const dir = { x: Math.sign(b.x), y: 0, z: 0 }
+      const hitBox = w.rapier.castRay(new RAPIER.Ray({ x: 0, y: 0.3, z: b.z + dz }, dir), 2, true)
+      const wantBox = Math.abs(b.x) - LADDER.post / 2
+      assert.ok(hitBox && Math.abs(hitBox.timeOfImpact - wantBox) < 0.002, `cột ở x = ${b.x}: toi ${hitBox?.timeOfImpact}, mong ${wantBox}`)
+      // y = 0,64 đã trên đỉnh cột (0,638) nhưng trong kẹp (0,608…0,673): trúng mặt trụ Ø35.
+      const hitClamp = w.rapier.castRay(new RAPIER.Ray({ x: 0, y: 0.64, z: b.z + dz }, dir), 2, true)
+      const wantClamp = Math.abs(b.x) - Math.sqrt(LADDER.clampR ** 2 - dz ** 2)
+      assert.ok(hitClamp && Math.abs(hitClamp.timeOfImpact - wantClamp) < 0.002, `kẹp ở x = ${b.x}: toi ${hitClamp?.timeOfImpact}, mong ${wantClamp}`)
+      // y = 0,69 trên kẹp (0,673) và trên ống (0,6675): không trúng gì ở đầu cột.
+      const above = w.rapier.castRay(new RAPIER.Ray({ x: 0, y: 0.69, z: b.z + dz }, dir), 2, true)
+      assert.ok(!above || above.timeOfImpact > Math.abs(b.x) + 0.1, 'trên kẹp phải trống')
+    }
+  } finally {
+    w.rapier.free()
   }
 })

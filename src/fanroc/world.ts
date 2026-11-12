@@ -109,7 +109,7 @@ export class FanrocWorld {
     }
   }
 
-  /** Thang Cứu Hỏa (luật V4): mỗi liên minh một thanh xà (trụ bo đầu, cao LADDER.y) trên hai cột tròn, va chạm tĩnh. */
+  /** Thang Cứu Hỏa (luật V4): mỗi liên minh một thanh xà (trụ bo đầu, cao LADDER.y) trên hai cột hộp 20×20 có kẹp Ø35, va chạm tĩnh. */
   private buildLadders(): void {
     for (const { a, b } of Object.values(LADDERS)) {
       const dx = b.x - a.x
@@ -122,7 +122,11 @@ export class FanrocWorld {
           .setTranslation((a.x + b.x) / 2, LADDER.y, (a.z + b.z) / 2)
           .setRotation({ x: dz * k, y: 0, z: -dx * k, w: Math.SQRT1_2 }),
       )
-      for (const p of [a, b]) this.fixed(RAPIER.ColliderDesc.cylinder(LADDER.y / 2, LADDER.postR).setTranslation(p.x, LADDER.y / 2, p.z))
+      for (const p of [a, b]) {
+        this.fixed(RAPIER.ColliderDesc.cuboid(LADDER.post / 2, LADDER.postH / 2, LADDER.post / 2).setTranslation(p.x, LADDER.postH / 2, p.z))
+        // kẹp đầu cột Ø35 cao 65 mm, y 0,608…0,673 (CAD Part 37)
+        this.fixed(RAPIER.ColliderDesc.cylinder(LADDER.clampH / 2, LADDER.clampR).setTranslation(p.x, LADDER.clampY0 + LADDER.clampH / 2, p.z))
+      }
     }
   }
 

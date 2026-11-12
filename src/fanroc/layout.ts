@@ -36,12 +36,35 @@ export const ZONES: {
 
 /**
  * Thang Cứu Hỏa: thanh xà tròn của mỗi liên minh, nằm trên rào, chạy từ `a` (đầu rào bên cạnh ô Bảo Vệ) tới `b` (đầu
- * Hộp Phân Phối). Đoạn từ `a` tới `divider` là Mặt Đất, phần còn lại là Nước. y = tâm thanh, rodR/postR = bán kính thanh/trụ.
+ * Hộp Phân Phối). Đoạn từ `a` tới `divider` là Mặt Đất, phần còn lại là Nước.
+ * Kích thước lấy từ CAD "Full sân Fanroc" (12/11/2026): thanh = Part 38 (ống Ø20 dày 2 mm, dài 1,400 m giữa tâm hai cột,
+ * trục cao 0,6575 m), cột = Part 34 (nhôm hộp 20×20, cao 0,638 m), kẹp đầu cột = Part 37 (trụ Ø35 cao 65 mm, y 0,608…0,673).
+ * CAD là các chi tiết rời nên vị trí đặt theo Hình 1 của luật: cột phía Hộp Phân Phối (∓0,202; −1,19) sát mép hộp, cột phía rào
+ * (∓1,19; −0,198). Vạch Đất/Nước = chỗ thanh cắt mép Khu Chữa Cháy (z = −0,6088), tính từ hình học, không gõ tay
+ * (số "khoảng 430 / 870 mm" trong luật chỉ để tham khảo).
+ * y = trục thanh, rodR = bán kính ống, post = cạnh cột vuông, postH = cao cột, clampR/clampH/clampY0 = kẹp đầu cột.
  */
-export const LADDER = { y: 0.65, divider: 0.43, rodR: 0.0125, postR: 0.02 }
 export const LADDERS: Record<Alliance, { a: { x: number; z: number }; b: { x: number; z: number } }> = {
-  red: { a: { x: -1.2, z: -0.317 }, b: { x: -0.246, z: -1.2 } },
-  blue: { a: { x: 1.2, z: -0.317 }, b: { x: 0.246, z: -1.2 } },
+  red: { a: { x: -1.19, z: -0.198 }, b: { x: -0.202, z: -1.19 } },
+  blue: { a: { x: 1.19, z: -0.198 }, b: { x: 0.202, z: -1.19 } },
+}
+
+/** Khoảng cách dọc thanh (từ `a`) tới chỗ thanh cắt đường z = zEdge. */
+export function barCrossing(l: { a: { x: number; z: number }; b: { x: number; z: number } }, zEdge: number): number {
+  const t = (zEdge - l.a.z) / (l.b.z - l.a.z)
+  return t * Math.hypot(l.b.x - l.a.x, l.b.z - l.a.z)
+}
+
+export const LADDER = {
+  y: 0.6575,
+  divider: barCrossing(LADDERS.red, ZONES.fire[0].z1),
+  rodR: 0.01,
+  post: 0.02,
+  postH: 0.638,
+  clampR: 0.0175,
+  clampH: 0.065,
+  /** đáy kẹp (CAD: y 0,608…0,673; kẹp không đối xứng quanh trục ống). */
+  clampY0: 0.608,
 }
 
 /**
