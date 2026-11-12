@@ -169,7 +169,9 @@ test('pha quay theo thanh không tiến (bánh không ăn): quá CLIMB_ALIGN_MAX
   const r = robots[1]
   r.setPose({ ...pointAt('red', LADDER.divider - 0.06), yaw: barYaw('red') + Math.PI / 2 }) // ở chỗ bám, vuông góc thanh
   const apply = r.apply.bind(r)
-  r.apply = (_ports, dt) => apply({ ...NEUTRAL }, dt) // bánh không ăn lệnh
+  // Mô phỏng HỆ TRUYỀN ĐỘNG CHẾT (động cơ đứt dây / bánh trượt hẳn): mọi lệnh cổng của robot này bị bỏ, robot đứng im dù
+  // agent ra lệnh quay — không phải cảnh kẹt trên sân (R163: dò cảnh kẹt thật không ra), chỉ để agent thấy "không tiến độ".
+  r.apply = (_ports, dt) => apply({ ...NEUTRAL }, dt)
   const agent = new Agent(r, MAKER, 'hard', 1)
   const view = { world: w, robots, match: m, humans: [] }
   let run = 0

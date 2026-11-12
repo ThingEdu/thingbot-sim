@@ -424,7 +424,7 @@ test('dọn Khu Chữa Cháy (nhiệm vụ 9) và trận đầu (nhiệm vụ 12
 })
 
 // ---------- Giải được trên sân thật ----------
-test('nhiệm vụ 5 «tiến (giây)» (R161): hai lần gọi tiến(0,4 m ÷ 0,275) + tiến(0,6 m ÷ 0,275) chạy trên sân đạt 3 sao; một lần gọi 2 sao; gọi ít giây ⇒ gợi ý tăng số giây', async (t) => {
+test('nhiệm vụ 5 «tiến (giây)» (R161): hai lần gọi tiến(0,4 m ÷ 0,275) + tiến(0,6 m ÷ 0,275) chạy trên sân đạt 3 sao; một lần gọi 2 sao; gọi ít giây ⇒ gợi ý tăng số giây, nhiều giây ⇒ «Đi quá … giảm số giây»', async (t) => {
   const m = byN(5)
   assert.equal(m.id, 'khoi-tien', 'giữ id để tiến độ đã lưu còn nguyên')
   const two = await runOnField(m, forward([secondsFor(0.4), secondsFor(0.6)]))
@@ -438,6 +438,9 @@ test('nhiệm vụ 5 «tiến (giây)» (R161): hai lần gọi tiến(0,4 m ÷ 
   const short = grade(m, await runOnField(m, forward([secondsFor(0.8)])))
   assert.equal(short.done, false)
   assert.match(short.hint ?? '', /hụt \d+ cm — tăng số giây/)
+  const long = grade(m, await runOnField(m, forward([secondsFor(1.2)])))
+  assert.equal(long.done, false)
+  assert.match(long.hint ?? '', /^Đi quá \d+ cm — giảm số giây\.$/)
 })
 
 test('nhiệm vụ 7 có lời giải: «lặp lại 4» + tiến (0,72 ÷ 0,275 = 2.62 giây) + rẽ trái (90) chạy trên sân đạt ≥ 2 sao', async (t) => {
