@@ -9,6 +9,13 @@ export type Climb = 'none' | 'contact' | 'ground' | 'water'
 export const HOOK = { upDeg: 150, downDeg: 30, tol: 0.06, slideV: 0.15, gap: 0.3, end: 0.05, hangY: 0.12 }
 
 /**
+ * Tên cổng của móc (bảng cổng / thẻ robot). Móc là cần lò xo (anh Tuấn 12/11): lúc xuất phát cần gập, cài chốt trong thân;
+ * servo quay tới 180° nhả chốt, lò xo bật MÓC lên trên thanh; servo về 0° là tời cuốn móc xuống, kéo robot lên xà.
+ * Luật RC04 cấm lò xo bắn ROBOT lên thanh: lò xo ở đây chỉ nâng móc (vài chục gam), robot lên xà là do tời / servo kéo.
+ */
+export const HOOK_LABEL = 'Móc leo xà (lò xo bật móc)'
+
+/**
  * Hình móc (vẽ bằng khối, chưa có CAD; anh Tuấn 12/11: không được có cơ cấu thò ra ngoài khung lúc xuất phát): cần ống lồng
  * THẲNG ĐỨNG ở tâm nóc xe, đầu chữ J. `reach` = thanh ngang của chữ J vươn ra khỏi trục cần, `t` = dày thanh ngang,
  * `drop` = nhánh rủ xuống của chữ J.
@@ -27,6 +34,29 @@ export function hookTop(def: { size: { h: number } }, deg: number, hanging: bool
   if (hanging) return LADDER.y - HOOK.hangY + HOOK_TIP.t / 2
   const frac = Math.max(0, Math.min(1, deg / HOOK.upDeg))
   return h + frac * (LADDER.y + 0.03 - h)
+}
+
+/**
+ * Móc lò xo theo thời gian (hình 3D): `latched` = cần đang gập, cài chốt trong thân; `top` = độ cao đỉnh móc như `hookTop`.
+ * - Cài chốt: đỉnh móc ở nóc xe, servo dưới HOOK.upDeg không làm gì (chốt chưa nhả).
+ * - Servo ≥ HOOK.upDeg: nhả chốt, lò xo bật móc lên nhanh (HOOK_SPRING_V) tới độ cao dây tời đang cho phép.
+ * - Servo hạ dần: tời cuốn dây, kéo móc xuống (HOOK_WINCH_V) theo góc servo; về tới nóc với servo ≤ HOOK.downDeg là cài chốt lại.
+ * - Đang treo: cần dài đúng tới trục thanh (tời kéo robot lên — vật lý leo ở stepClimb, không do lò xo).
+ */
+export type HookState = { latched: boolean; top: number }
+/** Tốc độ lò xo bật móc / tời cuốn móc xuống (m/s, chỉ để vẽ). */
+export const HOOK_SPRING_V = 3
+export const HOOK_WINCH_V = 1
+
+export function stepHook(st: HookState, def: { size: { h: number } }, deg: number, hanging: boolean, dt: number): HookState {
+  const h = def.size.h
+  if (hanging) return { latched: false, top: hookTop(def, deg, true) }
+  let latched = st.latched
+  if (latched && deg >= HOOK.upDeg) latched = false
+  if (latched) return { latched, top: h }
+  const target = hookTop(def, deg, false)
+  const top = target > st.top ? Math.min(target, st.top + HOOK_SPRING_V * dt) : Math.max(target, st.top - HOOK_WINCH_V * dt)
+  return { latched: deg <= HOOK.downDeg && top <= h + 1e-9, top }
 }
 
 /** % điểm leo của mỗi mức. */

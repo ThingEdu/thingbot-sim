@@ -3,7 +3,7 @@
 import type { PortValues } from './ports.ts'
 import type { Ps2Button } from './programs.ts'
 import { ZONES } from './layout.ts'
-import { HOOK_TIP, hookTop } from './ladder.ts'
+import { HOOK_LABEL, HOOK_TIP, hookTop } from './ladder.ts'
 
 export type RobotType = 'maker' | 'makerLift' | 'makerIntake' | 'makerPro' | 'ui' | 'co' | 'sort'
 export type Drive = 'diff2' | 'omni' | 'mecanum'
@@ -73,7 +73,7 @@ const MAKER: RobotDef = {
   // Luật V4 (anh Tuấn chốt 12/11): họ Maker bỏ cắm cờ, cổng S2 (trước là kẹp cờ) làm móc leo xà.
   mech: { M4: 'Thanh trượt răng' },
   // S1 trống (luật V4: "nâng tay" chỉ nâng điểm kẹp cờ, họ Maker không còn cờ ⇒ bỏ hẳn, rà soát cuối 12/11).
-  servos: { S2: 'Móc leo xà', S3: 'Cửa xả' },
+  servos: { S2: HOOK_LABEL, S3: 'Cửa xả' },
   storage: 4, hpLoad: false, flag: false,
   hook: { port: 'S2', button: 'SQUARE' },
   // Thanh răng 300 mm, bánh răng giữa xe: lùi được ~200 mm (CAD) — đúng trần mở rộng 500 mm của luật.
@@ -96,7 +96,7 @@ export const ROBOTS: Record<RobotType, RobotDef> = {
   // Ba mẫu cải tiến chỉ dùng linh kiện có trong CAD "Bộ thingbot mới" (servo MG996R, động cơ TT, bánh D65, thanh răng).
   makerLift: {
     ...MAKER, chuteBehind: false, rack: { ...MAKER.rack!, forward: false }, type: 'makerLift', name: 'Maker Nâng',
-    servos: { S1: 'Nâng cửa lồng (MG996R)', S2: 'Móc leo xà', S3: 'Cửa xả' },
+    servos: { S1: 'Nâng cửa lồng (MG996R)', S2: HOOK_LABEL, S3: 'Cửa xả' },
     chuteLift: CHUTE_LIFT,
   },
   makerIntake: {
@@ -110,7 +110,7 @@ export const ROBOTS: Record<RobotType, RobotDef> = {
     size: { ...MAKER.size, h: TALL_H },
     drives: ['omni', 'mecanum', 'diff2'],
     mech: { M3: 'Con lăn hút', M4: 'Thanh trượt răng' },
-    servos: { S1: 'Nâng cửa lồng (MG996R)', S2: 'Móc leo xà', S3: 'Cửa xả' },
+    servos: { S1: 'Nâng cửa lồng (MG996R)', S2: HOOK_LABEL, S3: 'Cửa xả' },
     storage: 8,
     chuteLift: CHUTE_LIFT,
   },
@@ -119,7 +119,7 @@ export const ROBOTS: Record<RobotType, RobotDef> = {
     size: { w: 0.18, l: 0.24, h: 0.15 },
     drives: ['diff2'],
     mech: {},
-    servos: { S1: 'Gàu hớt', S2: 'Móc leo xà' },
+    servos: { S1: 'Gàu hớt', S2: HOOK_LABEL },
     storage: 15, hpLoad: false, flag: false,
     hook: { port: 'S2', button: 'SQUARE' },
     release: { y: 0.1, reach: 0.05 }, maxExtend: 0,
@@ -131,7 +131,7 @@ export const ROBOTS: Record<RobotType, RobotDef> = {
     mech: { M4: 'Nâng thùng' },
     servos: { S1: 'Vươn tay cờ', S2: 'Kẹp cờ', S3: 'Cửa thùng' },
     storage: 12, hpLoad: true, flag: true,
-    // S1–S3 đã dùng cho cờ / thùng: móc ở S4 (bảng cổng ghi "S4: Móc leo xà"), nút R1 (□ vẫn là kẹp cờ).
+    // S1–S3 đã dùng cho cờ / thùng: móc ở S4 (bảng cổng ghi "S4: Móc leo xà (lò xo bật móc)"), nút R1 (□ vẫn là kẹp cờ).
     hook: { port: 'S4', button: 'R1' },
     release: { y: 0.2, reach: 0.05 }, maxExtend: 0.08,
     arm: { reach: 0.14, up: 0 },
@@ -142,7 +142,7 @@ export const ROBOTS: Record<RobotType, RobotDef> = {
     drives: ['diff2', 'mecanum', 'omni'],
     mech: { M3: 'Con lăn hút' },
     // S2 chọn ngăn (< 90° ngăn cam, ≥ 90° ngăn xanh), S3 là cửa xả của ngăn đang chọn.
-    servos: { S1: 'Móc leo xà', S2: 'Chọn ngăn', S3: 'Cửa xả ngăn' },
+    servos: { S1: HOOK_LABEL, S2: 'Chọn ngăn', S3: 'Cửa xả ngăn' },
     storage: 10, hpLoad: false, flag: false,
     hook: { port: 'S1', button: 'SQUARE' },
     release: { y: 0.1, reach: 0.05 }, maxExtend: 0,

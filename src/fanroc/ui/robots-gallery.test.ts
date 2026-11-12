@@ -9,11 +9,11 @@ test('portRows: cổng lấy từ portMap + servo của ROBOTS (đế 2 bánh, �
     { port: 'M1', use: 'Bánh trái' },
     { port: 'M2', use: 'Bánh phải' },
     { port: 'M4', use: 'Thanh trượt răng · động cơ TT' },
-    { port: 'S2', use: 'Móc leo xà' },
+    { port: 'S2', use: 'Móc leo xà (lò xo bật móc)' },
     { port: 'S3', use: 'Cửa xả' },
   ])
   // Xe Cắm Cờ: móc ở S4, ngoài các servo cố định.
-  assert.deepEqual(portRows({ type: 'co', drive: 'diff2', actuator: 'tt' }).find((r) => r.port === 'S4'), { port: 'S4', use: 'Móc leo xà' })
+  assert.deepEqual(portRows({ type: 'co', drive: 'diff2', actuator: 'tt' }).find((r) => r.port === 'S4'), { port: 'S4', use: 'Móc leo xà (lò xo bật móc)' })
 })
 
 test('portRows: đế 4 bánh chiếm M1–M4, cơ cấu chuyển sang S4 / S5 servo 360', () => {

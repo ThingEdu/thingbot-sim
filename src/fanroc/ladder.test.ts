@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { CLIMB_PCT, HOOK, HOOK_TIP, barYaw, hookTop, climbOf, ladderLen, pointAt, project, slideRange, stepClimb, type ClimbState } from './ladder.ts'
+import { CLIMB_PCT, HOOK, HOOK_LABEL, HOOK_TIP, barYaw, hookTop, stepHook, type HookState, climbOf, ladderLen, pointAt, project, slideRange, stepClimb, type ClimbState } from './ladder.ts'
 import { FIELD, LADDER } from './layout.ts'
 import { ROBOTS, ruleChecks } from './robots.ts'
 
@@ -184,5 +184,41 @@ test('ruleChecks R01 tính cả móc đã thu: mọi mẫu vẫn ≤ 300 × 300 
     assert.ok(r01 && r01.ok === true && /móc đã thu/.test(r01.text), `${d.type}: ${JSON.stringify(r01)}`)
     const mm = (m: number) => Math.round(m * 1000)
     assert.ok(r01.text.includes(`× ${mm(Math.max(d.size.h, hookTop(d, 0, false)))} mm`), r01.text)
+  }
+})
+
+// ---------- Móc lò xo (anh Tuấn 12/11): chốt gập lúc xuất phát, servo 180° nhả chốt — lò xo bật MÓC (không bắn robot, RC04) ----------
+test('stepHook: cài chốt thì servo < upDeg không nhúc nhích; 180° lò xo bật móc lên nhanh; về 0° tời cuốn xuống rồi cài chốt lại', () => {
+  const d = ROBOTS.maker
+  const h = d.size.h
+  const full = hookTop(d, 180, false)
+  const run = (st: HookState, deg: number, s: number, hanging = false) => {
+    for (let k = 0; k < Math.round(s * 60); k++) st = stepHook(st, d, deg, hanging, 1 / 60)
+    return st
+  }
+  let st: HookState = { latched: true, top: h }
+  st = run(st, HOOK.upDeg - 1, 1)
+  assert.deepEqual(st, { latched: true, top: h }, 'chốt chưa nhả mà móc đã lên')
+  // Lò xo: 0,05 s đã lên rõ, ≤ 0,25 s là lên hết (cao hơn trục thanh ≥ 2 cm), không vượt mức giơ hết.
+  const a = run(st, 180, 0.05)
+  assert.ok(!a.latched && a.top > h + 0.1, `0,05 s: ${a.top}`)
+  st = run(st, 180, 0.25)
+  assert.ok(Math.abs(st.top - full) < 1e-9 && st.top >= LADDER.y + 0.02, `0,25 s: ${st.top}`)
+  // Tời cuốn xuống chậm hơn lò xo bật lên.
+  const down = run(st, 0, 0.05)
+  assert.ok(full - down.top < a.top - h, 'tời phải chậm hơn lò xo')
+  st = run(st, 0, 1)
+  assert.deepEqual(st, { latched: true, top: h }, 'về 0° phải gập lại, cài chốt')
+  // Đã cài chốt lại: 90° không bật móc.
+  assert.deepEqual(run(st, 90, 0.5), { latched: true, top: h })
+  // Đang treo: cần dài đúng tới trục thanh.
+  assert.equal(stepHook(st, d, 0, true, 1 / 60).top, hookTop(d, 0, true))
+})
+
+test('HOOK_LABEL nói rõ lò xo bật móc (RC04: lò xo không được bắn robot lên thanh)', () => {
+  assert.equal(HOOK_LABEL, 'Móc leo xà (lò xo bật móc)')
+  for (const d of Object.values(ROBOTS)) {
+    const label = (d.servos as Record<string, string>)[d.hook.port] ?? HOOK_LABEL
+    assert.equal(label, HOOK_LABEL, d.type)
   }
 })

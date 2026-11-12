@@ -53,8 +53,9 @@ Trong trận:
 **Leo Thang Cứu Hỏa.** Mỗi liên minh có một thanh xà trên ô vàng ở góc sân, hai cột đứng ngoài rào. Vạch màu chia thanh
 làm hai đoạn: **Khu vực Đất** (gần rào, khoảng 45 cm tính từ cột) và **Khu vực Nước** (gần Khu Chữa Cháy). Thanh không
 đi qua giữa ô vàng mà lệch về phía rào chừng 9 cm: lái robot vào ô vàng, đứng ngay dưới thanh, quay theo thanh, giữ nút
-móc cho móc chạm thanh rồi nhả ra: robot được kéo lên và treo. Lúc xuất phát móc thu gọn trong thân (không thò ra ngoài
-khung); giữ nút thì cần móc duỗi thẳng lên cao hơn thanh. Đang treo thì đẩy cần tiến / lùi để trượt dọc thanh; tới gần
+móc cho móc chạm thanh rồi nhả ra: robot được kéo lên và treo. Lúc xuất phát móc gập, cài chốt trong thân (không thò ra ngoài
+khung); giữ nút là nhả chốt, lò xo bật móc lên cao hơn thanh; nhả nút là tời cuốn móc xuống, kéo robot lên (lò xo chỉ
+bật móc, không bắn robot lên thanh — luật cấm). Đang treo thì đẩy cần tiến / lùi để trượt dọc thanh; tới gần
 rào hay Hộp Phân Phối thì robot dừng lại (thân treo không trượt ra ngoài sân). Phải bám ở đoạn Đất trước rồi mới trượt
 sang Nước; giơ móc lần nữa là robot rơi xuống. Đoạn Đất ngắn, chỉ vừa một robot treo: robot thứ hai chờ bạn kia trượt
 sang Nước rồi mới bám. Mỗi thanh treo được 2 robot; leo thanh của liên minh kia không được tính.

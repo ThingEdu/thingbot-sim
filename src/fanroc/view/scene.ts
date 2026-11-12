@@ -11,7 +11,7 @@ import { servo360, type PortValues } from '../ports.ts'
 import { FLAG_LEN, buildRobotModel, makeFlag, type RobotModel } from './robotModels.ts'
 import { cadToModel, chuteExitModel, chuteSlot } from './cadModel.ts'
 import { TRAIL_COLORS, type Trail } from '../trail.ts'
-import { HOOK_TIP, hookTop, pointAt } from '../ladder.ts'
+import { HOOK_TIP, stepHook, pointAt, type HookState } from '../ladder.ts'
 import mesh from '../assets/mountain-mesh.json' with { type: 'json' }
 
 /** Ba góc chọn được ở ⚙ (`field | follow | driver`) và `orbit`: quay chậm quanh sân, nền của màn chính. */
@@ -298,13 +298,14 @@ function buildLadders(): THREE.Group {
 }
 
 /**
- * Móc leo xà vẽ bằng khối đơn giản (chưa có CAD): cần ống lồng thẳng đứng ở tâm nóc xe, đầu móc chữ J. Ở 0° cần rút hết,
- * đỉnh móc ngang nóc xe (không thò ra ngoài khung lúc xuất phát); độ cao đỉnh móc lấy từ `hookTop` (ladder.ts) — cùng số
- * với ô kiểm tra R01.
+ * Móc leo xà vẽ bằng khối đơn giản (chưa có CAD): cần ống lồng lò xo thẳng đứng ở tâm nóc xe, đầu móc chữ J. Lúc xuất phát
+ * cần gập, cài chốt (đỉnh móc ngang nóc xe, không thò ra ngoài khung); servo 180° nhả chốt, lò xo bật móc lên nhanh; servo
+ * về 0° tời cuốn móc xuống, kéo robot lên xà. Lò xo chỉ nâng móc, không bắn robot lên thanh (luật RC04). Độ cao đỉnh móc
+ * theo `stepHook` / `hookTop` (ladder.ts) — cùng số với ô kiểm tra R01.
  */
 interface Hook {
   group: THREE.Group
-  /** Góc servo móc (độ), robot đang treo, chiều cao thân xe (m). */
+  /** Góc servo móc (độ), robot đang treo, chiều cao thân xe (m). Móc mới dựng (trận mới) bắt đầu gập, cài chốt. */
   set(deg: number, hanging: boolean, h: number): void
 }
 
@@ -319,10 +320,17 @@ function makeHook(): Hook {
   const { reach, t, drop } = HOOK_TIP
   tip.add(box3(reach, t, 0.012, m, reach / 2, 0, 0), box3(t, drop, 0.012, m, reach - t / 2, -drop / 2, 0))
   group.add(outer, inner, tip)
+  let st: HookState | null = null
+  let last = 0
   return {
     group,
     set(deg, hanging, h) {
-      const top = hookTop({ size: { h } }, deg, hanging)
+      // Hoạt cảnh theo giờ thật (lò xo bật móc ~0,15 s), không theo bước vật lý: vật lý leo không đổi.
+      const now = performance.now() / 1000
+      const dt = st ? Math.min(0.1, now - last) : 0
+      last = now
+      st = stepHook(st ?? { latched: true, top: h }, { size: { h } }, deg, hanging, dt)
+      const top = st.top
       // Tâm thanh ngang chữ J; cần dài từ nóc xe tới đó (0 khi đã thu).
       const y = top - HOOK_TIP.t / 2
       const len = Math.max(0, y - h)

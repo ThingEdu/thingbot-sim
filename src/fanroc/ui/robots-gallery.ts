@@ -4,6 +4,7 @@
 // chỉ nạp (import động) khi màn hiện ra. Rời màn ⇒ giải phóng WebGL (renderer, hình) và vùng khối.
 import { localGripPoint, portMap, ROBOTS, type Actuator, type Drive, type RobotConfig, type RobotDef, type RobotType } from '../robots.ts'
 import { sample, teleopButtons, type Ps2Button } from '../programs.ts'
+import { HOOK_LABEL } from '../ladder.ts'
 import { injectCss as homeCss, robotStats } from './home.ts'
 import { icon } from './icons.ts'
 
@@ -24,7 +25,7 @@ export function portRows(cfg: RobotConfig): PortRow[] {
   if (m.lift && def.mech.M4) rows.push({ port: m.lift, use: `${def.mech.M4} · ${KIND[m.liftKind ?? 'motor']}` })
   for (const [s, what] of Object.entries(def.servos)) if (what) rows.push({ port: s, use: what })
   // Móc leo xà ở cổng ngoài `servos` (Xe Cắm Cờ: S4).
-  if (!(def.hook.port in def.servos)) rows.push({ port: def.hook.port, use: 'Móc leo xà' })
+  if (!(def.hook.port in def.servos)) rows.push({ port: def.hook.port, use: HOOK_LABEL })
   return rows.sort((a, b) => PORT_ORDER.indexOf(a.port) - PORT_ORDER.indexOf(b.port))
 }
 

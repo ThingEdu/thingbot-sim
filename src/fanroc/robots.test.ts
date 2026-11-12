@@ -131,15 +131,15 @@ test('Luật V4: móc leo xà — họ Maker / Xe Ủi S2 □, Xe Cắm Cờ S4 
   for (const t of ['maker', 'makerLift', 'makerIntake', 'makerPro'] as const) {
     assert.deepEqual(ROBOTS[t].hook, { port: 'S2', button: 'SQUARE' }, t)
     assert.equal(ROBOTS[t].flag, false, t)
-    assert.equal(ROBOTS[t].servos.S2, 'Móc leo xà', t)
+    assert.equal(ROBOTS[t].servos.S2, 'Móc leo xà (lò xo bật móc)', t)
     assert.equal('rearGrip' in ROBOTS[t] || 'flagFront' in ROBOTS[t], false, t)
   }
   assert.deepEqual(ROBOTS.ui.hook, { port: 'S2', button: 'SQUARE' })
   assert.deepEqual(ROBOTS.co.hook, { port: 'S4', button: 'R1' })
   assert.deepEqual(ROBOTS.sort.hook, { port: 'S1', button: 'SQUARE' })
   assert.equal(ROBOTS.co.flag, true)
-  assert.equal(ROBOTS.ui.servos.S2, 'Móc leo xà')
-  assert.equal(ROBOTS.sort.servos.S1, 'Móc leo xà')
+  assert.equal(ROBOTS.ui.servos.S2, 'Móc leo xà (lò xo bật móc)')
+  assert.equal(ROBOTS.sort.servos.S1, 'Móc leo xà (lò xo bật móc)')
 })
 
 test('Luật V4: mọi mẫu × mọi đế × cơ cấu đều ≤ 5 servo kể cả móc; Maker Pro omni 5 / 5, Xe Cắm Cờ omni 5 / 5 (móc S4 đếm thêm)', () => {
