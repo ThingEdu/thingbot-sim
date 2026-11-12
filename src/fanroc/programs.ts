@@ -259,8 +259,11 @@ export const AUTO_TIMES = {
   align: 1.6,
   /** Giơ móc rồi tiến chạm thanh (vẫn trong đoạn Mặt Đất); hạ móc là bám. */
   hookUp: 0.5,
-  /** Đang treo: tiến cho móc trượt dọc thanh qua vạch Đất / Nước (0,15 m/s × phần tốc độ bánh). */
-  slide: 5,
+  /**
+   * Đang treo: tiến cho móc trượt dọc thanh qua vạch Đất / Nước (0,15 m/s × phần tốc độ bánh). Đo trên sân: mọi mẫu dừng
+   * quá vạch ≥ 0,2 m và còn cách kẹp đầu thanh phía Hộp Phân Phối ≥ 0,45 m.
+   */
+  slide: 6,
 }
 
 /** Lệnh cho các bánh: đế 2 bánh (trái, phải) hoặc 4 bánh (trước trái, trước phải, sau trái, sau phải), −1…1. */

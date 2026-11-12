@@ -277,9 +277,9 @@ test('Chương trình lỗi giữa trận (chia cho 0) ⇒ báo lỗi tiếng Vi
 })
 
 // Luật V4: Auto mẫu kết thúc bằng leo Thang Cứu Hỏa. Mọi robot mẫu (cấu hình mặc định, thêm Mẫu Maker mecanum) đều
-// phải tới núi, xả bóng, rồi đang treo trên thanh đỏ (Mặt Đất hoặc Nước) lúc hết 30 s — không còn bỏ qua.
+// phải tới núi, xả bóng, bám thanh đỏ rồi trượt sang đoạn Nước, còn treo ở đó lúc hết 30 s — không còn bỏ qua.
 for (const cfg of [...TYPES.map(defaultConfig), { type: 'maker', drive: 'mecanum', actuator: 'tt' } as RobotConfig])
-  test(`Auto ${name(cfg)} từ ô Robot 1: tới Ngọn Núi A, mở cửa xả, rồi leo Thang Cứu Hỏa đỏ (treo ở Mặt Đất / Nước)`, async () => {
+  test(`Auto ${name(cfg)} từ ô Robot 1: tới Ngọn Núi A, mở cửa xả, rồi leo Thang Cứu Hỏa đỏ, trượt sang Nước`, async () => {
     const T = AUTO_TIMES
     const { robot, link, trace } = await onField(cfg, code(sample(cfg, 'auto')), 30)
     assert.notEqual(link.state, 'error', link.error ?? '')
@@ -287,7 +287,7 @@ for (const cfg of [...TYPES.map(defaultConfig), { type: 'maker', drive: 'mecanum
     assert.ok(atMountain.z < 0.95, `chưa tới núi: z = ${atMountain.z.toFixed(3)}`)
     if (ROBOTS[cfg.type].servos.S3) assert.equal(at(trace, T.toMountain + T.dump / 2).ports.S3, 180, 'đang xả: cửa S3 phải mở')
     const { level, bar } = robot.climbLevel
-    assert.ok(level === 'ground' || level === 'water', `chưa leo xà: ${level}, dừng ở ${JSON.stringify(robot.pose)}`)
+    assert.equal(level, 'water', `chưa treo ở Nước: ${level}, s = ${robot.climb.s.toFixed(3)}, dừng ở ${JSON.stringify(robot.pose)}`)
     assert.equal(bar, 'red')
   })
 
