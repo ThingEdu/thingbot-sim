@@ -5,16 +5,15 @@ import { RobotBody } from '../robot.ts'
 import { Match } from '../match.ts'
 import { NEUTRAL } from '../ports.ts'
 import { SEATS } from '../quickmatch.ts'
-import { ZONES } from '../layout.ts'
 import { teamScore, type ScoreBreakdown } from '../scoring.ts'
 import type { RobotConfig } from '../robots.ts'
 import { countdownCue, phaseOf, programLabel, resultView, scoreLine, scorePops, ScoreTicker, SCORE_HZ } from './scoreboard.ts'
 
 const MAKER: RobotConfig = { type: 'maker', drive: 'diff2', actuator: 'tt' }
-/** Xe Ủi: hẹp, hai chiếc đỗ toàn phần cạnh nhau được trong một Vùng Bảo Vệ (như match.test). */
+/** Xe Ủi: hẹp. */
 const UI: RobotConfig = { type: 'ui', drive: 'diff2', actuator: 'tt' }
 const TEAMS = ['Dế Xanh', 'Chuồn Chuồn', 'Kiến Lửa', 'Ong Vàng']
-const ZERO: ScoreBreakdown = { fire: 0, r1: 0, r2: 0, r3: 0, flag: 0, park: 0, wrong: 0, total: 0 }
+const ZERO: ScoreBreakdown = { fire: 0, r1: 0, r2: 0, r3: 0, flag: 0, wrong: 0, mission: 0, multPct: 100, total: 0 }
 const bd = (p: Partial<ScoreBreakdown>): ScoreBreakdown => ({ ...ZERO, ...p })
 
 /** Trận theo thứ tự ghế của trang (Đỏ 0, Xanh 0, Đỏ 1, Xanh 1). */
@@ -36,27 +35,19 @@ test('scorePops: tăng r3 15 ⇒ "+15 · Rãnh 3"; tăng fire ⇒ "+5 · Chữa 
   // Không đổi ⇒ không báo; hai mục cùng đổi ⇒ hai dòng theo thứ tự mục; tổng không phải một mục.
   assert.deepEqual(scorePops(bd({ r1: 5, total: 5 }), bd({ r1: 5, total: 5 })), [])
   assert.deepEqual(scorePops(ZERO, bd({ fire: 5, flag: 40, total: 45 })), ['+5 · Chữa Cháy', '+40 · Cờ'])
-  assert.deepEqual(scorePops(ZERO, bd({ park: 10, total: 10 })), ['+10 · Vùng Bảo Vệ'])
 })
 
-test('scoreLine: phần đỗ hai liên minh cộng lại = result().score.park; điểm đội = teamScore; tên đội đúng bên', async () => {
+test('scoreLine: điểm đội = teamScore; tên đội đúng bên', async () => {
   const { w, robots, m } = await setup(4, false, [UI, MAKER, UI, MAKER])
   try {
-    // Hai robot đỏ đỗ toàn phần cạnh nhau (thưởng liên minh), Robot 2 (xanh ô 0) nửa thân trong Vùng Bảo Vệ xanh.
-    const s = ZONES.ladder.red
-    const cz = (s.z0 + s.z1) / 2
-    robots[0].setPose({ x: s.x0 + 0.095, z: cz, yaw: 0 })
-    robots[2].setPose({ x: s.x1 - 0.095, z: cz, yaw: 0 })
-    const b = ZONES.ladder.blue
-    robots[1].setPose({ x: b.x0 - 0.05, z: (b.z0 + b.z1) / 2, yaw: 0 })
+    m.setFlag(0) // +20 để điểm đội khác 0
     m.pens[3].minor = 2 // Ong Vàng: 2 lỗi nhẹ
     m.t = 1
     run(m, 4, 0.1)
     const line = scoreLine(m, robots)
     const r = m.result()
-    assert.equal(line.red.park + line.red.bonus + line.blue.park + line.blue.bonus, r.score.park)
-    assert.deepEqual([line.red.park, line.red.bonus, line.blue.park, line.blue.bonus], [20, 10, 5, 0])
     assert.equal(line.total, r.score.total)
+    assert.equal(line.total, 20)
     assert.deepEqual(line.red.teams.map((t) => t.name), ['Dế Xanh', 'Kiến Lửa'])
     assert.deepEqual(line.blue.teams.map((t) => t.name), ['Chuồn Chuồn', 'Ong Vàng'])
     const ong = line.blue.teams[1]
@@ -82,13 +73,13 @@ test('scoreLine: nhiệm vụ một robot không vỡ (bên Xanh rỗng); luyệ
     assert.equal(line.blue.teams.length, 0)
     assert.equal(line.phase, 'LUYỆN TẬP')
     assert.equal(line.clock, '0:00')
-    assert.equal(resultView(m, robots).items.length, 7)
+    assert.equal(resultView(m, robots).items.length, 8)
   } finally {
     w.rapier.free()
   }
 })
 
-test('phaseOf: XẢ BÓNG → ĐIỀU KHIỂN → VỀ VÙNG BẢO VỆ (30 s cuối) → HẾT GIỜ', async () => {
+test('phaseOf: XẢ BÓNG → ĐIỀU KHIỂN (cả 30 s cuối, luật V4 bỏ End Game) → HẾT GIỜ', async () => {
   const { w, m } = await setup()
   try {
     assert.equal(phaseOf(m), 'XẢ BÓNG')
@@ -97,7 +88,7 @@ test('phaseOf: XẢ BÓNG → ĐIỀU KHIỂN → VỀ VÙNG BẢO VỆ (30 s cu
     assert.equal(phaseOf(m), 'ĐIỀU KHIỂN')
     m.t = 151
     run(m, 4, 0.1)
-    assert.equal(phaseOf(m), 'VỀ VÙNG BẢO VỆ')
+    assert.equal(phaseOf(m), 'ĐIỀU KHIỂN')
     m.t = 179.95
     run(m, 4, 0.1)
     assert.equal(phaseOf(m), 'HẾT GIỜ')
@@ -131,24 +122,22 @@ test('ScoreTicker: tối đa SCORE_HZ lần/giây; báo nổi chỉ khi đang th
     const first = tk.tick(0, m, robots)
     assert.ok(first && first.pops.length === 0, 'lần đầu: có dòng, không báo nổi')
     assert.equal(tk.tick(1000 / SCORE_HZ - 1, m, robots), null, 'chưa tới hạn ⇒ null')
-    // Đang xả bóng: điểm đổi (Robot 2 vào Vùng Bảo Vệ xanh) nhưng không báo nổi.
-    const b0 = ZONES.ladder.blue
-    robots[1].setPose({ x: (b0.x0 + b0.x1) / 2, z: (b0.z0 + b0.z1) / 2, yaw: 0 })
+    // Đang xả bóng: điểm đổi (cờ Núi A) nhưng không báo nổi.
+    m.setFlag(0)
     const rel = tk.tick(1000 / SCORE_HZ, m, robots)
-    assert.ok(rel && rel.line.phase === 'XẢ BÓNG' && rel.line.blue.park === 10 && rel.pops.length === 0, 'xả bóng không báo nổi')
+    assert.ok(rel && rel.line.phase === 'XẢ BÓNG' && rel.line.score.flag === 20 && rel.pops.length === 0, 'xả bóng không báo nổi')
     m.t = 0
     run(m, 4, 0.1)
-    // Lần đầu sau xả bóng chỉ đặt mốc, dù điểm đã đổi (Robot 1 vào Vùng Bảo Vệ đỏ ngay lúc sang thi đấu).
-    const s = ZONES.ladder.red
-    robots[0].setPose({ x: s.x0 + 0.125, z: (s.z0 + s.z1) / 2, yaw: 0 })
+    // Lần đầu sau xả bóng chỉ đặt mốc, dù điểm đã đổi (cờ Núi B ngay lúc sang thi đấu).
+    m.setFlag(1)
     const base = tk.tick(2000, m, robots)
-    assert.ok(base && base.line.phase === 'ĐIỀU KHIỂN' && base.line.red.park === 10 && base.pops.length === 0, 'sang thi đấu: chỉ đặt mốc')
-    // Robot 1 ra khỏi Vùng Bảo Vệ rồi vào lại ⇒ "−10", rồi "+10 · Vùng Bảo Vệ".
-    robots[0].setPose({ x: 0.3, z: 0.9, yaw: 0 })
-    assert.deepEqual(tk.tick(2300, m, robots)?.pops, ['−10 · Vùng Bảo Vệ'])
-    robots[0].setPose({ x: s.x0 + 0.125, z: (s.z0 + s.z1) / 2, yaw: 0 })
+    assert.ok(base && base.line.phase === 'ĐIỀU KHIỂN' && base.line.score.flag === 40 && base.pops.length === 0, 'sang thi đấu: chỉ đặt mốc')
+    // Cờ Núi B rơi rồi cắm lại ⇒ "−20 · Cờ", rồi "+20 · Cờ".
+    m.flags[1] = false
+    assert.deepEqual(tk.tick(2300, m, robots)?.pops, ['−20 · Cờ'])
+    m.setFlag(1)
     const next = tk.tick(2600, m, robots)
-    assert.deepEqual(next?.pops, ['+10 · Vùng Bảo Vệ'])
+    assert.deepEqual(next?.pops, ['+20 · Cờ'])
     // Trận khác (cùng thời điểm thật): mốc mới, không báo bù từ trận cũ.
     const b = await setup()
     try {

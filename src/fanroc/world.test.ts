@@ -119,13 +119,20 @@ test('gờ Rãnh 2 giữ bóng đang lăn ra mép (4 hướng, Núi A và D)', a
   }
 })
 
-test('bóng xanh trên tầng trang trí tính vào Rãnh 1 (mtn[m][0].g)', async () => {
+test('tầng trang trí (luật V4): 2 bóng xanh không tính, 1 bóng cam vào decorO (−3); 3 rãnh không nhận bóng nào', async () => {
   const w = await FanrocWorld.create(1)
-  w.placeBall(GREEN, above(grooveSpot(w, 1, DECOR), DECOR))
+  const spots = [0, (2 * Math.PI) / 3, (4 * Math.PI) / 3].map((a) => grooveSpot(w, 1, DECOR, a))
+  w.placeBall(GREEN, above(spots[0], DECOR))
+  w.placeBall(GREEN + 1, above(spots[1], DECOR))
+  w.placeBall(ORANGE, above(spots[2], DECOR))
   run(w, 2)
   const t = w.tally(new Set())
-  assert.equal(t.mtn[1][0].g, 1, `y = ${pos(w, GREEN).y.toFixed(3)}`)
-  assert.equal(t.mtn[1][1].g + t.mtn[1][2].g, 0)
+  for (const i of [GREEN, GREEN + 1, ORANGE]) {
+    assert.ok(Math.abs(pos(w, i).y - (TIERS[DECOR].floor + BALL_R)) < 0.01, `bóng ${i} không nằm trên tầng trang trí: y = ${pos(w, i).y.toFixed(3)}`)
+  }
+  assert.equal(t.decorO, 1)
+  assert.equal(t.mtn[1].length, 3)
+  assert.deepEqual(t.mtn[1], [{ g: 0, o: 0 }, { g: 0, o: 0 }, { g: 0, o: 0 }])
 })
 
 test('bóng nằm trên sàn ở góc hình bao chân núi (ngoài chân thật) không tính Rãnh 1', async () => {

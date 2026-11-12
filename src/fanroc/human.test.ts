@@ -14,7 +14,7 @@ const UI: RobotConfig = { type: 'ui', drive: 'diff2', actuator: 'tt' }
 const mid = (r: { x0: number; x1: number; z0: number; z1: number }) => ({ x: (r.x0 + r.x1) / 2, z: (r.z0 + r.z1) / 2 })
 const ball = (w: FanrocWorld, i: number, x: number, z: number) => w.placeBall(i, { x, y: BALL_R, z })
 const ctx = (world: FanrocWorld, robots: RobotBody[], over: Partial<HpContext> = {}): HpContext =>
-  ({ world, robots, phase: 'play', endgame: false, ...over })
+  ({ world, robots, phase: 'play', ...over })
 /** Robot đỏ nằm trọn trong Khu Tiếp Tế đỏ. */
 const inLoad = (r: RobotBody) => {
   const c = mid(ZONES.load.red)
@@ -69,20 +69,6 @@ test('load: từ chối khi robot ngoài Khu Tiếp Tế, nhận khi một góc 
   assert.equal(w.balls[0].st, 'held')
   assert.deepEqual(hp.tray, { o: 0, g: 0 })
   assert.deepEqual(events, ['Robot 1 nhận bóng cam'])
-})
-
-test('load: End Game + robot parked => từ chối; ngoài End Game thì vẫn nạp được', async () => {
-  const w = await FanrocWorld.create(1)
-  const s = mid(ZONES.start.red)
-  ball(w, 0, s.x, s.z)
-  const hp = new HumanPlayer('red')
-  hp.press('pick', ctx(w, []))
-  const r = new RobotBody(w, MAKER, 'red', 0)
-  inLoad(r)
-  r.parked = true
-  assert.equal(hp.press('load', ctx(w, [r], { endgame: true })), 'Robot đã về Vùng Bảo Vệ')
-  assert.equal(r.stored.length, 0)
-  assert.equal(hp.press('load', ctx(w, [r], { endgame: false })), null)
 })
 
 test('load: khay rỗng, màu hết, robot đầy, robot khác liên minh', async () => {
@@ -218,7 +204,7 @@ test('auto: robot thường nhận màu khay có nhiều hơn (hoà thì cam); d
   assert.equal(await run(), await run())
 })
 
-test('auto (P04–P07): tự nhặt bóng trong Khu Xuất Phát rồi nạp cho robot ở Khu Tiếp Tế; End Game + đã đỗ ⇒ không nạp', async () => {
+test('auto (P04–P07): tự nhặt bóng trong Khu Xuất Phát rồi nạp cho robot ở Khu Tiếp Tế (luật V4: không còn chặn nạp cuối trận)', async () => {
   const w = await FanrocWorld.create(1)
   const s = mid(ZONES.start.red)
   for (let k = 0; k < 2; k++) ball(w, 150 + k, s.x + k * 0.05, s.z)
@@ -230,10 +216,9 @@ test('auto (P04–P07): tự nhặt bóng trong Khu Xuất Phát rồi nạp cho
   hp.auto(ctx(w, [r]), 0.8)
   assert.deepEqual(r.stored, [150])
   assert.deepEqual(events, ['Human Player nhặt bóng xanh', 'Robot 1 nhận bóng xanh'])
-  r.parked = true
-  hp.auto(ctx(w, [r], { endgame: true }), 0.8)
-  assert.deepEqual(r.stored, [150], 'đã đỗ trong End Game: không nạp')
-  assert.deepEqual(hp.tray, { o: 0, g: 1 })
+  hp.auto(ctx(w, [r]), 0.8)
+  assert.deepEqual(r.stored, [150, 151], 'nạp tiếp, không có nhánh "đã về Vùng Bảo Vệ"')
+  assert.deepEqual(hp.tray, { o: 0, g: 0 })
   // Giai đoạn xả bóng: không nhặt.
   const hp2 = new HumanPlayer('red')
   ball(w, 152, s.x - 0.05, s.z)

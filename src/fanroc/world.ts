@@ -241,11 +241,13 @@ export class FanrocWorld {
   /**
    * Đếm bóng theo luật hình học: Khu Chữa Cháy (bóng chạm vạch cũng tính) và 3 rãnh của từng núi.
    * Bóng chỉ thuộc một tầng khi tia ngắn từ tâm bóng xuống chạm núi trước tiên (không phải sàn, robot hay bóng khác)
-   * và tâm bóng trong ±TIER_TOL của đáy rãnh + BALL_R; rãnh tính điểm lấy từ TIER_GROOVE (decor gộp vào Rãnh 1).
+   * và tâm bóng trong ±TIER_TOL của đáy rãnh + BALL_R; rãnh tính điểm lấy từ TIER_GROOVE. Tầng trang trí (TIER_GROOVE −1):
+   * chỉ đếm bóng cam vào `decorO`, bóng xanh bỏ qua (luật V4).
    * Bóng trong `robotsHolding` hoặc không ở 'field' không tính.
    */
-  tally(robotsHolding: Set<number>): Omit<FieldTally, 'flags' | 'parks'> {
+  tally(robotsHolding: Set<number>): Omit<FieldTally, 'flags' | 'climbs'> {
     const fire = { o: 0, g: 0 }
+    let decorO = 0
     const mtn = MOUNTAINS.map(() => [0, 1, 2].map(() => ({ g: 0, o: 0 })))
     this.balls.forEach((b, i) => {
       if (b.st !== 'field' || !b.body || robotsHolding.has(i)) return
@@ -263,8 +265,11 @@ export class FanrocWorld {
       })
       if (k < 0) return
       const hit = this.rapier.castRay(new RAPIER.Ray(p, DOWN), REST_RAY, true, undefined, undefined, undefined, b.body)
-      if (hit && this.mountainColliders.has(hit.collider.handle)) mtn[m][TIER_GROOVE[k]][b.color]++
+      if (!hit || !this.mountainColliders.has(hit.collider.handle)) return
+      const g = TIER_GROOVE[k]
+      if (g >= 0) mtn[m][g][b.color]++
+      else if (b.color === 'o') decorO++
     })
-    return { fire, mtn }
+    return { fire, mtn, decorO }
   }
 }

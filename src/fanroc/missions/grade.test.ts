@@ -17,6 +17,7 @@ import { TOOLBOX_OPCODES } from '../programs.ts'
 import { argumentReporter, procedureCall, procedureState } from '../procedures.ts'
 import { holeCentres, mountainAt, type Pose } from '../layout.ts'
 import { scoreTally, type FieldTally } from '../scoring.ts'
+import type { Climb } from '../ladder.ts'
 import { RobotLink } from '../link.ts'
 import { FanrocWorld, PHYSICS_DT } from '../world.ts'
 import { Match } from '../match.ts'
@@ -86,13 +87,14 @@ const prog = (begin: B[], extra: B[] = []) => ({
 })
 
 // ---------- Bản ghi giả ----------
+const CLIMB_ORDER: Climb[] = ['none', 'contact', 'ground', 'water']
 const at = (p: Pose, dx: number, dz = 0, dyaw = 0): Pose => ({ x: p.x + dx, z: p.z + dz, yaw: p.yaw + dyaw })
 const record = (m: Mission, o: Partial<RunRecord> = {}): RunRecord => ({
   start: m.start, end: m.start, trail: { distance: 3, turned: 360, time: 15 }, touchedMountain: false, events: [], program: null, ...o,
 })
 const emptyTally = (): FieldTally => ({
   fire: { o: 0, g: 0 }, mtn: [0, 1, 2, 3].map(() => [0, 1, 2].map(() => ({ g: 0, o: 0 }))), flags: [false, false, false, false],
-  parks: { red: [null, null], blue: [null, null] },
+  decorO: 0, climbs: { red: ['none', 'none'], blue: ['none', 'none'] },
 })
 
 /** Bản ghi đạt mọi điều kiện của nhiệm vụ (⭐ + ⭐⭐ + ⭐⭐⭐), dựng từ chính dữ liệu: chứng minh 3 sao đạt được về logic. */
@@ -112,7 +114,7 @@ function ideal(m: Mission): RunRecord {
     if (g.type === 'uses') begin.push(...g.opcodes.map((op) => (op === 'control_repeat' ? repeat(2, []) : op === 'control_wait' ? wait(1) : op === 'thingBotC3_setMotor' ? motor(1, 'forward', 0) : { type: op })))
     if (g.type === 'paramBlock') paramCalls = Math.max(paramCalls, g.calls ?? 1)
     if (g.type === 'flag') ((tally.flags[g.mountain] = true), events.push({ t: 1, robot: 0, text: `Robot 1 cắm cờ Núi ${'ABCD'[g.mountain]}` }))
-    if (g.type === 'park') tally.parks.red[0] = 'full'
+    if (g.type === 'climb' && CLIMB_ORDER.indexOf(g.min) > CLIMB_ORDER.indexOf(tally.climbs.red[0])) tally.climbs.red[0] = g.min
     if (g.type === 'score') tally.fire.o = Math.max(tally.fire.o, Math.ceil(g.min / 5))
     if (g.type === 'matchEnd') events.push({ t: 180, robot: null, text: 'Hết giờ — điểm trận 0' })
   }
@@ -317,12 +319,14 @@ test('cắm cờ (nhiệm vụ 10) chấm bằng sự kiện cắm cờ của tr
   assert.deepEqual([r.done, r.stars], [true, 3])
 })
 
-test('đỗ xe (nhiệm vụ 11): một phần ⇒ 1 sao, toàn phần ⇒ 2 sao trở lên', () => {
+test('leo Thang Cứu Hỏa (nhiệm vụ 11, luật V4): chạm ⇒ 1 sao, treo Đất ⇒ 2, treo Nước ⇒ 3; robot em là climbs.red[0]', () => {
   const m = byN(11)
-  const t = (p: 'full' | 'partial' | null) => ({ ...emptyTally(), parks: { red: [p, null] as ('full' | 'partial' | null)[], blue: [null, null] as ('full' | 'partial' | null)[] } })
-  assert.equal(grade(m, record(m, { tally: t(null) })).done, false)
-  assert.equal(grade(m, record(m, { tally: t('partial'), trail: { distance: 2, turned: 90, time: 15 } })).stars, 1)
-  assert.equal(grade(m, record(m, { tally: t('full'), trail: { distance: 2, turned: 90, time: 15 } })).stars, 3)
+  const t = (c: Climb, other: Climb = 'none') => ({ ...emptyTally(), climbs: { red: [c, other], blue: ['water', 'water'] as Climb[] } })
+  assert.equal(grade(m, record(m, { tally: t('none', 'water') })).done, false, 'chỉ robot em (Robot 1) được tính')
+  assert.deepEqual([grade(m, record(m, { tally: t('contact') })).done, grade(m, record(m, { tally: t('contact') })).stars], [true, 1])
+  assert.equal(grade(m, record(m, { tally: t('ground') })).stars, 2)
+  assert.equal(grade(m, record(m, { tally: t('water') })).stars, 3)
+  assert.deepEqual(grade(m, record(m, { tally: t('water') })).goals.map((g) => g.text), ['Chạm Thang Cứu Hỏa', '⭐⭐ Treo ở Khu vực Đất', '⭐⭐⭐ Treo ở Khu vực Nước'])
 })
 
 test('dọn Khu Chữa Cháy (nhiệm vụ 9) và trận đầu (nhiệm vụ 12) đọc tally', () => {

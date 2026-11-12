@@ -12,7 +12,7 @@ const byN = (n: number) => MISSIONS.find((m) => m.n === n)!
 const DT = 1 / 240
 const tally = (): FieldTally => ({
   fire: { o: 0, g: 0 }, mtn: [0, 1, 2, 3].map(() => [0, 1, 2].map(() => ({ g: 0, o: 0 }))), flags: [false, false, false, false],
-  parks: { red: [null, null], blue: [null, null] },
+  decorO: 0, climbs: { red: ['none', 'none'], blue: ['none', 'none'] },
 })
 /** Sân giả: robot ở `pose`, thân vuông 24 cm; đếm số lần đọc tally. */
 function field(start: Pose) {

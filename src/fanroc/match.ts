@@ -1,12 +1,14 @@
-// Trận đấu FANROC: 10 s xả bóng (robot đứng yên) → 180 s thi đấu (End Game = 30 s cuối) → hết giờ (G12, robot đóng băng).
+// Trận đấu FANROC: 10 s xả bóng (robot đứng yên) → 180 s thi đấu → hết giờ (G12, robot đóng băng). Luật V4: không còn
+// End Game / đỗ Vùng Bảo Vệ; robot treo trên Thang Cứu Hỏa lúc hết giờ nâng hệ số nhân điểm trận.
 // Luyện tập (ruling R31): 10 s xả bóng chạy tua ngay lúc tạo trận (không vẽ, robot đứng yên), trận bắt đầu ở t = 0, không hết giờ.
 // Chấm điểm một lần lúc t = 180 từ thế giới vật lý; trọng tài tự động chỉ ghi các lỗi máy thấy được (spec §4.5, §4.7, §5).
 // Không đồ hoạ: chạy được trong Node.
 import { PHYSICS_DT, type FanrocWorld } from './world.ts'
 import type { RobotBody, Vec2 } from './robot.ts'
-import { ENDGAME_S, FIELD, MATCH_S, RELEASE_S, ZONES, mountainAt, type Phase, type Rect } from './layout.ts'
+import { FIELD, MATCH_S, RELEASE_S, ZONES, mountainAt, type Alliance, type Phase, type Rect } from './layout.ts'
 import { NEUTRAL, type PortValues } from './ports.ts'
-import { scoreTally, teamScore, type FieldTally, type Park, type ScoreBreakdown } from './scoring.ts'
+import { scoreTally, teamScore, type FieldTally, type ScoreBreakdown } from './scoring.ts'
+import type { Climb } from './ladder.ts'
 
 // ---------- Thời gian trận và ngưỡng trọng tài (gom một chỗ) ----------
 const EPS = 1e-9
@@ -22,7 +24,7 @@ const SAMPLES = 5
 const FLAG_FLOOR_Y = 0.05
 /**
  * G15 (ruling R19): chỉ giữa hai robot khác liên minh, khe thân < BLOCK_GAP, cả hai chậm hơn BLOCK_V, kéo dài hơn BLOCK_S;
- * không tính khi một trong hai có góc trong Vùng Bảo Vệ / Khu Tiếp Tế của mình.
+ * không tính khi một trong hai có góc trong Khu Tiếp Tế của mình hoặc đang treo trên Thang Cứu Hỏa (luật V4).
  */
 const BLOCK_GAP = 0.02
 const BLOCK_V = 0.02
@@ -30,6 +32,15 @@ const BLOCK_S = 5
 /** S02: góc footprint vượt mặt trong rào quá chừng này (thân tựa rào lún ~1 mm do vật lý, Khu Xuất Phát sát rào). */
 const OUT_TOL = 0.005
 const MOUNTAIN_NAME = ['A', 'B', 'C', 'D']
+/** Nhật ký leo: mức leo phải giữ chừng này giây mới báo (khỏi nháy khi móc vừa chạm đã treo). */
+const CLIMB_LOG_S = 0.5
+const ALLIANCE_NAME: Record<Alliance, string> = { red: 'Đỏ', blue: 'Xanh' }
+const CLIMB_TEXT: Record<Climb, string> = {
+  none: 'rời xà',
+  contact: 'chạm xà (+0,05)',
+  ground: 'treo ở Khu vực Đất (+0,10)',
+  water: 'treo ở Khu vực Nước (+0,20)',
+}
 
 export type MatchEvent = { t: number; robot: number | null; text: string }
 export type Penalty = { minor: number; yellow: number; red: boolean }
@@ -56,15 +67,16 @@ class Episode {
 
 const inRect = (r: Rect, p: Vec2) => p.x >= r.x0 && p.x <= r.x1 && p.z >= r.z0 && p.z <= r.z1
 
-/** Đang đỗ hoặc đang được nạp bóng: có góc footprint trong Vùng Bảo Vệ / Khu Tiếp Tế của liên minh mình. */
-const inOwnZone = (r: RobotBody, fp: Vec2[]) =>
-  fp.some((p) => inRect(ZONES.ladder[r.alliance], p) || inRect(ZONES.load[r.alliance], p))
+/**
+ * Miễn G15: đang được nạp bóng (có góc footprint trong Khu Tiếp Tế của liên minh mình) hoặc đang treo trên Thang Cứu
+ * Hỏa (robot treo không tránh được).
+ */
+const inOwnZone = (r: RobotBody, fp: Vec2[]) => r.climb.mode === 'hang' || fp.some((p) => inRect(ZONES.load[r.alliance], p))
 
-/** Đỗ theo footprint ∩ Vùng Bảo Vệ của liên minh mình: mọi góc trong = full, ≥ 1 góc = partial. */
-function parkState(r: RobotBody): Park {
-  const zone = ZONES.ladder[r.alliance]
-  const n = r.footprint().filter((p) => inRect(zone, p)).length
-  return n === 4 ? 'full' : n > 0 ? 'partial' : null
+/** Mức leo được tính của robot: chỉ khi bám đúng thanh của liên minh mình. */
+const climbCounted = (r: RobotBody): Climb => {
+  const c = r.climbLevel
+  return c.bar === r.alliance ? c.level : 'none'
 }
 
 /** Phần footprint (lấy mẫu lưới) nằm trong hình chiếu một núi nào đó. */
@@ -128,7 +140,6 @@ export class Match {
   /** −10 … 0: xả bóng; 0 … 180: thi đấu. */
   t = -RELEASE_S
   phase: Phase = 'release'
-  endgame = false
   readonly events: MatchEvent[] = []
   readonly pens: Penalty[]
   readonly flags = [false, false, false, false]
@@ -147,6 +158,8 @@ export class Match {
   private readonly block = new Map<string, { time: number; ep: Episode }>()
   /** Thời điểm gần nhất robot còn chạy (tốc độ ≥ BLOCK_V); −∞ nếu chưa chạy lần nào. */
   private readonly lastMoving: number[]
+  /** Nhật ký leo mỗi robot: mức đã báo, mức đang chờ và thời gian đã giữ mức đang chờ. */
+  private readonly climbLog: { shown: Climb; pending: Climb; held: number }[]
 
   /** `opts.seed` giữ theo giao diện của kế hoạch; nhiễu do thế giới (FanrocWorld.create(seed)) lo, Match không dùng. */
   constructor(world: FanrocWorld, robots: RobotBody[], teams: string[], opts: { practice?: boolean; seed: number }) {
@@ -161,6 +174,8 @@ export class Match {
     this.out = robots.map(() => new Episode())
     this.flagRun = robots.map(() => new Episode())
     this.lastMoving = robots.map(() => -Infinity)
+    this.climbLog = robots.map(() => ({ shown: 'none', pending: 'none', held: 0 }))
+    for (const r of robots) r.peers = robots // robot đang treo chặn chỗ bám của robot khác trên cùng thanh
     robots.forEach((r, i) => {
       r.onFlag = (m) => {
         this.flags[m] = true
@@ -198,10 +213,7 @@ export class Match {
     if (this.phase !== 'end') this.t += dt
     this.syncPhase()
     if (this.phase !== 'play') return
-    const endgame = !this.practice && MATCH_S - this.t <= ENDGAME_S + EPS
-    if (endgame && !this.endgame) this.log('End Game: còn 30 giây')
-    this.endgame = endgame
-    for (const r of this.robots) r.parked = parkState(r) !== null && this.endgame
+    this.logClimbs(dt)
     this.referee(dt)
     if (!this.practice && this.t >= MATCH_S - EPS) this.finish()
   }
@@ -224,6 +236,22 @@ export class Match {
     this.log(`Hết giờ — điểm trận ${this.final.score.total}`)
   }
 
+  /** Báo khi mức leo (đã xét đúng thanh) của robot đổi và giữ ≥ CLIMB_LOG_S: "Robot Đỏ 1 treo ở Khu vực Nước (+0,20)". */
+  private logClimbs(dt: number): void {
+    this.robots.forEach((r, i) => {
+      const s = this.climbLog[i]
+      const now = climbCounted(r)
+      if (now !== s.pending) {
+        s.pending = now
+        s.held = 0
+      } else s.held += dt
+      if (s.pending !== s.shown && s.held >= CLIMB_LOG_S - EPS) {
+        s.shown = s.pending
+        this.log(`Robot ${ALLIANCE_NAME[r.alliance]} ${r.slot + 1} ${CLIMB_TEXT[s.shown]}`, i)
+      }
+    })
+  }
+
   private freeze(r: RobotBody): void {
     r.body.setLinvel({ x: 0, y: 0, z: 0 }, true)
     r.body.setAngvel({ x: 0, y: 0, z: 0 }, true)
@@ -237,9 +265,9 @@ export class Match {
       for (const i of r.stored) held.add(i)
       if (r.compartments) for (const i of [...r.compartments.o, ...r.compartments.g]) held.add(i)
     }
-    const parks: FieldTally['parks'] = { red: [null, null], blue: [null, null] }
-    for (const r of this.robots) parks[r.alliance][r.slot] = parkState(r)
-    return { ...this.world.tally(held), flags: [...this.flags], parks }
+    const climbs: FieldTally['climbs'] = { red: ['none', 'none'], blue: ['none', 'none'] }
+    for (const r of this.robots) climbs[r.alliance][r.slot] = climbCounted(r)
+    return { ...this.world.tally(held), flags: [...this.flags], climbs }
   }
 
   result(): { score: ScoreBreakdown; teams: { team: string; score: number }[] } {

@@ -69,7 +69,7 @@ export async function playAgents(o: QuickOpts): Promise<QuickResult> {
       const view = { world: w, robots, match: m, humans }
       const ports = agents.map((a) => a.update(view, PHYSICS_DT))
       o.onStep?.(ports, m)
-      for (const h of humans) h.auto({ world: w, robots, phase: m.phase, endgame: m.endgame }, PHYSICS_DT)
+      for (const h of humans) h.auto({ world: w, robots, phase: m.phase }, PHYSICS_DT)
       m.step(PHYSICS_DT, ports)
     }
     const r = m.result()

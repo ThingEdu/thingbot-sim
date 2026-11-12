@@ -245,7 +245,7 @@ export class GameSession {
     this.drivers.forEach((d, i) => {
       this.ports[i] = d.kind === 'program' ? d.link.ports() : this.agents[i]!.update(view, PHYSICS_DT)
     })
-    const ctx = { world: this.world, robots: this.robots, phase: this.match.phase, endgame: this.match.endgame }
+    const ctx = { world: this.world, robots: this.robots, phase: this.match.phase }
     for (const h of this.humans) h.auto(ctx, PHYSICS_DT)
     this.match.step(PHYSICS_DT, this.ports)
     this.onStep?.(this)

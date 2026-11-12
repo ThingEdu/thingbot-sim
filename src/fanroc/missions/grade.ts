@@ -5,8 +5,12 @@
 // tiên chưa đạt trong mức sao thấp nhất còn thiếu có câu gợi ý hợp tình huống; `{d}` thay bằng số (cm, độ hoặc điểm).
 import { procedureArgCount } from '../procedures.ts'
 import { scoreTally } from '../scoring.ts'
+import type { Climb } from '../ladder.ts'
 import { mountainAt, type Pose } from '../layout.ts'
 import type { Goal, GradeResult, HintWhen, Mission, RunRecord } from './types.ts'
+
+/** Thứ tự mức leo Thang Cứu Hỏa (luật V4) để so `climb.min`. */
+const CLIMB_ORDER: Climb[] = ['none', 'contact', 'ground', 'water']
 
 /** Robot đứng yên bao lâu (s) thì coi là đã dừng hẳn (R57 a). */
 export const REST_S = 1
@@ -116,9 +120,9 @@ function check(g: Goal, r: RunRecord): Check {
       // Chỉ cờ do robot của em (Robot 1, chỉ số 0 trong trận) cắm.
       return ok(r.events.some((e) => e.robot === 0 && e.text.endsWith(text)))
     }
-    case 'park': {
-      const p = r.tally?.parks.red[0] ?? null
-      return ok(g.full ? p === 'full' : p !== null)
+    case 'climb': {
+      const lv = r.tally?.climbs.red[0] ?? 'none'
+      return ok(CLIMB_ORDER.indexOf(lv) >= CLIMB_ORDER.indexOf(g.min))
     }
     case 'fireClear':
       return ok(!!r.tally && r.tally.fire.g <= g.max)
@@ -140,6 +144,12 @@ function check(g: Goal, r: RunRecord): Check {
 }
 
 // ---------- Chữ của điều kiện ----------
+const CLIMB_GOAL_TEXT: Record<Climb, string> = {
+  none: 'Không cần leo',
+  contact: 'Chạm Thang Cứu Hỏa',
+  ground: 'Treo ở Khu vực Đất',
+  water: 'Treo ở Khu vực Nước',
+}
 const pretty = (v: number) => String(v).replace('.', ',')
 function describe(g: Goal): string {
   switch (g.type) {
@@ -150,7 +160,7 @@ function describe(g: Goal): string {
     case 'uses': return g.opcodes.includes('control_repeat') ? 'Dùng khối «lặp lại»' : 'Dùng khối «đặt động cơ» và «đợi»'
     case 'paramBlock': return (g.calls ?? 1) > 1 ? `Gọi khối của em có ô số ít nhất ${g.calls} lần` : 'Dùng khối của em có ô số'
     case 'flag': return `Cắm cờ lên Núi ${MOUNTAIN_NAME[g.mountain]}`
-    case 'park': return g.full ? 'Đỗ toàn phần trong Vùng Bảo Vệ' : 'Đỗ trong Vùng Bảo Vệ'
+    case 'climb': return CLIMB_GOAL_TEXT[g.min]
     case 'fireClear': return g.max === 0 ? 'Khu Chữa Cháy không còn bóng xanh' : `Khu Chữa Cháy còn ≤ ${g.max} bóng xanh`
     case 'matchEnd': return 'Chơi hết trận'
     case 'turn': return `Quay ${g.deg >= 0 ? 'trái' : 'phải'} ${Math.abs(g.deg)}°, sai ≤ ${g.tol}°`

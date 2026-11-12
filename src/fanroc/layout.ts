@@ -7,10 +7,9 @@ export type Phase = 'release' | 'play' | 'end'
 export type Pose = { x: number; z: number; yaw: number }
 export type Rect = { x0: number; x1: number; z0: number; z1: number }
 
-/** Thời gian trận (giây): 10 s xả bóng, 180 s thi đấu, End Game = 30 s cuối. Dùng chung cho trận, bảng điểm, agent. */
+/** Thời gian trận (giây): 10 s xả bóng, 180 s thi đấu (luật V4 bỏ End Game). Dùng chung cho trận, bảng điểm, agent. */
 export const RELEASE_S = 10
 export const MATCH_S = 180
-export const ENDGAME_S = 30
 
 // Mọi số đo sân lấy từ CAD "Lắp sân.step" (user gửi 03/11/2026); CAD thắng cả số trong văn bản luật (ruling R11).
 
@@ -60,7 +59,8 @@ export const MOUNTAINS: { x: number; z: number; yaw: number }[] = [
 export const MOUNTAIN_FOOT = { hx: 0.207, hz: 0.2045 }
 
 /**
- * Các tầng núi: `floor` = đáy rãnh, `lip` = đỉnh gờ ngoài. Tầng trang trí (decor) tính như rãnh ngay dưới nó.
+ * Các tầng núi: `floor` = đáy rãnh, `lip` = đỉnh gờ ngoài. Tầng trang trí (decor) không phải rãnh tính điểm (luật V4):
+ * bóng xanh ở đó không tính, bóng cam vẫn −3.
  * Luật ghi 15/50/95/130 mm; CAD cho đỉnh gờ 15/50/95/125 và đáy rãnh 5/40/80/110.
  */
 export const TIERS: { floor: number; lip: number; decor?: boolean }[] = [
@@ -69,8 +69,8 @@ export const TIERS: { floor: number; lip: number; decor?: boolean }[] = [
   { floor: 0.08, lip: 0.095 },
   { floor: 0.11, lip: 0.125 },
 ]
-/** Rãnh tính điểm (0..2) của từng tầng: tầng decor gộp vào rãnh của tầng không-decor gần nhất bên dưới. */
-export const TIER_GROOVE: number[] = TIERS.map((_, k) => Math.max(0, TIERS.slice(0, k + 1).filter((t) => !t.decor).length - 1))
+/** Rãnh tính điểm (0..2) của từng tầng; tầng decor = −1 (không thuộc rãnh nào). */
+export const TIER_GROOVE: number[] = TIERS.map((t, k) => (t.decor ? -1 : TIERS.slice(0, k + 1).filter((x) => !x.decor).length - 1))
 export const PEAK_Y = 0.16
 /** Lỗ cờ Ø45, đáy phẳng sâu 30 (CAD; luật ghi 45), tâm lệch (lx, lz) so với tâm chân trong hệ núi. */
 export const HOLE = { r: 0.0225, depth: 0.03, lx: 0.00143, lz: 0.00908 }

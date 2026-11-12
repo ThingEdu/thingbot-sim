@@ -73,12 +73,12 @@ test('4 núi nằm trong sân, không chồng nhau, không chồng Khu Chữa Ch
   }
 })
 
-test('tầng núi: đáy rãnh < đỉnh gờ, tăng dần, dưới đỉnh; tầng decor gộp vào Rãnh 1', () => {
+test('tầng núi: đáy rãnh < đỉnh gờ, tăng dần, dưới đỉnh; tầng decor không phải rãnh tính điểm', () => {
   for (const [k, t] of TIERS.entries()) {
     assert.ok(t.floor < t.lip && t.lip < PEAK_Y)
     if (k > 0) assert.ok(t.floor > TIERS[k - 1].lip)
   }
-  assert.deepEqual(TIER_GROOVE, [0, 0, 1, 2])
+  assert.deepEqual(TIER_GROOVE, [0, -1, 1, 2], 'tầng trang trí không gộp vào rãnh nào (luật V4)')
   assert.ok(HOLE.depth < PEAK_Y - TIERS[TIERS.length - 1].floor + 1e-9)
   assert.ok(Math.hypot(HOLE.lx, HOLE.lz) < 0.02 && HOLE.r > BALL_R)
 })

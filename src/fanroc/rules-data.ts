@@ -3,8 +3,8 @@
 // Mọi con số đọc lúc chạy từ chính mã chơi: điểm từ scoring.ts (dò bằng sân giả), thời gian / sân từ layout.ts, số trận
 // mỗi đội từ tournament.ts; lỗi trọng tài là đúng các lỗi match.ts đang bắt (phép thử rules-data.test.ts đọc match.ts
 // để giữ khớp). Hình minh hoạ là SVG dựng từ số đo sân, không tải gì từ mạng. Thuần, chạy được trong Node.
-import { allianceShare, scoreTally, teamScore, type FieldTally } from './scoring.ts'
-import { DISPENSER, ENDGAME_S, FIELD, MATCH_S, MOUNTAIN_FOOT, MOUNTAINS, PEAK_Y, RELEASE_S, TIER_GROOVE, TIERS, ZONES, type Rect } from './layout.ts'
+import { scoreTally, teamScore, type FieldTally } from './scoring.ts'
+import { DISPENSER, FIELD, MATCH_S, MOUNTAIN_FOOT, MOUNTAINS, PEAK_Y, RELEASE_S, TIER_GROOVE, TIERS, ZONES, type Rect } from './layout.ts'
 import { createTournament, TEAM_COUNT } from './tournament.ts'
 
 /** Một thẻ Luật chơi: tiêu đề, một câu dẫn, bảng (nhãn | số) hoặc gạch đầu dòng, và hình SVG (chuỗi). */
@@ -30,17 +30,13 @@ const blank = (): FieldTally => ({
   fire: { o: 0, g: 0 },
   mtn: MOUNTAINS.map(() => [{ g: 0, o: 0 }, { g: 0, o: 0 }, { g: 0, o: 0 }]),
   flags: MOUNTAINS.map(() => false),
-  parks: { red: [null, null], blue: [null, null] },
+  decorO: 0,
+  climbs: { red: ['none', 'none'], blue: ['none', 'none'] },
 })
 const tally = (edit: (t: FieldTally) => void) => {
   const t = blank()
   edit(t)
   return scoreTally(t)
-}
-const share = (edit: (t: FieldTally) => void) => {
-  const t = blank()
-  edit(t)
-  return allianceShare(t).red
 }
 const NO_PEN = { minor: 0, yellow: 0, red: false }
 
@@ -54,10 +50,6 @@ export const POINTS = {
   flag: tally((t) => (t.flags[0] = true)).flag,
   /** Cờ trên núi đã có bóng xanh ở cả ba rãnh. */
   flagFull: tally((t) => ((t.flags[0] = true), t.mtn[0].forEach((x) => (x.g = 1)))).flag,
-  parkPartial: share((t) => (t.parks.red = ['partial', null])).park,
-  parkFull: share((t) => (t.parks.red = ['full', null])).park,
-  /** Thêm khi cả hai robot của liên minh đỗ hẳn. */
-  parkBonus: share((t) => (t.parks.red = ['full', 'full'])).bonus,
   /** Một bóng sai chỗ (âm). */
   wrong: tally((t) => (t.fire.g = 1)).total,
   /** Phạt một lỗi nhẹ / một thẻ vàng (số dương, trừ vào điểm đội). */
@@ -97,7 +89,7 @@ export const FAULTS: Fault[] = [
   { code: 'P10', name: 'Cán cờ trên sàn', pens: ['warn'], text: `Đè lên lá cờ của robot khác đang nằm trên sàn: ${PEN_NAME.warn}.` },
   {
     code: 'G15', name: 'Chặn robot đội bạn', pens: ['yellow', 'warn'],
-    text: `Đứng sát, chặn robot liên minh kia hơn ${BLOCK_SECONDS} giây: robot tới sau bị ${PEN_NAME.yellow}; không rõ ai chặn thì cả hai bị ${PEN_NAME.warn}. Đang ở Vùng Bảo Vệ hay Khu Tiếp Tế của mình thì không tính.`,
+    text: `Đứng sát, chặn robot liên minh kia hơn ${BLOCK_SECONDS} giây: robot tới sau bị ${PEN_NAME.yellow}; không rõ ai chặn thì cả hai bị ${PEN_NAME.warn}. Đang ở Khu Tiếp Tế của mình hay đang treo trên Thang Cứu Hỏa thì không tính.`,
   },
 ]
 
@@ -157,24 +149,20 @@ function fieldArt(): string {
   return svg(OX * 2 + W, OY + W + 22, b, 'Sơ đồ sân nhìn từ trên: 4 núi ở giữa, Khu Chữa Cháy hai góc xa, Vùng Bảo Vệ hai bên, Khu Xuất Phát và Khu Tiếp Tế gần Khu Điều Khiển')
 }
 
-/** Dòng thời gian một trận: xả bóng → thi đấu → End Game. */
+/** Dòng thời gian một trận: xả bóng → thi đấu (luật V4 không còn End Game). */
 function timelineArt(): string {
   const W = 240
   const total = RELEASE_S + MATCH_S
   const x0 = 10
   const rw = (W * RELEASE_S) / total
-  const ew = (W * ENDGAME_S) / total
   const y = 22
   let b = `<rect x="${x0}" y="${y}" width="${f1(rw)}" height="18" fill="#8a93a6"/>`
-  b += `<rect x="${f1(x0 + rw)}" y="${y}" width="${f1(W - rw - ew)}" height="18" fill="${COLOR.blue}"/>`
-  b += `<rect x="${f1(x0 + W - ew)}" y="${y}" width="${f1(ew)}" height="18" fill="${COLOR.fire}"/>`
+  b += `<rect x="${f1(x0 + rw)}" y="${y}" width="${f1(W - rw)}" height="18" fill="${COLOR.blue}"/>`
   b += text(x0 + rw / 2, y - 5, `${RELEASE_S} s`, { size: 8 })
-  b += text(x0 + rw + (W - rw - ew) / 2, y + 13, `${MATCH_S / 60} phút thi đấu`, { size: 9, fill: '#fff' })
-  b += text(x0 + W - ew / 2, y - 5, `${ENDGAME_S} s cuối`, { size: 8 })
+  b += text(x0 + rw + (W - rw) / 2, y + 13, `${MATCH_S / 60} phút thi đấu`, { size: 9, fill: '#fff' })
   b += text(x0, y + 32, 'Xả bóng', { size: 8, anchor: 'start' })
-  b += text(x0 + W, y + 32, 'End Game', { size: 8, anchor: 'end' })
   b += text(x0 + W / 2, y + 48, 'Hết giờ: robot đứng yên, chấm điểm', { size: 8, fill: '#5b6475' })
-  return svg(260, 76, b, `Dòng thời gian: ${RELEASE_S} giây xả bóng, ${MATCH_S / 60} phút thi đấu, ${ENDGAME_S} giây cuối là End Game`)
+  return svg(260, 76, b, `Dòng thời gian: ${RELEASE_S} giây xả bóng, ${MATCH_S / 60} phút thi đấu`)
 }
 
 /** Một ngọn núi nhìn ngang: các tầng theo TIERS, rãnh tính điểm theo TIER_GROOVE, cờ trên đỉnh. */
@@ -196,7 +184,7 @@ function mountainArt(): string {
     labels.push(`<line x1="${f1(lx)}" y1="${f1(y)}" x2="186" y2="${f1(y)}" stroke="#5b6475" stroke-width="0.6" stroke-dasharray="2 2"/>`)
     labels.push(
       t.decor
-        ? text(190, y + 3, `trang trí (= Rãnh ${g + 1})`, { size: 8, anchor: 'start', fill: '#5b6475' })
+        ? text(190, y + 3, `trang trí (bóng cam ${signed(POINTS.wrong)})`, { size: 8, anchor: 'start', fill: '#5b6475' })
         : text(190, y + 3, `Rãnh ${g + 1} · ${signed(value[g])}`, { size: 9, anchor: 'start', weight: 800 }),
     )
     if (!t.decor) b += `<circle cx="${f1(cx - half(k) + 8)}" cy="${f1(top - 3)}" r="3" fill="${COLOR.green}"/>`
@@ -253,7 +241,6 @@ export function fanrocRules(): RuleCard[] {
       bullets: [
         `${MOUNTAINS.length} Ngọn Núi ở giữa sân. Mỗi núi có 3 rãnh, rãnh càng cao càng nhiều điểm; đỉnh núi có lỗ để cắm cờ.`,
         'Khu Chữa Cháy: hai ô ở hai góc phía xa — nơi đưa bóng cam tới.',
-        'Vùng Bảo Vệ: mỗi liên minh một ô sát rào bên — cuối trận đỗ robot vào đây.',
         'Khu Xuất Phát và Khu Tiếp Tế ở gần Khu Điều Khiển. Ở Khu Tiếp Tế, Human Player nạp thêm bóng cho robot (trong game Human Player tự làm).',
         'Hộp Phân Phối ở rào phía xa thả bóng xuống sân lúc đầu trận.',
       ],
@@ -267,7 +254,6 @@ export function fanrocRules(): RuleCard[] {
       bullets: [
         `${RELEASE_S} giây đầu: Hộp Phân Phối xả bóng, robot đứng yên.`,
         `Tiếp theo là ${MATCH_S / 60} phút thi đấu: robot chạy theo chương trình khối của em (hoặc em lái bằng tay PS2 / bàn phím).`,
-        `${ENDGAME_S} giây cuối là End Game: lúc đưa robot về Vùng Bảo Vệ.`,
         'Hết giờ, robot đứng yên và sân được chấm điểm đúng như lúc đó.',
         'Điểm của mỗi đội = điểm trận trừ phần phạt của riêng đội đó, thấp nhất là 0.',
       ],
@@ -285,9 +271,6 @@ export function fanrocRules(): RuleCard[] {
         { label: 'Bóng xanh ở Rãnh 3 (cao nhất)', value: signed(P.r3) },
         { label: 'Cắm cờ trên đỉnh núi', value: signed(P.flag) },
         { label: 'Cắm cờ trên núi có bóng xanh ở cả 3 rãnh (thay cho số trên)', value: signed(P.flagFull) },
-        { label: 'Mỗi robot đỗ một phần trong Vùng Bảo Vệ', value: signed(P.parkPartial) },
-        { label: 'Mỗi robot đỗ hẳn trong Vùng Bảo Vệ', value: signed(P.parkFull) },
-        { label: 'Cả 2 robot của một liên minh đỗ hẳn: thưởng thêm', value: signed(P.parkBonus) },
         { label: 'Mỗi bóng sai chỗ (bóng cam trên núi, bóng xanh ở Khu Chữa Cháy)', value: signed(P.wrong) },
       ],
       note: 'Bóng xanh nằm ở tầng trang trí của núi được tính như ở rãnh ngay dưới nó.',

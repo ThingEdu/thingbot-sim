@@ -73,8 +73,6 @@ export class RobotBody {
   hasFlag: boolean
   /** Cờ đã rơi ra sàn (vật dynamic) để vẽ; null khi đang giữ hoặc đã cắm. */
   flagBody: RAPIER.RigidBody | null = null
-  /** Trận đặt; RobotBody không tự tính đỗ. */
-  parked = false
   /** Thông báo cho người chơi (vd. R16), null khi không có gì. */
   lastMessage: string | null = null
   /** Tay kẹp cờ (S1 / 180, 0…1); S1 null giữ giá trị lệnh gần nhất. */

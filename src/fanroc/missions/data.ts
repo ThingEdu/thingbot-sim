@@ -331,10 +331,11 @@ export const MISSIONS: Mission[] = [
       'Cả thân robot nằm trong vạch là đỗ toàn phần (nhiều điểm hơn), một phần thân là đỗ một phần.',
       'Dùng khối của em «tiến» và «rẽ trái» của chặng 2: tính xem cần đi mấy mét, rẽ mấy độ.',
     ],
-    goals: [{ type: 'park' }],
-    stars: { two: [{ type: 'park', full: true }], three: [{ type: 'noMountain' }, { type: 'time', max: 20 }] },
+    // Task 3 (luật V4): điều kiện chuyển sang mức leo Thang Cứu Hỏa; lời, hướng dẫn và lời giải viết lại ở Task 7.
+    goals: [{ type: 'climb', min: 'contact' }],
+    stars: { two: [{ type: 'climb', min: 'ground' }], three: [{ type: 'climb', min: 'water' }] },
     hints: [
-      { when: 'park', text: 'Robot chưa đỗ vào Vùng Bảo Vệ — đo lại quãng đường tới đó.' },
+      { when: 'climb', text: 'Robot chưa đỗ vào Vùng Bảo Vệ — đo lại quãng đường tới đó.' },
       { when: 'noMountain', text: 'Đỗ được rồi! Thử đường khác để không chạm Núi A.' },
       { when: 'time', text: 'Đỗ được rồi! Thử đường ngắn hơn để tới nơi trong 20 giây.' },
     ],

@@ -5,7 +5,8 @@ import { FanrocWorld, PHYSICS_DT } from './world.ts'
 import { RobotBody } from './robot.ts'
 import { Match } from './match.ts'
 import { NEUTRAL, type PortValues } from './ports.ts'
-import { BALL_R, FIELD, MOUNTAINS, PEAK_Y, TIERS, ZONES, fromMountain, type Rect } from './layout.ts'
+import { BALL_R, FIELD, MOUNTAINS, PEAK_Y, TIERS, ZONES, fromMountain, type Alliance, type Rect } from './layout.ts'
+import { barYaw, pointAt } from './ladder.ts'
 import type { RobotConfig } from './robots.ts'
 
 const MAKER: RobotConfig = { type: 'maker', drive: 'diff2', actuator: 'tt' }
@@ -69,8 +70,8 @@ function grid(r: Rect, n: number): { x: number; z: number }[] {
   return out
 }
 
-test('ví dụ 2 của luật dựng trên sân thật = 299', async () => {
-  const { w, robots, m } = await setup([UI, UI, MAKER, MAKER])
+test('ví dụ 2 cũ dựng trên sân thật (luật V4 bỏ đỗ): điểm nhiệm vụ 269, không ai leo ⇒ hệ số 100 %, điểm trận 269', async () => {
+  const { w, m } = await setup([UI, UI, MAKER, MAKER])
   // Núi A (0): Rãnh 1 = 6, Rãnh 2 = 3, Rãnh 3 = 2 Mầm Cây; núi B (1): Rãnh 1 = 5. Rãnh 2 = tầng 2, Rãnh 3 = tầng 3.
   const spots: [number, number, number][] = [[0, 0, 6], [0, 2, 3], [0, 3, 2], [1, 0, 5]]
   const places = spots.map(([mt, k, n]) => grooveSpots(w, mt, k, n).map((p) => ({ ...p, k })))
@@ -81,19 +82,15 @@ test('ví dụ 2 của luật dựng trên sân thật = 299', async () => {
   fire.forEach((p, j) => w.placeBall(j < 20 ? ORANGE + j : g++, { x: p.x, y: BALL_R, z: p.z }))
   m.setFlag(0)
   m.setFlag(1)
-  // Hai Xe Ủi đỏ đỗ toàn phần cạnh nhau trong Vùng Bảo Vệ đỏ; robot xanh ở Khu Xuất Phát.
-  const s = ZONES.ladder.red
-  const c = mid(s)
-  robots[0].setPose({ x: s.x0 + 0.095, z: c.z, yaw: 0 })
-  robots[1].setPose({ x: s.x1 - 0.095, z: c.z, yaw: 0 })
   const t = m.tally()
   assert.deepEqual(t.fire, { o: 20, g: 2 })
   assert.deepEqual(t.mtn[0].map((x) => x.g), [6, 3, 2])
   assert.deepEqual(t.mtn[1].map((x) => x.g), [5, 0, 0])
-  assert.deepEqual(t.parks, { red: ['full', 'full'], blue: [null, null] })
+  assert.deepEqual(t.climbs, { red: ['none', 'none'], blue: ['none', 'none'] })
+  assert.equal(t.decorO, 0)
   const r = m.result()
-  assert.equal(r.score.total, 299)
-  assert.deepEqual(r.teams.map((x) => x.score), [299, 299, 299, 299])
+  assert.deepEqual([r.score.mission, r.score.multPct, r.score.total], [269, 100, 269])
+  assert.deepEqual(r.teams.map((x) => x.score), [269, 269, 269, 269])
 })
 
 test('bóng đè vạch Chữa Cháy (tâm cách mép 0.015 ngoài vùng) được tính; bóng trong robot không tính', async () => {
@@ -106,22 +103,80 @@ test('bóng đè vạch Chữa Cháy (tâm cách mép 0.015 ngoài vùng) đư�
   assert.deepEqual(m.tally().fire, { o: 1, g: 0 })
 })
 
-test('đỗ một phần (≥ 1 góc trong) / toàn phần; robot.parked chỉ bật trong End Game', async () => {
+/** Robot móc (S2 của Mẫu Maker) vào thanh `bar` ở chỗ bám `s`: đặt dưới thanh, giơ móc một bước rồi hạ một bước. */
+const grab = (m: Match, robots: RobotBody[], i: number, bar: Alliance, s: number) => {
+  const p = pointAt(bar, s)
+  robots[i].setPose({ x: p.x, z: p.z, yaw: barYaw(bar) })
+  m.step(PHYSICS_DT, only(i, { S2: 180 }))
+  m.step(PHYSICS_DT, only(i, { S2: 0 }))
+}
+const climbLog = (m: Match) => m.events.filter((e) => /chạm xà|treo ở|rời xà/.test(e.text))
+
+test('không còn End Game: không có dòng báo "End Game" khi qua mốc 30 s cuối, không có thuộc tính endgame', async () => {
+  const { m } = await setup()
+  m.t = 149
+  run(m, all({}), 2)
+  assert.equal(m.events.filter((e) => e.text.includes('End Game')).length, 0)
+  assert.equal('endgame' in m, false)
+})
+
+test('robot treo khi hết giờ được tính vào hệ số: Đỏ 1 treo Nước, Đỏ 2 treo Đất ⇒ 130 %, 1 bóng cam ⇒ ⌈5 × 1,3⌉ = 7', async () => {
+  const { w, robots, m } = await setup()
+  m.t = 170
+  grab(m, robots, 0, 'red', 0.4)
+  run(m, only(0, { M1: 255, M2: 255 }), 3) // trượt sang Nước
+  grab(m, robots, 1, 'red', 0.05)
+  assert.deepEqual(m.tally().climbs, { red: ['water', 'ground'], blue: ['none', 'none'] })
+  const f = mid(ZONES.fire[0])
+  w.placeBall(ORANGE, { x: f.x, y: BALL_R, z: f.z })
+  run(m, all({}), 7.5)
+  assert.equal(m.phase, 'end')
+  const r = m.result()
+  assert.deepEqual([r.score.mission, r.score.multPct, r.score.total], [5, 130, 7])
+  assert.deepEqual(m.tally().climbs.red, ['water', 'ground'])
+})
+
+test('robot Xanh treo thanh Đỏ không tính (hệ số 100 %); robot Đỏ treo đúng chỗ đó thì 110 %', async () => {
+  for (const [i, want, climbs] of [[2, 100, { red: ['none', 'none'], blue: ['none', 'none'] }], [0, 110, { red: ['ground', 'none'], blue: ['none', 'none'] }]] as const) {
+    const { robots, m } = await setup()
+    m.t = 0
+    grab(m, robots, i, 'red', 0.2)
+    assert.deepEqual(robots[i].climbLevel, { level: 'ground', bar: 'red' })
+    assert.deepEqual(m.tally().climbs, climbs)
+    assert.equal(m.result().score.multPct, want)
+  }
+})
+
+test('Match đặt r.peers: thanh Đỏ đã có 2 robot treo (Đỏ 1, Xanh 1) thì Đỏ 2 không bám được', async () => {
   const { robots, m } = await setup()
-  const s = ZONES.ladder.red
-  const c = mid(s)
-  robots[0].setPose({ x: s.x0 + 0.125, z: c.z, yaw: 0 }) // toàn phần
-  robots[1].setPose({ x: s.x1 + 0.05, z: c.z, yaw: 0 }) // nửa thân trong ô
-  m.t = 100
-  run(m, all({}), 0.1)
-  assert.deepEqual(m.tally().parks.red, ['full', 'partial'])
-  assert.equal(m.endgame, false)
-  assert.equal(robots[0].parked, false)
-  m.t = 151
-  run(m, all({}), 0.1)
-  assert.equal(m.endgame, true)
-  assert.equal(robots[0].parked, true)
-  assert.equal(robots[2].parked, false)
+  m.t = 0
+  assert.ok(robots.every((r) => r.peers === robots))
+  grab(m, robots, 0, 'red', 0.4)
+  grab(m, robots, 2, 'red', 0.05)
+  grab(m, robots, 1, 'red', 0.2)
+  assert.deepEqual(robots.map((r) => r.climb.mode), ['hang', 'floor', 'hang', 'floor'])
+})
+
+test('nhật ký leo: chỉ báo khi mức leo giữ ≥ 0,5 s (chạm 1 bước rồi treo không báo "chạm"); tên robot theo liên minh và số trong liên minh', async () => {
+  const { robots, m } = await setup()
+  m.t = 0
+  grab(m, robots, 0, 'red', 0.2)
+  run(m, all({}), 0.4)
+  assert.equal(climbLog(m).length, 0, 'chưa đủ 0,5 s')
+  run(m, all({}), 0.2)
+  assert.deepEqual(climbLog(m).map((e) => [e.robot, e.text]), [[0, 'Robot Đỏ 1 treo ở Khu vực Đất (+0,10)']])
+  run(m, only(0, { M1: 255, M2: 255 }), 2.5)
+  run(m, all({}), 0.6)
+  assert.equal(climbLog(m).at(-1)?.text, 'Robot Đỏ 1 treo ở Khu vực Nước (+0,20)')
+  run(m, only(0, { S2: 180 }), 0.6) // giơ móc: rơi xuống sàn, móc vẫn chạm xà
+  assert.equal(climbLog(m).at(-1)?.text, 'Robot Đỏ 1 chạm xà (+0,05)')
+  robots[0].setPose({ x: 0, z: 0.6, yaw: 0 })
+  run(m, all({}), 0.6)
+  assert.equal(climbLog(m).at(-1)?.text, 'Robot Đỏ 1 rời xà')
+  grab(m, robots, 3, 'blue', 0.2)
+  run(m, all({}), 0.6)
+  assert.deepEqual(climbLog(m).at(-1), { t: climbLog(m).at(-1)!.t, robot: 3, text: 'Robot Xanh 2 treo ở Khu vực Đất (+0,10)' })
+  assert.equal(climbLog(m).length, 5)
 })
 
 test('pha xả bóng: lệnh tiến không làm robot đi; hết 10 s sang play và robot chạy', async () => {
@@ -151,15 +206,6 @@ test('t = 180 ⇒ end: lệnh sau đó không làm robot đi, điểm chấm m�
   run(m, all({}), 0.1)
   assert.equal(m.result().score.total, before)
   assert.ok(m.t <= 180 + 1e-9)
-})
-
-test('End Game khi còn ≤ 30 s', async () => {
-  const { m } = await setup()
-  m.t = 149
-  run(m, all({}), 0.5)
-  assert.equal(m.endgame, false)
-  run(m, all({}), 0.6)
-  assert.equal(m.endgame, true)
 })
 
 test('cắm cờ qua onFlag: flags[m] = true và có sự kiện', async () => {
@@ -253,7 +299,7 @@ test('G15: hai robot khác liên minh cùng đứng yên từ đầu (không ph�
   assert.deepEqual(m.pens.map((p) => p.yellow), [0, 0, 0, 0])
 })
 
-test('G15 không áp cho đồng đội cùng liên minh, kể cả hai robot đỗ toàn phần trong End Game (ví dụ 2 vẫn 299)', async () => {
+test('G15 không áp cho đồng đội cùng liên minh, kể cả hai robot đứng sát nhau trong ô Thang Cứu Hỏa', async () => {
   const { robots, m } = await setup([UI, UI, MAKER, MAKER])
   // Đồng đội đứng sát nhau giữa sân.
   m.t = 0
@@ -261,20 +307,19 @@ test('G15 không áp cho đồng đội cùng liên minh, kể cả hai robot đ
   robots[1].setPose({ x: -0.1 + 0.18 + 0.01, z: 0, yaw: 0 })
   run(m, all({}), 6)
   assert.equal(g15(m).length, 0)
-  // Hai Xe Ủi đỏ đỗ toàn phần cạnh nhau (khe 0.005) trong End Game > 5 s.
+  // Hai Xe Ủi đỏ đứng cạnh nhau (khe 0.005) trong ô Thang Cứu Hỏa > 5 s.
   const s = ZONES.ladder.red
   const c = mid(s)
   robots[0].setPose({ x: s.x0 + 0.095, z: c.z, yaw: 0 })
   robots[1].setPose({ x: s.x1 - 0.095, z: c.z, yaw: 0 })
   m.t = 155
   run(m, all({}), 6)
-  assert.deepEqual(m.tally().parks.red, ['full', 'full'])
   assert.equal(g15(m).length, 0)
   assert.deepEqual(m.pens.map((p) => p.yellow), [0, 0, 0, 0])
 })
 
-test('G15 không tính khi một robot có góc trong Vùng Bảo Vệ / Khu Tiếp Tế của mình', async () => {
-  for (const zone of [ZONES.ladder.red, ZONES.load.red]) {
+test('G15 không tính khi một robot có góc trong Khu Tiếp Tế của mình; ô Thang Cứu Hỏa (Vùng Bảo Vệ cũ) không còn miễn', async () => {
+  for (const zone of [ZONES.load.red, ZONES.ladder.red]) {
     const { robots, m } = await setup()
     m.t = 0
     // Robot đỏ chìa nửa thân ra khỏi mép phải ô của mình, robot xanh đứng sát bên phải nó (ngoài mọi ô xanh).
@@ -282,7 +327,27 @@ test('G15 không tính khi một robot có góc trong Vùng Bảo Vệ / Khu Ti�
     robots[0].setPose({ x: zone.x1 + 0.05, z, yaw: 0 })
     robots[2].setPose({ x: zone.x1 + 0.05 + 0.24 + 0.01, z, yaw: 0 })
     run(m, all({}), 6)
-    assert.equal(g15(m).length, 0, `ô x1 = ${zone.x1}`)
+    assert.equal(g15(m).length > 0, zone !== ZONES.load.red, `ô x1 = ${zone.x1}: ${JSON.stringify(g15(m))}`)
+  }
+})
+
+test('G15 miễn cho robot đang treo trên Thang Cứu Hỏa; cùng chỗ đó đứng sàn thì vẫn tính', async () => {
+  for (const hanging of [true, false]) {
+    const { robots, m } = await setup()
+    m.t = 0
+    const p = pointAt('red', 0.2)
+    if (hanging) grab(m, robots, 0, 'red', 0.2)
+    else robots[0].setPose({ x: p.x, z: p.z, yaw: barYaw('red') })
+    assert.equal(robots[0].climb.mode === 'hang', hanging)
+    // Robot xanh song song, đứng sát phía trong sân (khe 0,01 theo pháp tuyến của thanh).
+    const fp = robots[0].footprint()
+    const width = Math.hypot(fp[1].x - fp[0].x, fp[1].z - fp[0].z)
+    const n = { x: fp[1].x - fp[0].x, z: fp[1].z - fp[0].z }
+    const sgn = n.x + n.z > 0 ? 1 : -1 // phía +x +z là trong sân
+    const off = (width + 0.01) / width
+    robots[2].setPose({ x: p.x + sgn * n.x * off, z: p.z + sgn * n.z * off, yaw: barYaw('red') })
+    run(m, all({}), 6)
+    assert.equal(g15(m).length > 0, !hanging, `${hanging ? 'đang treo: không tính' : 'đứng sàn: tính'} ${JSON.stringify(g15(m))}`)
   }
 })
 

@@ -4,10 +4,11 @@ import type { Pose, Rect } from '../layout.ts'
 import type { RobotConfig } from '../robots.ts'
 import type { MatchEvent } from '../match.ts'
 import type { FieldTally } from '../scoring.ts'
+import type { Climb } from '../ladder.ts'
 
 /**
  * Một điều kiện kiểm trên trạng thái mô phỏng sau lần chạy (spec §6.3). Mọi số đo theo mét / độ / giây.
- * Năm loại cuối (`turn`, `time`, `paramBlock`, `score`, `park.full`, `measure.min`) là phần thêm của người dựng
+ * Năm loại cuối (`turn`, `time`, `paramBlock`, `score`, `climb`, `measure.min`) là phần thêm của người dựng
  * (spec §9: điều kiện ⭐ cụ thể do người dựng chọn).
  */
 export type Goal =
@@ -23,8 +24,8 @@ export type Goal =
   | { type: 'uses'; opcodes: string[] }
   /** Robot của em (Robot 1, chỉ số 0 trong trận) đã cắm cờ lên núi `mountain` (0..3 = A..D): sự kiện của match.ts. */
   | { type: 'flag'; mountain: number }
-  /** Robot của em (Robot 1, đỏ) đỗ trong Vùng Bảo Vệ lúc chấm; `full` ⇒ phải đỗ toàn phần. */
-  | { type: 'park'; full?: boolean }
+  /** Robot của em (Robot 1, đỏ) leo Thang Cứu Hỏa đỏ lúc chấm, ít nhất mức `min` (none < contact < ground < water). */
+  | { type: 'climb'; min: Climb }
   /** Khu Chữa Cháy còn ≤ `max` bóng xanh. */
   | { type: 'fireClear'; max: number }
   /** Trận đã chạy hết giờ. */

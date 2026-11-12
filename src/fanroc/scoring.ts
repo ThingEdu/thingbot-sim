@@ -1,34 +1,33 @@
-// Tính điểm FANROC: hàm thuần theo bảng điểm của luật (B.4.2, B.4.3).
+// Tính điểm FANROC luật V4: hàm thuần. Điểm nhiệm vụ (bóng, cờ, bóng sai chỗ) nhân hệ số leo Thang Cứu Hỏa.
 import type { Alliance } from './layout.ts'
-
-export type Park = 'full' | 'partial' | null
+import { CLIMB_PCT, type Climb } from './ladder.ts'
 
 export interface FieldTally {
   /** Khu Chữa Cháy: o = cam (đúng, +5), g = xanh (sai vị trí, -3). */
   fire: { o: number; g: number }
-  /** mtn[núi][rãnh 0..2]: g = Mầm Cây xanh, o = cam (sai vị trí). Bóng xanh tầng trang trí đã gộp vào rãnh 0. */
+  /** mtn[núi][rãnh 0..2]: g = Mầm Cây xanh, o = cam (sai vị trí). Tầng trang trí không thuộc rãnh nào. */
   mtn: { g: number; o: number }[][]
+  /** Tổng bóng cam ở tầng trang trí của mọi núi (−3 mỗi bóng); bóng xanh ở tầng trang trí không tính. */
+  decorO: number
   /** Cờ đã cắm trên từng núi. */
   flags: boolean[]
-  parks: Record<Alliance, Park[]>
+  /** Mức leo đã xét đúng thanh: climbs[liên minh][ô robot]; robot bám thanh của liên minh kia là 'none'. */
+  climbs: Record<Alliance, Climb[]>
 }
 
 export type ScoreBreakdown = {
-  fire: number; r1: number; r2: number; r3: number; flag: number; park: number; wrong: number; total: number
-}
-
-/** Phần điểm đỗ xe của mỗi liên minh: park = 5/10 mỗi robot (một phần/toàn phần), bonus = +10 khi cả 2 robot toàn phần. */
-export function allianceShare(t: FieldTally): Record<Alliance, { park: number; bonus: number }> {
-  const one = (p: Park[]) => ({
-    park: p.reduce((n, x) => n + (x === 'full' ? 10 : x === 'partial' ? 5 : 0), 0),
-    bonus: p.length === 2 && p.every((x) => x === 'full') ? 10 : 0,
-  })
-  return { red: one(t.parks.red), blue: one(t.parks.blue) }
+  fire: number; r1: number; r2: number; r3: number; flag: number; wrong: number
+  /** Điểm nhiệm vụ = bóng + cờ + bóng sai chỗ, có thể âm. */
+  mission: number
+  /** Hệ số nhân theo phần trăm (100…180), số nguyên để không lệch số thực. */
+  multPct: number
+  /** Điểm trận = ⌈mission × multPct / 100⌉ khi mission > 0; mission ≤ 0 thì giữ nguyên. */
+  total: number
 }
 
 export function scoreTally(t: FieldTally): ScoreBreakdown {
-  const b: ScoreBreakdown = { fire: t.fire.o * 5, r1: 0, r2: 0, r3: 0, flag: 0, park: 0, wrong: 0, total: 0 }
-  let wrong = t.fire.g
+  const b: ScoreBreakdown = { fire: t.fire.o * 5, r1: 0, r2: 0, r3: 0, flag: 0, wrong: 0, mission: 0, multPct: 100, total: 0 }
+  let wrong = t.fire.g + t.decorO
   t.mtn.forEach((tiers, m) => {
     b.r1 += tiers[0].g * 5
     b.r2 += tiers[1].g * 10
@@ -36,10 +35,12 @@ export function scoreTally(t: FieldTally): ScoreBreakdown {
     wrong += tiers[0].o + tiers[1].o + tiers[2].o
     if (t.flags[m]) b.flag += tiers.every((x) => x.g > 0) ? 40 : 20
   })
-  const sh = allianceShare(t)
-  b.park = sh.red.park + sh.red.bonus + sh.blue.park + sh.blue.bonus
   b.wrong = 0 - 3 * wrong // "0 -" để không ra -0
-  b.total = b.fire + b.r1 + b.r2 + b.r3 + b.flag + b.park + b.wrong
+  b.mission = b.fire + b.r1 + b.r2 + b.r3 + b.flag + b.wrong
+  for (const c of [...t.climbs.red, ...t.climbs.blue]) b.multPct += CLIMB_PCT[c]
+  // Tích mission × multPct là số nguyên; chia 100 rồi làm tròn lên cho đúng (31775 / 100 → 318).
+  // Điểm nhiệm vụ âm: luật không nói — chỉ nhân hệ số khi dương (spec "Tính điểm").
+  b.total = b.mission > 0 ? Math.ceil((b.mission * b.multPct) / 100) : b.mission
   return b
 }
 

@@ -6,7 +6,7 @@ import type { RobotBody } from './robot.ts'
 import { ZONES, type Alliance, type Phase, type Rect } from './layout.ts'
 
 export type HpAction = 'pick' | 'orange' | 'green' | 'load'
-export type HpContext = { world: FanrocWorld; robots: RobotBody[]; phase: Phase; endgame: boolean }
+export type HpContext = { world: FanrocWorld; robots: RobotBody[]; phase: Phase }
 
 /** Human Player tự động nhặt và nạp mỗi chừng này giây. */
 const AUTO_EVERY = 0.8
@@ -55,13 +55,8 @@ export class HumanPlayer {
   private load(ctx: HpContext): string | null {
     const mine = ctx.robots.filter((r) => r.alliance === this.alliance)
     const zone = ZONES.load[this.alliance]
-    const parked = (r: RobotBody) => ctx.endgame && r.parked
-    const inZone = mine.filter((r) => r.footprint().some((p) => cornerIn(zone, p)))
-    const eligible = inZone.filter((r) => !parked(r))
-    if (eligible.length === 0) {
-      const allParked = mine.length > 0 && mine.every(parked)
-      return inZone.length > 0 || allParked ? 'Robot đã về Vùng Bảo Vệ' : 'Robot chưa vào Khu Tiếp Tế'
-    }
+    const eligible = mine.filter((r) => r.footprint().some((p) => cornerIn(zone, p)))
+    if (eligible.length === 0) return 'Robot chưa vào Khu Tiếp Tế'
     // Ruling R33: robot không có cửa xả (S3, vd. Xe Ủi) không nhận bóng — nhận rồi cũng không đưa ra được.
     const gated = eligible.filter((r) => r.def.servos.S3 !== undefined)
     if (gated.length === 0) return 'Robot không có cửa xả'
@@ -89,7 +84,7 @@ export class HumanPlayer {
     const zone = ZONES.load[this.alliance]
     const robot = ctx.robots.find(
       (r) =>
-        r.alliance === this.alliance && r.def.servos.S3 !== undefined && !(ctx.endgame && r.parked) &&
+        r.alliance === this.alliance && r.def.servos.S3 !== undefined &&
         r.footprint().some((p) => cornerIn(zone, p)),
     )
     if (!robot) return

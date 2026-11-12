@@ -1,20 +1,20 @@
 // Bảng điểm trận đấu kiểu game (spec §6.1 ③, anh Tuấn chốt 04/11): ô Đỏ trái | điểm trận CHUNG + đồng hồ + pha giữa |
 // ô Xanh phải. 4 đội hợp tác, nhận chung một điểm trận; mỗi ô liên minh hiện 2 đội (tên, nhãn chương trình, phạt, điểm
-// đội = teamScore(điểm chung, phạt)) và phần đỗ Vùng Bảo Vệ + thưởng liên minh (allianceShare). Kèm đếm ngược
+// đội = teamScore(điểm chung, phạt)). Luật V4 bỏ đỗ Vùng Bảo Vệ (bảng điểm làm lại ở Task 4). Kèm đếm ngược
 // 3 · 2 · 1 · BẮT ĐẦU!, chữ báo điểm nổi 1,5 s, màn kết quả phủ sân.
 // Phần thuần (scoreLine, scorePops, countdownCue, ScoreTicker, resultView) chạy được trong Node; createScoreboard dựng DOM.
 import type { Match } from '../match.ts'
 import type { RobotBody } from '../robot.ts'
 import type { Skill } from '../agent.ts'
-import { allianceShare, scoreTally, teamScore, type ScoreBreakdown } from '../scoring.ts'
+import { scoreTally, teamScore, type ScoreBreakdown } from '../scoring.ts'
 import { penaltyPoints } from '../quickmatch.ts'
 import { matchClock } from '../view/hud.ts'
 
 /** Điểm trận tính lại tối đa chừng này lần mỗi giây (tally dò tia trên 300 bóng). */
 export const SCORE_HZ = 4
 
-export type ScorePhase = 'XẢ BÓNG' | 'ĐIỀU KHIỂN' | 'VỀ VÙNG BẢO VỆ' | 'HẾT GIỜ' | 'LUYỆN TẬP'
-export type AllianceLine = { teams: { name: string; score: number; penalty: number; program: string }[]; park: number; bonus: number }
+export type ScorePhase = 'XẢ BÓNG' | 'ĐIỀU KHIỂN' | 'HẾT GIỜ' | 'LUYỆN TẬP'
+export type AllianceLine = { teams: { name: string; score: number; penalty: number; program: string }[] }
 export interface ScoreLine {
   red: AllianceLine
   blue: AllianceLine
@@ -37,7 +37,7 @@ export function phaseOf(m: Match): ScorePhase {
   if (m.practice) return 'LUYỆN TẬP'
   if (m.phase === 'release') return 'XẢ BÓNG'
   if (m.phase === 'end') return 'HẾT GIỜ'
-  return m.endgame ? 'VỀ VÙNG BẢO VỆ' : 'ĐIỀU KHIỂN'
+  return 'ĐIỀU KHIỂN'
 }
 
 /**
@@ -49,7 +49,6 @@ export function phaseOf(m: Match): ScorePhase {
 export function scoreLine(match: Match, robots: RobotBody[], programs: string[] = [], names?: string[]): ScoreLine {
   const tally = match.tally()
   const score = scoreTally(tally)
-  const share = allianceShare(tally)
   const total = score.total
   const teamNames = names ?? match.result().teams.map((t) => t.team)
   const side = (a: 'red' | 'blue'): AllianceLine => ({
@@ -58,14 +57,12 @@ export function scoreLine(match: Match, robots: RobotBody[], programs: string[] 
         ? [{ name: teamNames[i] ?? `Robot ${i + 1}`, score: teamScore(total, match.pens[i]), penalty: penaltyPoints(match.pens[i], total), program: programs[i] ?? 'Mặc định' }]
         : [],
     ),
-    park: share[a].park,
-    bonus: share[a].bonus,
   })
   return { red: side('red'), blue: side('blue'), total, clock: matchClock(match.t, match.practice), phase: phaseOf(match), score }
 }
 
-const ITEMS: [Exclude<keyof ScoreBreakdown, 'total'>, string][] = [
-  ['fire', 'Chữa Cháy'], ['r1', 'Rãnh 1'], ['r2', 'Rãnh 2'], ['r3', 'Rãnh 3'], ['flag', 'Cờ'], ['park', 'Vùng Bảo Vệ'], ['wrong', 'Bóng sai chỗ'],
+const ITEMS: [Exclude<keyof ScoreBreakdown, 'total' | 'mission' | 'multPct'>, string][] = [
+  ['fire', 'Chữa Cháy'], ['r1', 'Rãnh 1'], ['r2', 'Rãnh 2'], ['r3', 'Rãnh 3'], ['flag', 'Cờ'], ['wrong', 'Bóng sai chỗ'],
 ]
 /** Số có dấu kiểu bảng điểm: "+15", "−3" (dấu trừ U+2212). */
 const signed = (v: number) => (v > 0 ? `+${v}` : `−${-v}`)
@@ -108,7 +105,7 @@ export class ScoreTicker {
     this.last = nowMs
     const line = scoreLine(match, robots, programs, names)
     // Mốc so sánh phải lấy trong lúc thi đấu: lần đầu sau xả bóng chỉ đặt mốc (bóng còn lăn từ lúc xả không phải ghi điểm).
-    const playing = (p: ScorePhase | null) => p === 'ĐIỀU KHIỂN' || p === 'VỀ VÙNG BẢO VỆ' || p === 'LUYỆN TẬP'
+    const playing = (p: ScorePhase | null) => p === 'ĐIỀU KHIỂN' || p === 'LUYỆN TẬP'
     const scoring = playing(this.phase) && (playing(line.phase) || line.phase === 'HẾT GIỜ')
     const pops = this.prev && scoring ? scorePops(this.prev, line.score) : []
     this.prev = line.score
@@ -119,7 +116,7 @@ export class ScoreTicker {
 
 export interface ResultView {
   line: ScoreLine
-  /** Bảng mục theo thứ tự của luật: Chữa Cháy, Rãnh 1–3, Sai vị trí, Cờ, Vùng Bảo Vệ. */
+  /** Bảng mục theo thứ tự của luật: Chữa Cháy, Rãnh 1–3, Sai vị trí, Cờ, Điểm nhiệm vụ, phần hệ số leo xà (%). */
   items: { label: string; value: number }[]
 }
 
@@ -136,7 +133,8 @@ export function resultView(match: Match, robots: RobotBody[], programs: string[]
       { label: 'Rãnh 3', value: s.r3 },
       { label: 'Sai vị trí', value: s.wrong },
       { label: 'Cờ', value: s.flag },
-      { label: 'Vùng Bảo Vệ', value: s.park },
+      { label: 'Điểm nhiệm vụ', value: s.mission },
+      { label: 'Hệ số nhân leo xà (%)', value: s.multPct - 100 },
     ],
   }
 }
@@ -182,7 +180,6 @@ const CSS = `
 .sb-sub { display: flex; gap: 6px; align-items: baseline; white-space: nowrap; }
 .sb-clock { font: 700 15px/1.2 var(--mono); font-variant-numeric: tabular-nums; }
 .sb-phase { font: 800 10px/1 var(--font); letter-spacing: .5px; padding: 2px 5px; border-radius: 4px; background: #ffffff1f; }
-.sb-phase[data-p="VỀ VÙNG BẢO VỆ"] { background: #ff7a1a; }
 .sb-phase[data-p="HẾT GIỜ"] { background: #e2384d; }
 .sb-pops { position: absolute; top: calc(var(--runbar-top, 72px) + 46px); left: 50%; transform: translateX(-50%); z-index: 11; display: grid; gap: 6px; justify-items: center; pointer-events: none; max-width: calc(100% - 16px); }
 .sb-pop { background: linear-gradient(90deg, #e2384d, #ff7a1a); color: #fff; padding: 7px 18px; border-radius: 30px; font: 900 18px/1.2 var(--font); box-shadow: 0 4px 20px #0008; white-space: nowrap; animation: sb-pop ${POP_MS}ms ease-out forwards; }
@@ -235,7 +232,6 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 }
 
 const ALLIANCE_NAME = { red: 'ĐỎ', blue: 'XANH' } as const
-const parkText = (a: AllianceLine) => `Đỗ ${a.park}${a.bonus ? ` + thưởng ${a.bonus}` : ''}`
 const penText = (p: number) => (p ? `−${p}` : '')
 
 /** Dựng bảng điểm trên `stage`; đặt `--runbar-top` của stage để thanh chạy nằm ngay dưới bảng điểm. */
@@ -253,12 +249,11 @@ export function createScoreboard(stage: HTMLElement): Scoreboard {
     const box = el('div', 'sb-side')
     box.dataset.side = a
     const hd = el('div', 'sb-hd')
-    const park = el('span')
-    hd.append(el('b', undefined, ALLIANCE_NAME[a]), park)
+    hd.append(el('b', undefined, ALLIANCE_NAME[a]))
     const rows = el('div')
     rows.style.display = 'contents'
     box.append(hd, rows)
-    return { box, park, rows, key: '' }
+    return { box, rows, key: '' }
   }
   const red = mkSide('red')
   const blue = mkSide('blue')
@@ -291,7 +286,6 @@ export function createScoreboard(stage: HTMLElement): Scoreboard {
   placeRunbar()
 
   const fillSide = (s: typeof red, a: AllianceLine) => {
-    s.park.textContent = parkText(a)
     const key = a.teams.map((t) => `${t.name}|${t.program}|${t.penalty}|${t.score}`).join('/')
     if (key === s.key) return
     s.key = key
@@ -342,11 +336,6 @@ export function createScoreboard(stage: HTMLElement): Scoreboard {
           row.append(el('small', undefined, `${t.program} · ${t.penalty ? `phạt −${t.penalty}` : 'không bị phạt'}`))
           c.append(row)
         }
-        const park = el('div', 'sb-row')
-        park.append(el('span', undefined, 'Đỗ Vùng Bảo Vệ'), el('b', undefined, String(line.park)))
-        const bonus = el('div', 'sb-row')
-        bonus.append(el('span', undefined, 'Thưởng liên minh'), el('b', undefined, String(line.bonus)))
-        c.append(park, bonus)
         return c
       }
       const mid = el('section', 'sb-col')
