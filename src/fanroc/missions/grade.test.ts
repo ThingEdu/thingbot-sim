@@ -10,7 +10,7 @@ import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
 import { MISSION_SEED, MISSIONS } from './data.ts'
-import { climb, straight, turtle } from './solutions.ts'
+import { climb, forward, secondsFor, straight, turtle } from './solutions.ts'
 import { grade, loopEmpty, restWaits, shouldGrade, touchesMountain, type RunState } from './grade.ts'
 import type { Goal, Mission, RunRecord } from './types.ts'
 import { AUTO_TIMES, defaultConfig, sample, teleopButtons, TOOLBOX_OPCODES } from '../programs.ts'
@@ -122,7 +122,7 @@ function ideal(m: Mission): RunRecord {
   }
   if (trail.time === 1e9) trail.time = 5
   for (let k = 0; k < paramCalls; k++) begin.push(procedureCall('tiến', [0.1]) as B)
-  const program = prog(begin, paramCalls ? defs(procedureState('tiến', ['mét'], [])) : [])
+  const program = prog(begin, paramCalls ? defs(procedureState('tiến', ['giây'], [])) : [])
   return { start: m.start, end, trail, touchedMountain: false, events, tally, program }
 }
 
@@ -184,7 +184,7 @@ test('12 nhiệm vụ, id duy nhất, n = 1..12, chặng và tên đúng bảng 
   assert.deepEqual(MISSIONS.map((m) => m.n), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
   assert.deepEqual(MISSIONS.map((m) => m.stage), [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 4])
   assert.deepEqual(MISSIONS.map((m) => m.title), [
-    'Làm quen robot', 'Đi thẳng', 'Cong và xoay', 'Đo robot', 'Khối "tiến (m)"', 'Khối "rẽ phải/trái (độ)"', 'Hình vuông', 'Gỡ lỗi',
+    'Làm quen robot', 'Đi thẳng', 'Cong và xoay', 'Đo robot', 'Khối "tiến (giây)"', 'Khối "rẽ phải/trái (độ)"', 'Hình vuông', 'Gỡ lỗi',
     'Dọn Khu Chữa Cháy', 'Cắm cờ', 'Leo Thang Cứu Hỏa', 'Trận đầu tiên',
   ])
   assert.equal(byN(12).kind, 'match')
@@ -275,7 +275,7 @@ test('⭐⭐⭐ cần lặp lại VÀ lời gọi khối của em có ít nhất
   const noArg = prog([repeat(4, [procedureCall('vuông', []) as B])], defs(procedureState('vuông', [], [motor(1, 'forward', 60)])))
   assert.equal(grade(M7, record(M7, { end: close, program: noArg })).stars, 2)
   // Khối của em có ô số, không lặp.
-  const noLoop = prog([procedureCall('tiến', [1]) as B], defs(procedureState('tiến', ['mét'], [wait(argumentReporter('mét') as B)])))
+  const noLoop = prog([procedureCall('tiến', [1]) as B], defs(procedureState('tiến', ['giây'], [wait(argumentReporter('giây') as B)])))
   const r = grade(M7, record(M7, { end: close, program: noLoop }))
   assert.equal(r.stars, 2)
   assert.match(r.hint ?? '', /lặp lại/)
@@ -415,7 +415,23 @@ test('dọn Khu Chữa Cháy (nhiệm vụ 9) và trận đầu (nhiệm vụ 12
 })
 
 // ---------- Giải được trên sân thật ----------
-test('nhiệm vụ 7 có lời giải: «lặp lại 4» + tiến (0.72) + rẽ trái (90) chạy trên sân đạt ≥ 2 sao', async (t) => {
+test('nhiệm vụ 5 «tiến (giây)» (R161): hai lần gọi tiến(0,4 m ÷ 0,275) + tiến(0,6 m ÷ 0,275) chạy trên sân đạt 3 sao; một lần gọi 2 sao; gọi ít giây ⇒ gợi ý tăng số giây', async (t) => {
+  const m = byN(5)
+  assert.equal(m.id, 'khoi-tien', 'giữ id để tiến độ đã lưu còn nguyên')
+  const two = await runOnField(m, forward([secondsFor(0.4), secondsFor(0.6)]))
+  const g2 = grade(m, two)
+  t.diagnostic(`hai lần gọi ${secondsFor(0.4)} + ${secondsFor(0.6)} s: cuối x ${two.end.x.toFixed(3)} (đích ${(m.start.x + 1).toFixed(3)}), z ${two.end.z.toFixed(3)}, ${g2.stars} sao`)
+  assert.deepEqual([g2.done, g2.stars], [true, 3], JSON.stringify(g2.goals))
+  const one = await runOnField(m, forward([secondsFor(1)]))
+  const g1 = grade(m, one)
+  t.diagnostic(`một lần gọi ${secondsFor(1)} s: cuối x ${one.end.x.toFixed(3)}, ${g1.stars} sao`)
+  assert.deepEqual([g1.done, g1.stars], [true, 2], JSON.stringify(g1.goals))
+  const short = grade(m, await runOnField(m, forward([secondsFor(0.8)])))
+  assert.equal(short.done, false)
+  assert.match(short.hint ?? '', /hụt \d+ cm — tăng số giây/)
+})
+
+test('nhiệm vụ 7 có lời giải: «lặp lại 4» + tiến (0,72 ÷ 0,275 = 2.62 giây) + rẽ trái (90) chạy trên sân đạt ≥ 2 sao', async (t) => {
   const r = await runOnField(M7, SOLVED)
   const g = grade(M7, r)
   t.diagnostic(`sai số cuối ${(err(r) * 100).toFixed(1)} cm, quãng ${r.trail.distance.toFixed(2)} m, góc ${r.trail.turned.toFixed(0)}°, dừng lúc ${r.trail.time.toFixed(2)} s, chấm lúc ${r.gradedAt.toFixed(2)} s (${r.why}), ${g.stars} sao`)

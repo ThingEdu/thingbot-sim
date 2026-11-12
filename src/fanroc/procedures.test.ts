@@ -61,9 +61,9 @@ const motor = (m: number, speed: number) => ({
   inputs: { SPEED: { shadow: { type: 'math_number', fields: { NUM: speed } } } },
 })
 const waitFor = (value: object) => ({ type: 'control_wait', inputs: { DURATION: { shadow: { type: 'math_positive_number', fields: { NUM: 1 } }, block: value } } })
-/** tiến (mét): M1 = M2 = 60, đợi (mét) giây, rồi dừng. */
-const TIEN = procedureState('tiến', ['mét'], [motor(1, 60), motor(2, 60), waitFor(argumentReporter('mét')), motor(1, 0), motor(2, 0)])
-/** Chương trình: khi Arduino khởi động → tiến (m). */
+/** tiến (giây) — nhiệm vụ 5 (R161): M1 = M2 = 60, đợi (giây), rồi dừng. */
+const TIEN = procedureState('tiến', ['giây'], [motor(1, 60), motor(2, 60), waitFor(argumentReporter('giây')), motor(1, 0), motor(2, 0)])
+/** Chương trình: khi Arduino khởi động → tiến (m) với m giây. */
 const program = (m: number) => {
   const def = (TIEN as { blocks: { blocks: object[] } }).blocks.blocks
   return { blocks: { languageVersion: 0, blocks: [{ type: 'event_whenarduinobegin', x: 30, y: 30, next: { block: procedureCall('tiến', [m]) } }, ...def] } }
@@ -123,11 +123,11 @@ test('khối của em không tham số vẫn chạy như trước', () => {
 
 test('ô tham số kéo ra ngoài khối định nghĩa báo lỗi tiếng Việt, không chạy', () => {
   const st = { blocks: { languageVersion: 0, blocks: [
-    { type: 'event_whenarduinobegin', x: 30, y: 30, next: { block: waitFor(argumentReporter('mét')) } },
+    { type: 'event_whenarduinobegin', x: 30, y: 30, next: { block: waitFor(argumentReporter('giây')) } },
     ...(TIEN as { blocks: { blocks: object[] } }).blocks.blocks,
   ] } }
   const { error } = H.generate(st)
-  assert.match(error ?? '', /mét.*bên trong khối/)
+  assert.match(error ?? '', /giây.*bên trong khối/)
 })
 
 // ---------- .tb ----------
@@ -155,25 +155,25 @@ test('.tb: khối 1 tham số có đúng mutation, một prototype mỗi định
   assert.equal(proto.mutation?.proccode, 'tiến %n')
   const ids = JSON.parse(String(proto.mutation?.argumentids)) as string[]
   assert.equal(ids.length, 1)
-  assert.deepEqual(JSON.parse(String(proto.mutation?.argumentnames)), ['mét'])
+  assert.deepEqual(JSON.parse(String(proto.mutation?.argumentnames)), ['giây'])
   assert.deepEqual(JSON.parse(String(proto.mutation?.argumentdefaults)), [''])
   assert.equal(proto.mutation?.warp, 'false')
-  // Ô tham số trên prototype là bóng argument_reporter_string_number tên "mét".
+  // Ô tham số trên prototype là bóng argument_reporter_string_number tên "giây".
   const reporterRef = proto.inputs[ids[0]]
   assert.equal(reporterRef[0], 1)
   const reporter = all[reporterRef[1] as string]
   assert.equal(reporter.opcode, 'argument_reporter_string_number')
   assert.equal(reporter.shadow, true)
-  assert.deepEqual(reporter.fields.VALUE, ['mét', null])
+  assert.deepEqual(reporter.fields.VALUE, ['giây', null])
   // Lời gọi: cùng proccode và argumentids, đối số 1 ở ô có id đó.
   const [, call] = ofType(state, 'procedures_call')[0]
   assert.equal(call.mutation?.proccode, 'tiến %n')
   assert.deepEqual(JSON.parse(String(call.mutation?.argumentids)), ids)
   assert.deepEqual(call.inputs[ids[0]], [1, [4, '1']])
-  // Ô "mét" trong thân (không phải bóng) vẫn tên "mét".
+  // Ô "giây" trong thân (không phải bóng) vẫn tên "giây".
   const used = ofType(state, 'argument_reporter_string_number').filter(([, b]) => !b.shadow)
   assert.equal(used.length, 1)
-  assert.deepEqual(used[0][1].fields.VALUE, ['mét', null])
+  assert.deepEqual(used[0][1].fields.VALUE, ['giây', null])
 })
 
 test('.tb: khối 0 tham số có đúng mutation', () => {
@@ -220,13 +220,13 @@ test('bản nháp ↔ mutation: proccode "tên %n %n", giữ id tham số cũ kh
   const m = draftMutation({ name: '  rẽ  ', params: ['độ', 'tốc độ'], ids: ['x1', 'x2'] })
   assert.deepEqual(m, { proccode: 'rẽ %n %n', argumentids: '["x1","x2"]', argumentnames: '["độ","tốc độ"]', argumentdefaults: '["",""]', warp: 'false' })
   assert.deepEqual(draftFromMutation(m), { name: 'rẽ', params: ['độ', 'tốc độ'], ids: ['x1', 'x2'] })
-  const fresh = draftMutation({ name: 'tiến', params: ['mét'] })
+  const fresh = draftMutation({ name: 'tiến', params: ['giây'] })
   assert.equal(JSON.parse(fresh.argumentids).length, 1)
   assert.equal(draftFromMutation({ proccode: 'Khối của em', argumentids: '[]', argumentnames: '[]' }).name, 'Khối của em')
 })
 
 test('kiểm bản nháp: tên trống, tham số trống, tham số trùng', () => {
-  assert.equal(draftProblem({ name: 'tiến', params: ['mét'] }), null)
+  assert.equal(draftProblem({ name: 'tiến', params: ['giây'] }), null)
   assert.match(draftProblem({ name: '  ', params: [] }) ?? '', /tên/i)
   assert.match(draftProblem({ name: 'tiến', params: [' '] }) ?? '', /ô số/i)
   assert.match(draftProblem({ name: 'tiến', params: ['a', 'a'] }) ?? '', /trùng/i)
@@ -249,7 +249,7 @@ test('hộp thoại tạo khối: nhập tên, thêm ô số, Tạo khối / Hu�
     const q = (sel: string) => host.querySelector(sel) as HTMLElement
     const button = (text: string) => [...host.querySelectorAll('button')].find((b) => b.textContent?.includes(text)) as HTMLButtonElement
 
-    // Tạo khối "tiến" có một ô số "mét".
+    // Tạo khối "tiến" có một ô số "giây".
     let result = open({ name: 'Khối của em', params: [] })
     const name = q('input[name="ten-khoi"]') as HTMLInputElement
     assert.ok(name, 'có ô Tên khối')
@@ -257,12 +257,12 @@ test('hộp thoại tạo khối: nhập tên, thêm ô số, Tạo khối / Hu�
     name.dispatchEvent(new dom.window.Event('input'))
     button('Thêm ô số').click()
     const param = host.querySelector('input[name="tham-so"]') as HTMLInputElement
-    param.value = 'mét'
+    param.value = 'giây'
     param.dispatchEvent(new dom.window.Event('input'))
     button('Tạo khối').click()
     const made = await within(result, 'Tạo khối')
     assert.equal(made?.name, 'tiến')
-    assert.deepEqual(made?.params, ['mét'])
+    assert.deepEqual(made?.params, ['giây'])
     assert.equal(host.querySelector('[role="dialog"]'), null, 'hộp thoại đóng')
 
     // Tên trống: không tạo, báo lỗi, hộp thoại còn mở.

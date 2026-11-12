@@ -79,7 +79,7 @@ vụ chia 4 chặng. Làm theo thứ tự hay nhảy cóc đều được.
 | Chặng | Nhiệm vụ |
 |---|---|
 | 1 · Hai bánh xe | 1 Làm quen robot · 2 Đi thẳng · 3 Cong và xoay · 4 Đo robot |
-| 2 · Con rùa robot | 5 Khối "tiến (m)" · 6 Khối "rẽ phải/trái (độ)" · 7 Hình vuông · 8 Gỡ lỗi |
+| 2 · Con rùa robot | 5 Khối "tiến (giây)" · 6 Khối "rẽ phải/trái (độ)" · 7 Hình vuông · 8 Gỡ lỗi |
 | 3 · Việc trên sân | 9 Dọn Khu Chữa Cháy · 10 Cắm cờ (Xe Cắm Cờ) · 11 Leo Thang Cứu Hỏa |
 | 4 · Thi đấu | 12 Trận đầu tiên |
 
@@ -100,10 +100,14 @@ Tiến độ, số sao tốt nhất và chương trình của từng nhiệm v�
 **Tạo khối của em** (nhiệm vụ 5 và 6):
 
 1. Bấm mục **Khối của em** (chấm hồng), rồi bấm nút **Tạo một khối**.
-2. Đặt tên khối, bấm **+ Thêm ô số** nếu khối cần một số (ví dụ "mét"), rồi bấm **Tạo khối**.
+2. Đặt tên khối, bấm **+ Thêm ô số** nếu khối cần một số (ví dụ "giây"), rồi bấm **Tạo khối**.
 3. Vùng khối hiện khối hồng «định nghĩa …». Kéo các khối vào ngay dưới khối hồng đó. Cần dùng số trong ô thì kéo ô
    tròn trên khối hồng xuống.
 4. Khối mới có trong mục Khối của em, kéo ra dùng như mọi khối khác.
+
+Robot không đếm được bánh đã quay bao nhiêu vòng, nên khối «tiến» của nhiệm vụ 5 đi thẳng theo **số giây**: thân khối là
+M1 = M2 = 60, «đợi (giây)», rồi dừng. Muốn đi 1 mét, em tính số giây = 1 ÷ (số mét robot đi được trong 1 giây, đo ở
+nhiệm vụ 4). Hụt thì tăng số giây một chút, quá thì giảm.
 
 ## 3. Xưởng lập trình: robot của em
 
@@ -132,7 +136,7 @@ Sau khi tải, em có thể:
 
 Lưu ý:
 
-- Chương trình có **khối của em có ô số** (như «tiến (mét)») vẫn tải được, nhưng **chưa nạp được lên ThingBot thật**.
+- Chương trình có **khối của em có ô số** (như «tiến (giây)») vẫn tải được, nhưng **chưa nạp được lên ThingBot thật**.
   Game sẽ báo khi em tải. Muốn nạp robot thật thì dùng khối của em không có ô số, hoặc ghép thẳng các khối.
 - Game hiện **chỉ tải ra** tệp .tb, chưa mở lại được tệp .tb. Chương trình trong game vẫn tự lưu trên máy em.
 

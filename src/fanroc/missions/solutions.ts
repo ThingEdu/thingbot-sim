@@ -22,15 +22,26 @@ const prog = (begin: B[], extra: B[] = []) => ({
 /** Nhiệm vụ 2: hai động cơ 60, đợi `s` giây, dừng (0,9 s ⇒ dừng ở z ≈ 0,79, 3 sao). */
 export const straight = (s = 0.9) => prog([motor(1, 'forward', 60), motor(2, 'forward', 60), wait(s), motor(1, 'forward', 0), motor(2, 'forward', 0)])
 
+/** Quãng đi được trong 1 giây ở tốc độ 60 (số đo nhiệm vụ 4, đã gồm đoạn trôi sau khi dừng). */
+export const METRES_PER_S = 0.275
+/** Số giây «tiến» cho `m` mét: m ÷ quãng trong 1 giây, làm tròn 2 chữ số như học sinh gõ. */
+export const secondsFor = (m: number) => Math.round((m / METRES_PER_S) * 100) / 100
+/** Định nghĩa «tiến (giây)» (R161): M1 = M2 = 60, đợi (giây), dừng — robot không có encoder nên đi theo thời gian. */
+const tienGiay = (pause: number) =>
+  procedureState('tiến', ['giây'], [motor(1, 'forward', 60), motor(2, 'forward', 60), wait(argumentReporter('giây') as B), motor(1, 'forward', 0), motor(2, 'forward', 0), ...(pause > 0 ? [wait(pause)] : [])])
+
+/** Nhiệm vụ 5: gọi «tiến (giây)» lần lượt với từng số giây trong `seconds` (hai lần gọi ⇒ ⭐⭐⭐). */
+export const forward = (seconds: number[]) => prog(seconds.map((s) => procedureCall('tiến', [s]) as B), defs(tienGiay(0)))
+
 /**
- * Nhiệm vụ 7 (và bản sửa của nhiệm vụ 8): «tiến (mét)» và «rẽ trái (độ)» chia cho đúng số đo của nhiệm vụ 4 ở tốc độ 60
- * (0,275 m/s; 131 °/s), «lặp lại 4».
+ * Nhiệm vụ 7 (và bản sửa của nhiệm vụ 8): «tiến (giây)» với số giây = cạnh `side` mét ÷ 0,275 m/s, «rẽ trái (độ)» chia
+ * cho số đo của nhiệm vụ 4 ở tốc độ 60 (131 °/s), «lặp lại 4».
  */
 export const turtle = (side: number, degPerS: number) =>
   prog(
-    [repeat(4, [procedureCall('tiến', [side]) as B, procedureCall('rẽ trái', [90]) as B])],
+    [repeat(4, [procedureCall('tiến', [secondsFor(side)]) as B, procedureCall('rẽ trái', [90]) as B])],
     defs(
-      procedureState('tiến', ['mét'], [motor(1, 'forward', 60), motor(2, 'forward', 60), wait(div(argumentReporter('mét') as B, 0.275)), motor(1, 'forward', 0), motor(2, 'forward', 0), wait(0.3)]),
+      tienGiay(0.3),
       procedureState('rẽ trái', ['độ'], [motor(1, 'backward', 60), motor(2, 'forward', 60), wait(div(argumentReporter('độ') as B, degPerS)), motor(1, 'forward', 0), motor(2, 'forward', 0), wait(0.3)]),
     ),
   )

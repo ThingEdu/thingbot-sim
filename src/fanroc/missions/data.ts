@@ -96,13 +96,13 @@ const define = (name: string, param: string, body: B[], y: number): B => ({
 const call = (name: string, value: number): B => procedureCall(name, [value]) as B
 
 /**
- * Nhiệm vụ 8 — chương trình bị sai: «rẽ trái (độ)» chia cho 100 °/s (số đoán, chưa đo) trong khi robot quay ~131 °/s,
+ * Nhiệm vụ 8 — chương trình bị sai: «tiến (2.55)» đúng (0,70 m ÷ 0,275 m/s, R161), nhưng «rẽ trái (độ)» chia cho 100 °/s (số đoán, chưa đo) trong khi robot quay ~131 °/s,
  * nên mỗi góc robot quay quá ~ 28° và vệt không khép (phép thử grade.test.ts chạy nó trên sân để chắc chắn).
  */
 const BUGGY_SQUARE = program(
-  [{ type: 'control_repeat', inputs: { TIMES: shadow('math_whole_number', 'NUM', 4), SUBSTACK: { block: chain([call('tiến', 0.7), call('rẽ trái', 90)]) } } }],
+  [{ type: 'control_repeat', inputs: { TIMES: shadow('math_whole_number', 'NUM', 4), SUBSTACK: { block: chain([call('tiến', 2.55), call('rẽ trái', 90)]) } } }],
   [
-    define('tiến', 'mét', [motor(1, 'forward', 60), motor(2, 'forward', 60), waitFor(divide(arg('mét'), 0.275)), motor(1, 'forward', 0), motor(2, 'forward', 0), wait(0.3)], 30),
+    define('tiến', 'giây', [motor(1, 'forward', 60), motor(2, 'forward', 60), waitFor(arg('giây')), motor(1, 'forward', 0), motor(2, 'forward', 0), wait(0.3)], 30),
     define('rẽ trái', 'độ', [motor(1, 'backward', 60), motor(2, 'forward', 60), waitFor(divide(arg('độ'), 100)), motor(1, 'forward', 0), motor(2, 'forward', 0), wait(0.3)], 330),
   ],
 )
@@ -209,7 +209,7 @@ export const MISSIONS: Mission[] = [
     guide: [
       'Cho M1 = M2 = 60 trong 1 giây rồi dừng. Đọc ô "quãng đã đi" — đó là số mét robot đi được trong 1 giây.',
       'Tiếp theo cho M1 lùi 60, M2 tiến 60 trong 1 giây rồi dừng. Đọc ô "góc đã quay" — số độ xoay được trong 1 giây.',
-      'Ghi hai số này lại: chặng sau em dùng chúng để robot đi đúng số mét, quay đúng số độ.',
+      'Ghi hai số này lại: chặng sau em dùng chúng để tính robot cần chạy bao nhiêu giây cho đúng quãng, đúng góc.',
       'Đo vài lần cho chắc. Robot còn trôi một chút sau khi dừng — số đo đã tính cả đoạn trôi đó.',
       'Robot đứng yên quá 1 giây là được chấm luôn, nên giữa hai phép đo chỉ dừng ngắn thôi.',
     ],
@@ -225,22 +225,24 @@ export const MISSIONS: Mission[] = [
 
   // ---------- Chặng 2 · Con rùa robot ----------
   {
-    id: 'khoi-tien', stage: 2, n: 5, title: 'Khối "tiến (m)"',
-    goal: 'Tạo khối của em «tiến (mét)» có một ô số, rồi dùng nó cho robot đi đúng 1 mét dọc mép sân.',
+    // R161: robot không có encoder nên khối đi thẳng theo số giây, không theo mét. Giữ id 'khoi-tien' (tiến độ đã lưu).
+    id: 'khoi-tien', stage: 2, n: 5, title: 'Khối "tiến (giây)"',
+    goal: 'Tạo khối của em «tiến (giây)» có một ô số, rồi tính số giây để robot đi đúng 1 mét dọc mép sân.',
     robot: MAKER, start: ALONG, balls: false, toolbox: TOOLBOX_TURTLE, starter: EMPTY, kind: 'program', maxTime: 40,
     path: [{ x: ALONG.x, z: ALONG.z }, { x: ALONG.x + 1, z: ALONG.z }],
     guide: [
-      'Bấm mục "Khối của em" (chấm hồng), bấm nút "Tạo một khối". Đặt tên "tiến", bấm "+ Thêm ô số", đổi tên ô thành "mét", rồi bấm "Tạo khối".',
-      'Vùng khối hiện khối hồng «định nghĩa tiến (mét)». Kéo khối vào ngay dưới nó: M1 = M2 = 60, đợi (mét ÷ quãng đi được trong 1 giây em đo ở nhiệm vụ 4), rồi dừng. Muốn có ô «mét», kéo ô tròn «mét» trên khối hồng xuống.',
-      'Dưới «khởi động ThingBot», gọi «tiến (1)». Robot phải đi đúng 1 mét.',
-      'Muốn ⭐⭐⭐: đi 1 mét bằng hai lần gọi, ví dụ «tiến (0.4)» rồi «tiến (0.6)».',
+      'Robot không đếm được bánh đã quay bao nhiêu vòng, nên nó chỉ biết chạy trong bao nhiêu giây. Khối của em sẽ đi thẳng theo số giây.',
+      'Bấm mục "Khối của em" (chấm hồng), bấm nút "Tạo một khối". Đặt tên "tiến", bấm "+ Thêm ô số", đổi tên ô thành "giây", rồi bấm "Tạo khối".',
+      'Vùng khối hiện khối hồng «định nghĩa tiến (giây)». Kéo khối vào ngay dưới nó: M1 = M2 = 60, đợi (giây), rồi dừng. Muốn có ô «giây», kéo ô tròn «giây» trên khối hồng xuống.',
+      'Tính số giây: 1 mét ÷ quãng robot đi được trong 1 giây (số em đo ở nhiệm vụ 4). Dưới «khởi động ThingBot», gọi «tiến (số giây đó)». Robot phải đi đúng 1 mét.',
+      'Muốn ⭐⭐⭐: đi 1 mét bằng hai lần gọi, ví dụ «tiến (số giây đi 0,4 m)» rồi «tiến (số giây đi 0,6 m)».',
     ],
     goals: [{ type: 'reach', rect: rectAround(ALONG.x + 1, ALONG.z, 0.05, 0.05) }, { type: 'paramBlock' }],
     stars: { two: [{ type: 'reach', rect: rectAround(ALONG.x + 1, ALONG.z, 0.02, 0.03) }], three: [{ type: 'paramBlock', calls: 2 }] },
     hints: [
-      { when: 'paramBlock', text: 'Chương trình cần khối của em có ô số — tạo khối «tiến» với ô "mét" rồi gọi nó.' },
-      { when: 'short', text: 'Còn hụt {d} cm — thử tăng thời gian đợi? (chia cho số nhỏ hơn)' },
-      { when: 'long', text: 'Robot đi quá {d} cm — số em chia có đúng quãng đi trong 1 giây không?' },
+      { when: 'paramBlock', text: 'Chương trình cần khối của em có ô số — tạo khối «tiến» với ô "giây" rồi gọi nó.' },
+      { when: 'short', text: 'Còn hụt {d} cm — tăng số giây một chút.' },
+      { when: 'long', text: 'Đi quá {d} cm — giảm số giây.' },
       { when: 'reach', text: 'Robot lệch đường {d} cm — M1 và M2 có cùng tốc độ không?' },
     ],
   },
@@ -269,16 +271,17 @@ export const MISSIONS: Mission[] = [
     robot: MAKER, start: SQUARE_A.start, balls: false, toolbox: TOOLBOX_TURTLE, starter: EMPTY, kind: 'program', maxTime: 40, path: SQUARE_A.path,
     guide: [
       'Một hình vuông là 4 lần: đi một cạnh rồi rẽ trái 90°. Robot rẽ trái nên đi ngược chiều kim đồng hồ quanh núi.',
-      'Tạo lại hai khối của em «tiến (mét)» và «rẽ trái (độ)» như nhiệm vụ 5 và 6.',
-      'Dùng «lặp lại 4» bọc quanh «tiến (0.72)» và «rẽ trái (90)».',
+      'Tạo lại hai khối của em «tiến (giây)» và «rẽ trái (độ)» như nhiệm vụ 5 và 6.',
+      'Tính số giây đi hết một cạnh 0,72 m: 0,72 ÷ quãng đi được trong 1 giây (số đo nhiệm vụ 4).',
+      'Dùng «lặp lại 4» bọc quanh «tiến (số giây đó)» và «rẽ trái (90)».',
       'Bấm ▶, xem vệt có khép lại không. Robot về càng sát chỗ cũ, em càng được nhiều sao.',
     ],
     ...closedLoop(2.4),
     hints: [
       { when: 'measure', text: 'Robot chưa đi hết vòng — có đủ 4 cạnh và 4 lần rẽ chưa?' },
-      { when: 'return', text: 'Còn cách chỗ xuất phát {d} cm — xem vệt: cạnh ngắn thì tăng thời gian đợi, góc rẽ quá thì giảm.' },
+      { when: 'return', text: 'Còn cách chỗ xuất phát {d} cm — xem vệt: cạnh ngắn thì tăng số giây «tiến», góc rẽ quá thì giảm.' },
       { when: 'uses', text: 'Đã khép vòng! Muốn ⭐⭐⭐ hãy dùng «lặp lại 4» thay cho chép 4 lần.' },
-      { when: 'paramBlock', text: 'Đã khép vòng! Muốn ⭐⭐⭐ hãy dùng khối của em có ô số, như «tiến (mét)».' },
+      { when: 'paramBlock', text: 'Đã khép vòng! Muốn ⭐⭐⭐ hãy dùng khối của em có ô số, như «tiến (giây)».' },
     ],
   },
   {
