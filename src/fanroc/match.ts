@@ -34,7 +34,6 @@ const OUT_TOL = 0.005
 const MOUNTAIN_NAME = ['A', 'B', 'C', 'D']
 /** Nhật ký leo: mức leo phải giữ chừng này giây mới báo (khỏi nháy khi móc vừa chạm đã treo). */
 const CLIMB_LOG_S = 0.5
-const ALLIANCE_NAME: Record<Alliance, string> = { red: 'Đỏ', blue: 'Xanh' }
 const CLIMB_TEXT: Record<Climb, string> = {
   none: 'rời xà',
   contact: 'chạm xà (+0,05)',
@@ -236,7 +235,10 @@ export class Match {
     this.log(`Hết giờ — điểm trận ${this.final.score.total}`)
   }
 
-  /** Báo khi mức leo (đã xét đúng thanh) của robot đổi và giữ ≥ CLIMB_LOG_S: "Robot Đỏ 1 treo ở Khu vực Nước (+0,20)". */
+  /**
+   * Báo khi mức leo (đã xét đúng thanh) của robot đổi và giữ ≥ CLIMB_LOG_S: "Robot 1 treo ở Khu vực Nước (+0,20)" — số
+   * robot theo thứ tự của trận như mọi dòng nhật ký khác (lỗi, cờ, Human Player) và bảng điểm.
+   */
   private logClimbs(dt: number): void {
     this.robots.forEach((r, i) => {
       const s = this.climbLog[i]
@@ -247,7 +249,7 @@ export class Match {
       } else s.held += dt
       if (s.pending !== s.shown && s.held >= CLIMB_LOG_S - EPS) {
         s.shown = s.pending
-        this.log(`Robot ${ALLIANCE_NAME[r.alliance]} ${r.slot + 1} ${CLIMB_TEXT[s.shown]}`, i)
+        this.log(`Robot ${i + 1} ${CLIMB_TEXT[s.shown]}`, i)
       }
     })
   }

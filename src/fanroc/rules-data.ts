@@ -3,8 +3,9 @@
 // Mọi con số đọc lúc chạy từ chính mã chơi: điểm từ scoring.ts (dò bằng sân giả), thời gian / sân từ layout.ts, số trận
 // mỗi đội từ tournament.ts; lỗi trọng tài là đúng các lỗi match.ts đang bắt (phép thử rules-data.test.ts đọc match.ts
 // để giữ khớp). Hình minh hoạ là SVG dựng từ số đo sân, không tải gì từ mạng. Thuần, chạy được trong Node.
-import { scoreTally, teamScore, type FieldTally } from './scoring.ts'
-import { DISPENSER, FIELD, MATCH_S, MOUNTAIN_FOOT, MOUNTAINS, PEAK_Y, RELEASE_S, TIER_GROOVE, TIERS, ZONES, type Rect } from './layout.ts'
+import { pctText, scoreTally, teamScore, type FieldTally } from './scoring.ts'
+import { DISPENSER, FIELD, LADDER, LADDERS, MATCH_S, MOUNTAIN_FOOT, MOUNTAINS, PEAK_Y, RELEASE_S, TIER_GROOVE, TIERS, ZONES, type Rect } from './layout.ts'
+import { ladderLen, pointAt, type Climb } from './ladder.ts'
 import { createTournament, TEAM_COUNT } from './tournament.ts'
 
 /** Một thẻ Luật chơi: tiêu đề, một câu dẫn, bảng (nhãn | số) hoặc gạch đầu dòng, và hình SVG (chuỗi). */
@@ -52,10 +53,29 @@ export const POINTS = {
   flagFull: tally((t) => ((t.flags[0] = true), t.mtn[0].forEach((x) => (x.g = 1)))).flag,
   /** Một bóng sai chỗ (âm). */
   wrong: tally((t) => (t.fire.g = 1)).total,
+  /** Một bóng cam ở tầng trang trí (âm, như mọi bóng cam trên núi). */
+  decorOrange: tally((t) => (t.decorO = 1)).total,
+  /** Phần hệ số nhân (theo %) của một robot leo ở từng mức, đúng thanh liên minh mình. */
+  climb: Object.fromEntries(
+    (['contact', 'ground', 'water'] as const).map((c) => [c, tally((t) => (t.climbs.red[0] = c)).multPct - 100]),
+  ) as Record<Exclude<Climb, 'none'>, number>,
   /** Phạt một lỗi nhẹ / một thẻ vàng (số dương, trừ vào điểm đội). */
   minor: 100 - teamScore(100, { ...NO_PEN, minor: 1 }),
   yellow: 100 - teamScore(100, { ...NO_PEN, yellow: 1 }),
 }
+
+/**
+ * Ví dụ trên thẻ Leo Thang Cứu Hỏa: một sân giả chấm bằng chính scoreTally — 205 điểm nhiệm vụ (13 bóng cam, Núi A đủ
+ * 3 rãnh + cờ, Núi B 4 bóng Rãnh 3, Núi C 1 bóng Rãnh 2), 4 robot leo Nước, Đất, Nước, Chạm ⇒ hệ số 1,55 ⇒ 318.
+ */
+export const CLIMB_EXAMPLE = tally((t) => {
+  t.fire.o = 13
+  t.mtn[0].forEach((x) => (x.g = 1))
+  t.flags[0] = true
+  t.mtn[1][2].g = 4
+  t.mtn[2][1].g = 1
+  t.climbs = { red: ['water', 'ground'], blue: ['water', 'contact'] }
+})
 
 /** Số trận mỗi đội của vòng xếp hạng: dò khoảng createTournament nhận. */
 export const PER_TEAM = (() => {
@@ -103,6 +123,26 @@ const text = (x: number, y: number, s: string, o: { size?: number; fill?: string
 
 const COLOR = {
   red: '#e23b4d', blue: '#2f68e0', fire: '#ff8a1f', green: '#2ea84f', floor: '#f3f1ea', wall: '#5b6475', ink: '#1d2433',
+  yellow: '#f2c230', metal: '#8d939e',
+}
+
+/**
+ * Một thanh xà nhìn từ trên (theo LADDERS): hai cột tròn ở hai đầu, thanh xám, vạch Đất / Nước là khoanh màu liên minh
+ * ở LADDER.divider tính từ đầu rào. `X`, `Y` đổi mét ra px của hình.
+ */
+function barTop(a: 'red' | 'blue', X: (x: number) => number, Y: (z: number) => number): string {
+  const { a: p, b: q } = LADDERS[a]
+  const d = pointAt(a, LADDER.divider)
+  // Vạch: đoạn ngắn vuông góc với thanh.
+  const len = ladderLen(a)
+  const nx = -(q.z - p.z) / len
+  const nz = (q.x - p.x) / len
+  const k = 0.05
+  return (
+    `<line data-bar="${a}" x1="${f1(X(p.x))}" y1="${f1(Y(p.z))}" x2="${f1(X(q.x))}" y2="${f1(Y(q.z))}" stroke="${COLOR.metal}" stroke-width="3" stroke-linecap="round"/>` +
+    `<line data-divider="${a}" x1="${f1(X(d.x - nx * k))}" y1="${f1(Y(d.z - nz * k))}" x2="${f1(X(d.x + nx * k))}" y2="${f1(Y(d.z + nz * k))}" stroke="${COLOR[a]}" stroke-width="3"/>` +
+    [p, q].map((c) => `<circle cx="${f1(X(c.x))}" cy="${f1(Y(c.z))}" r="3.2" fill="${COLOR.ink}"/>`).join('')
+  )
 }
 
 /** Sân nhìn từ trên: các khu từ ZONES, 4 núi từ MOUNTAINS, Hộp Phân Phối ở rào xa, Khu Điều Khiển ở dưới. */
@@ -119,7 +159,7 @@ function fieldArt(): string {
   let b = `<rect x="${OX}" y="${OY}" width="${W}" height="${W}" fill="${COLOR.floor}" stroke="${COLOR.wall}" stroke-width="3"/>`
   for (const z of ZONES.fire) b += rect(z, COLOR.fire, 0.45)
   for (const a of ['red', 'blue'] as const) {
-    b += rect(ZONES.start[a], COLOR[a], 0.18) + rect(ZONES.load[a], COLOR[a], 0.35) + rect(ZONES.ladder[a], COLOR[a], 0.6)
+    b += rect(ZONES.start[a], COLOR[a], 0.18) + rect(ZONES.load[a], COLOR[a], 0.35) + rect(ZONES.ladder[a], COLOR.yellow, 0.75)
   }
   MOUNTAINS.forEach((m, i) => {
     const hx = MOUNTAIN_FOOT.hx * S
@@ -138,15 +178,17 @@ function fieldArt(): string {
   }
   for (const a of ['red', 'blue'] as const) {
     const s = mid(ZONES.ladder[a])
-    b += text(s.x, s.y - 1, 'Vùng', { size: 7, fill: '#fff' }) + text(s.x, s.y + 7, 'Bảo Vệ', { size: 7, fill: '#fff' })
+    b += text(s.x, s.y + 12, 'THANG', { size: 7.5, weight: 800 })
     const l = mid(ZONES.load[a])
     b += text(l.x, l.y - 1, 'Khu', { size: 7 }) + text(l.x, l.y + 7, 'Tiếp Tế', { size: 7 })
     const st = mid(ZONES.start[a])
     b += text(st.x, st.y + 3, `Xuất Phát ${a === 'red' ? 'Đỏ' : 'Xanh'}`, { size: 7.5, fill: COLOR[a] })
   }
+  // Thang Cứu Hỏa vẽ sau cùng: thanh xà nằm trên Khu Chữa Cháy và ô THANG.
+  for (const a of ['red', 'blue'] as const) b += barTop(a, X, Y)
   b += `<rect x="${OX}" y="${OY + W + 4}" width="${W}" height="14" rx="3" fill="${COLOR.wall}"/>`
   b += text(OX + W / 2, OY + W + 14, 'Khu Điều Khiển — các bạn đứng lái ở đây', { size: 7.5, fill: '#fff' })
-  return svg(OX * 2 + W, OY + W + 22, b, 'Sơ đồ sân nhìn từ trên: 4 núi ở giữa, Khu Chữa Cháy hai góc xa, Vùng Bảo Vệ hai bên, Khu Xuất Phát và Khu Tiếp Tế gần Khu Điều Khiển')
+  return svg(OX * 2 + W, OY + W + 22, b, 'Sơ đồ sân nhìn từ trên: 4 núi ở giữa, Khu Chữa Cháy hai góc xa, hai thanh xà Thang Cứu Hỏa chạy chéo qua Khu Chữa Cháy và ô vàng THANG, Khu Xuất Phát và Khu Tiếp Tế gần Khu Điều Khiển')
 }
 
 /** Dòng thời gian một trận: xả bóng → thi đấu (luật V4 không còn End Game). */
@@ -184,7 +226,7 @@ function mountainArt(): string {
     labels.push(`<line x1="${f1(lx)}" y1="${f1(y)}" x2="186" y2="${f1(y)}" stroke="#5b6475" stroke-width="0.6" stroke-dasharray="2 2"/>`)
     labels.push(
       t.decor
-        ? text(190, y + 3, `trang trí (bóng cam ${signed(POINTS.wrong)})`, { size: 8, anchor: 'start', fill: '#5b6475' })
+        ? text(190, y + 3, `trang trí: không tính điểm`, { size: 8, anchor: 'start', fill: '#5b6475' })
         : text(190, y + 3, `Rãnh ${g + 1} · ${signed(value[g])}`, { size: 9, anchor: 'start', weight: 800 }),
     )
     if (!t.decor) b += `<circle cx="${f1(cx - half(k) + 8)}" cy="${f1(top - 3)}" r="3" fill="${COLOR.green}"/>`
@@ -196,6 +238,46 @@ function mountainArt(): string {
   b += `<rect x="${cx}" y="${f1(peak - 22)}" width="16" height="10" fill="#da251d"/>`
   labels.push(text(cx + 20, peak - 13, `Cờ ${signed(POINTS.flag)} / ${signed(POINTS.flagFull)}`, { size: 8.5, anchor: 'start', weight: 800 }))
   return svg(300, 136, b + labels.join(''), `Ngọn núi nhìn ngang: Rãnh 1 ${signed(POINTS.r1)}, Rãnh 2 ${signed(POINTS.r2)}, Rãnh 3 ${signed(POINTS.r3)}, cờ trên đỉnh`)
+}
+
+/**
+ * Thang Cứu Hỏa nhìn ngang (dọc theo thanh): cột rào bên trái, cột Hộp Phân Phối bên phải, đoạn Đất (từ đầu rào tới
+ * vạch) phía trên ô vàng THANG, đoạn Nước phía trên Khu Chữa Cháy; ba robot minh hoạ Chạm / Đất / Nước.
+ */
+function ladderArt(): string {
+  const S = 200 // px mỗi mét
+  const len = ladderLen('red')
+  const x0 = 20
+  const ground = 168
+  const X = (s: number) => x0 + s * S
+  const yBar = ground - LADDER.y * S
+  const xd = X(LADDER.divider)
+  let b = `<line x1="4" y1="${ground}" x2="${f1(X(len) + 16)}" y2="${ground}" stroke="${COLOR.wall}" stroke-width="2"/>`
+  // Ô vàng THANG dưới đoạn Đất; Khu Chữa Cháy dưới đoạn Nước (chỉ minh hoạ vị trí).
+  b += `<rect x="${f1(X(0.04))}" y="${ground}" width="${f1(xd - X(0.04))}" height="8" fill="${COLOR.yellow}"/>`
+  b += text((X(0.04) + xd) / 2, ground + 18, 'ô vàng THANG', { size: 8.5, weight: 800 })
+  b += `<rect x="${f1(xd + 6)}" y="${ground}" width="${f1(X(len) - xd - 40)}" height="8" fill="${COLOR.fire}" fill-opacity="0.7"/>`
+  b += text((xd + X(len)) / 2, ground + 18, 'Khu Chữa Cháy', { size: 8.5 })
+  for (const s of [0, len]) b += `<rect x="${f1(X(s) - 3)}" y="${f1(yBar)}" width="6" height="${f1(ground - yBar)}" fill="${COLOR.ink}"/>`
+  b += `<line x1="${f1(X(0))}" y1="${f1(yBar)}" x2="${f1(X(len))}" y2="${f1(yBar)}" stroke="${COLOR.metal}" stroke-width="5" stroke-linecap="round"/>`
+  b += `<rect x="${f1(xd - 3)}" y="${f1(yBar - 5)}" width="6" height="10" fill="${COLOR.red}"/>`
+  b += text((X(0) + xd) / 2, yBar - 16, `Đất ${pctText(POINTS.climb.ground, true)}`, { size: 9, weight: 800 })
+  b += text((xd + X(len)) / 2, yBar - 16, `Nước ${pctText(POINTS.climb.water, true)}`, { size: 9, weight: 800 })
+  b += text(X(0) + 6, yBar + 12, 'rào', { size: 7.5, fill: COLOR.wall, anchor: 'start' })
+  b += text(X(len) - 6, yBar + 12, 'Hộp Phân Phối', { size: 7.5, fill: COLOR.wall, anchor: 'end' })
+  b += text(xd, yBar + 18, 'vạch', { size: 7.5, fill: COLOR.red })
+  // Robot: thân hộp + móc vàng lên thanh. Treo ⇒ thân rời sàn.
+  const robot = (cx: number, hang: boolean, label: string) => {
+    const top = hang ? yBar + 26 : ground - 26
+    return (
+      `<rect x="${f1(cx - 13)}" y="${f1(top)}" width="26" height="22" rx="3" fill="${COLOR.blue}"/>` +
+      `<path d="M${f1(cx)} ${f1(top)} V${f1(yBar - 6)} h-6 v6" fill="none" stroke="${COLOR.yellow}" stroke-width="2.4"/>` +
+      text(cx, top + 14, label, { size: 7, fill: '#fff' })
+    )
+  }
+  b += robot(X(0.1), false, 'Chạm') + robot(X(0.34), true, 'Đất') + robot(X(0.85), true, 'Nước')
+  const w = X(len) + 22
+  return svg(w, ground + 26, b, `Thang Cứu Hỏa nhìn ngang: thanh dài ${pctText(Math.round(len * 100))} m cao ${pctText(Math.round(LADDER.y * 100))} m; đoạn Đất trên ô vàng THANG, qua vạch là đoạn Nước`)
 }
 
 /** Ba mức phạt của trọng tài tự động. */
@@ -230,9 +312,10 @@ function tournamentArt(): string {
   return svg(260, 88, b, `${n} đội được bốc thăm ghép thành liên minh Đỏ và Xanh cho từng trận`)
 }
 
-/** 5 thẻ Luật chơi của FANROC 2026–2027. */
+/** 6 thẻ Luật chơi của FANROC 2026–2027. */
 export function fanrocRules(): RuleCard[] {
   const P = POINTS
+  const ex = CLIMB_EXAMPLE
   return [
     {
       id: 'field',
@@ -243,6 +326,7 @@ export function fanrocRules(): RuleCard[] {
         'Khu Chữa Cháy: hai ô ở hai góc phía xa — nơi đưa bóng cam tới.',
         'Khu Xuất Phát và Khu Tiếp Tế ở gần Khu Điều Khiển. Ở Khu Tiếp Tế, Human Player nạp thêm bóng cho robot (trong game Human Player tự làm).',
         'Hộp Phân Phối ở rào phía xa thả bóng xuống sân lúc đầu trận.',
+        `Thang Cứu Hỏa: mỗi liên minh một thanh xà cao ${Math.round(LADDER.y * 100)} cm, chạy chéo từ rào bên qua Khu Chữa Cháy tới Hộp Phân Phối. Ô vàng THANG nằm ngay dưới đoạn Đất.`,
       ],
       art: fieldArt(),
       alt: 'Sơ đồ sân từ trên xuống',
@@ -273,9 +357,28 @@ export function fanrocRules(): RuleCard[] {
         { label: 'Cắm cờ trên núi có bóng xanh ở cả 3 rãnh (thay cho số trên)', value: signed(P.flagFull) },
         { label: 'Mỗi bóng sai chỗ (bóng cam trên núi, bóng xanh ở Khu Chữa Cháy)', value: signed(P.wrong) },
       ],
-      note: 'Bóng xanh nằm ở tầng trang trí của núi được tính như ở rãnh ngay dưới nó.',
+      note: `Tầng trang trí (giữa Rãnh 1 và Rãnh 2) không tính điểm: bóng xanh nằm đó không được cộng; bóng cam ở bất kỳ đâu trên núi ${signed(P.decorOrange)}, kể cả tầng trang trí. Tổng các mục này là Điểm nhiệm vụ.`,
       art: mountainArt(),
       alt: 'Ngọn núi và điểm từng rãnh',
+    },
+    {
+      id: 'climb',
+      title: 'Leo Thang Cứu Hỏa',
+      lead: 'Cuối trận, đưa robot lên thanh xà của liên minh mình để nhân điểm của cả sân. Giơ móc chạm thanh, hạ móc để kéo robot lên, rồi chạy dọc thanh sang đoạn Nước.',
+      rows: [
+        { label: 'Chạm: móc giơ chạm thanh, bánh vẫn trên sàn', value: pctText(P.climb.contact, true) },
+        { label: 'Treo ở đoạn Đất (từ đầu rào tới vạch)', value: pctText(P.climb.ground, true) },
+        { label: 'Treo ở đoạn Nước (đã qua hẳn vạch)', value: pctText(P.climb.water, true) },
+      ],
+      bullets: [
+        `Hệ số nhân = ${pctText(100)} + mức của cả 4 robot, cao nhất ${pctText(100 + 4 * P.climb.water)}. Điểm trận = Điểm nhiệm vụ × Hệ số nhân, làm tròn lên.`,
+        `Ví dụ: Điểm nhiệm vụ ${ex.mission}, hai robot ở Nước, một ở Đất, một Chạm ⇒ hệ số ${pctText(ex.multPct)} ⇒ ⌈${ex.mission} × ${pctText(ex.multPct)}⌉ = ${ex.total}.`,
+        'Phải bám ở đoạn Đất rồi mới trượt sang Nước. Mỗi thanh treo tối đa 2 robot; leo thanh của liên minh kia không được tính.',
+        'Phạt không nhân hệ số: điểm đội = điểm trận trừ phạt của đội.',
+      ],
+      note: 'Hết giờ, robot đang treo ở đâu thì tính mức ở đó.',
+      art: ladderArt(),
+      alt: 'Thang Cứu Hỏa nhìn ngang với ba mức leo',
     },
     {
       id: 'faults',

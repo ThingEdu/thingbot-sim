@@ -1,12 +1,13 @@
 // Bảng điểm trận đấu kiểu game (spec §6.1 ③, anh Tuấn chốt 04/11): ô Đỏ trái | điểm trận CHUNG + đồng hồ + pha giữa |
 // ô Xanh phải. 4 đội hợp tác, nhận chung một điểm trận; mỗi ô liên minh hiện 2 đội (tên, nhãn chương trình, phạt, điểm
-// đội = teamScore(điểm chung, phạt)). Luật V4 bỏ đỗ Vùng Bảo Vệ (bảng điểm làm lại ở Task 4). Kèm đếm ngược
-// 3 · 2 · 1 · BẮT ĐẦU!, chữ báo điểm nổi 1,5 s, màn kết quả phủ sân.
+// đội = teamScore(điểm chung, phạt)). Luật V4: dưới điểm chung là dòng nhỏ "205 × 1,55" (điểm nhiệm vụ × hệ số nhân leo
+// Thang Cứu Hỏa), hệ số 1,00 thì ẩn. Kèm đếm ngược 3 · 2 · 1 · BẮT ĐẦU!, chữ báo điểm nổi 1,5 s, màn kết quả phủ sân.
 // Phần thuần (scoreLine, scorePops, countdownCue, ScoreTicker, resultView) chạy được trong Node; createScoreboard dựng DOM.
 import type { Match } from '../match.ts'
 import type { RobotBody } from '../robot.ts'
 import type { Skill } from '../agent.ts'
-import { scoreTally, teamScore, type ScoreBreakdown } from '../scoring.ts'
+import { pctText, scoreTally, teamScore, type ScoreBreakdown } from '../scoring.ts'
+import { CLIMB_PCT, type Climb } from '../ladder.ts'
 import { penaltyPoints } from '../quickmatch.ts'
 import { matchClock } from '../view/hud.ts'
 
@@ -14,15 +15,29 @@ import { matchClock } from '../view/hud.ts'
 export const SCORE_HZ = 4
 
 export type ScorePhase = 'XẢ BÓNG' | 'ĐIỀU KHIỂN' | 'HẾT GIỜ' | 'LUYỆN TẬP'
-export type AllianceLine = { teams: { name: string; score: number; penalty: number; program: string }[] }
+/** Mỗi đội của một liên minh; `climb` = mức leo đã xét đúng thanh (như lúc chấm). */
+export type AllianceLine = { teams: { name: string; score: number; penalty: number; program: string; climb: Climb }[] }
 export interface ScoreLine {
   red: AllianceLine
   blue: AllianceLine
   total: number
+  /** Dòng nhỏ dưới điểm chung: "205 × 1,55"; hệ số 1,00 ⇒ null (ẩn). */
+  mult: string | null
   clock: string
   phase: ScorePhase
   /** Điểm trận từng mục (để báo điểm nổi và màn kết quả). */
   score: ScoreBreakdown
+}
+
+export { pctText }
+
+/**
+ * Dòng nhỏ dưới điểm chung: "{điểm nhiệm vụ} × {hệ số}", ví dụ "205 × 1,55"; hệ số 1,00 ⇒ null. Điểm nhiệm vụ ≤ 0 thì
+ * scoring.ts không nhân hệ số: chỉ ghi "× 1,05" để em biết hệ số đang có.
+ */
+export function multText(s: ScoreBreakdown): string | null {
+  if (s.multPct === 100) return null
+  return s.mission > 0 ? `${s.mission} × ${pctText(s.multPct)}` : `× ${pctText(s.multPct)}`
 }
 
 const SKILL_NAME: Record<Skill, string> = { easy: 'Dễ', medium: 'Vừa', hard: 'Khó' }
@@ -54,11 +69,17 @@ export function scoreLine(match: Match, robots: RobotBody[], programs: string[] 
   const side = (a: 'red' | 'blue'): AllianceLine => ({
     teams: robots.flatMap((r, i) =>
       r.alliance === a
-        ? [{ name: teamNames[i] ?? `Robot ${i + 1}`, score: teamScore(total, match.pens[i]), penalty: penaltyPoints(match.pens[i], total), program: programs[i] ?? 'Mặc định' }]
+        ? [{
+            name: teamNames[i] ?? `Robot ${i + 1}`,
+            score: teamScore(total, match.pens[i]),
+            penalty: penaltyPoints(match.pens[i], total),
+            program: programs[i] ?? 'Mặc định',
+            climb: tally.climbs[a][r.slot] ?? 'none',
+          }]
         : [],
     ),
   })
-  return { red: side('red'), blue: side('blue'), total, clock: matchClock(match.t, match.practice), phase: phaseOf(match), score }
+  return { red: side('red'), blue: side('blue'), total, mult: multText(score), clock: matchClock(match.t, match.practice), phase: phaseOf(match), score }
 }
 
 const ITEMS: [Exclude<keyof ScoreBreakdown, 'total' | 'mission' | 'multPct'>, string][] = [
@@ -67,12 +88,21 @@ const ITEMS: [Exclude<keyof ScoreBreakdown, 'total' | 'mission' | 'multPct'>, st
 /** Số có dấu kiểu bảng điểm: "+15", "−3" (dấu trừ U+2212). */
 const signed = (v: number) => (v > 0 ? `+${v}` : `−${-v}`)
 
-/** Chữ báo nổi cho mỗi mục điểm đã đổi: "+15 · Rãnh 3", "+5 · Chữa Cháy", "−3 · Bóng sai chỗ". */
+/** Tên mục hệ số nhân trong chữ báo nổi ("+0,05 · Hệ số nhân"). */
+export const MULT_POP = 'Hệ số nhân'
+
+/**
+ * Chữ báo nổi cho mỗi mục điểm đã đổi: "+15 · Rãnh 3", "+5 · Chữa Cháy", "−3 · Bóng sai chỗ"; hệ số nhân đổi (robot
+ * chạm / treo / rời xà) ⇒ "+0,05 · Hệ số nhân", đứng sau các mục điểm.
+ */
 export function scorePops(prev: ScoreBreakdown, next: ScoreBreakdown): string[] {
-  return ITEMS.flatMap(([k, name]) => {
+  const pops = ITEMS.flatMap(([k, name]) => {
     const d = next[k] - prev[k]
     return d === 0 ? [] : [`${signed(d)} · ${name}`]
   })
+  const dm = next.multPct - prev.multPct
+  if (dm !== 0) pops.push(`${pctText(dm, true)} · ${MULT_POP}`)
+  return pops
 }
 
 /**
@@ -114,28 +144,38 @@ export class ScoreTicker {
   }
 }
 
+/** Tên mức leo trên màn kết quả. */
+const CLIMB_NAME: Record<Climb, string> = { none: '—', contact: 'Chạm', ground: 'Đất', water: 'Nước' }
+
 export interface ResultView {
   line: ScoreLine
-  /** Bảng mục theo thứ tự của luật: Chữa Cháy, Rãnh 1–3, Sai vị trí, Cờ, Điểm nhiệm vụ, phần hệ số leo xà (%). */
-  items: { label: string; value: number }[]
+  /** Bảng mục theo thứ tự của luật (chữ đã định dạng): Chữa Cháy, Rãnh 1–3, Sai vị trí, Cờ, Điểm nhiệm vụ, Hệ số nhân. */
+  items: { label: string; value: string }[]
+  /** Phép tính điểm trận "⌈205 × 1,55⌉ = 318"; hệ số 1,00 hoặc điểm nhiệm vụ ≤ 0 (không nhân) ⇒ null. */
+  formula: string | null
+  /** Leo xà từng robot (Đỏ rồi Xanh, như hai cột): tên đội, mức (Chạm / Đất / Nước / —), phần hệ số "+0,05"…"0". */
+  climbs: { name: string; level: string; value: string }[]
 }
 
 /** Màn kết quả: lấy `match.result()` (đã chốt lúc hết giờ). */
 export function resultView(match: Match, robots: RobotBody[], programs: string[] = [], names?: string[]): ResultView {
   const line = scoreLine(match, robots, programs, names)
   const s = line.score
+  const pts = (v: number) => (v === 0 ? '0' : signed(v))
   return {
     line,
     items: [
-      { label: 'Chữa Cháy', value: s.fire },
-      { label: 'Rãnh 1', value: s.r1 },
-      { label: 'Rãnh 2', value: s.r2 },
-      { label: 'Rãnh 3', value: s.r3 },
-      { label: 'Sai vị trí', value: s.wrong },
-      { label: 'Cờ', value: s.flag },
-      { label: 'Điểm nhiệm vụ', value: s.mission },
-      { label: 'Hệ số nhân leo xà (%)', value: s.multPct - 100 },
+      { label: 'Chữa Cháy', value: pts(s.fire) },
+      { label: 'Rãnh 1', value: pts(s.r1) },
+      { label: 'Rãnh 2', value: pts(s.r2) },
+      { label: 'Rãnh 3', value: pts(s.r3) },
+      { label: 'Sai vị trí', value: pts(s.wrong) },
+      { label: 'Cờ', value: pts(s.flag) },
+      { label: 'Điểm nhiệm vụ', value: s.mission < 0 ? signed(s.mission) : String(s.mission) },
+      { label: 'Hệ số nhân', value: `× ${pctText(s.multPct)}` },
     ],
+    formula: s.multPct !== 100 && s.mission > 0 ? `⌈${s.mission} × ${pctText(s.multPct)}⌉ = ${s.total}` : null,
+    climbs: [...line.red.teams, ...line.blue.teams].map((t) => ({ name: t.name, level: CLIMB_NAME[t.climb], value: pctText(CLIMB_PCT[t.climb], true) })),
   }
 }
 
@@ -177,6 +217,8 @@ const CSS = `
 .sb-ts { font: 900 14px/1 var(--font); font-variant-numeric: tabular-nums; flex: none; }
 .sb-mid { display: grid; justify-items: center; align-content: center; padding: 4px 14px; background: #12141f; min-width: 92px; }
 .sb-total { font: 900 30px/1 var(--font); font-variant-numeric: tabular-nums; }
+.sb-mult { font: 700 11px/1.1 var(--font); font-variant-numeric: tabular-nums; color: #ffd23f; white-space: nowrap; }
+.sb-mult[hidden] { display: none; }
 .sb-sub { display: flex; gap: 6px; align-items: baseline; white-space: nowrap; }
 .sb-clock { font: 700 15px/1.2 var(--mono); font-variant-numeric: tabular-nums; }
 .sb-phase { font: 800 10px/1 var(--font); letter-spacing: .5px; padding: 2px 5px; border-radius: 4px; background: #ffffff1f; }
@@ -204,6 +246,9 @@ const CSS = `
 .sb-row { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
 .sb-row b { font-variant-numeric: tabular-nums; }
 .sb-col[data-side="total"] .sb-row { text-align: left; }
+.sb-row[data-key] { border-top: 1px solid #fff2; padding-top: 4px; font-weight: 800; }
+.sb-col h4 { margin: 4px 0 0; font: 900 12px/1.2 var(--font); letter-spacing: .6px; color: #ffd23f; text-align: left; }
+.sb-row small { opacity: .75; font-size: 12px; }
 .sb-trow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; padding: 6px 8px; border-radius: 6px; background: #0003; font-size: 13px; }
 .sb-trow small { grid-column: 1 / -1; font-size: 11px; opacity: .85; }
 .sb-trow b { font: 900 18px/1 var(--font); font-variant-numeric: tabular-nums; grid-row: span 1; }
@@ -261,11 +306,14 @@ export function createScoreboard(stage: HTMLElement): Scoreboard {
   mid.dataset.side = 'total'
   mid.title = 'Điểm trận chung: cả 4 đội cùng nhận'
   const total = el('b', 'sb-total', '0')
+  const mult = el('span', 'sb-mult')
+  mult.hidden = true
+  mult.title = 'Điểm nhiệm vụ × hệ số nhân leo Thang Cứu Hỏa (làm tròn lên)'
   const sub = el('div', 'sb-sub')
   const clock = el('span', 'sb-clock', '0:10')
   const phase = el('span', 'sb-phase', 'XẢ BÓNG')
   sub.append(clock, phase)
-  mid.append(total, sub)
+  mid.append(total, mult, sub)
   bar.append(red.box, mid, blue.box)
 
   const pops = el('div', 'sb-pops')
@@ -303,6 +351,8 @@ export function createScoreboard(stage: HTMLElement): Scoreboard {
   const api: Scoreboard = {
     update(line, news) {
       total.textContent = String(line.total)
+      mult.hidden = line.mult === null
+      mult.textContent = line.mult ?? ''
       clock.textContent = line.clock
       phase.textContent = line.phase
       phase.dataset.p = line.phase
@@ -341,10 +391,23 @@ export function createScoreboard(stage: HTMLElement): Scoreboard {
       const mid = el('section', 'sb-col')
       mid.dataset.side = 'total'
       mid.append(el('h3', undefined, 'ĐIỂM TRẬN CHUNG'), el('div', 'sb-big', String(r.line.total)), el('div', 'sb-note', 'Cả 4 đội cùng nhận; điểm đội = điểm chung − phạt'))
-      for (const it of r.items) {
-        const row = el('div', 'sb-row')
-        row.append(el('span', undefined, it.label), el('b', undefined, it.value > 0 ? `+${it.value}` : it.value < 0 ? `−${-it.value}` : '0'))
-        mid.append(row)
+      const row = (label: string, value: string, key = false) => {
+        const x = el('div', 'sb-row')
+        if (key) x.dataset.key = ''
+        x.append(el('span', undefined, label), el('b', undefined, value))
+        return x
+      }
+      for (const it of r.items) mid.append(row(it.label, it.value, it.label === 'Điểm nhiệm vụ'))
+      if (r.formula) mid.append(row('Điểm trận', r.formula, true))
+      if (r.climbs.length) {
+        mid.append(el('h4', undefined, 'LEO XÀ'))
+        for (const c of r.climbs) {
+          const x = el('div', 'sb-row')
+          const name = el('span', undefined, `${c.name} `)
+          name.append(el('small', undefined, c.level))
+          x.append(name, el('b', undefined, c.value))
+          mid.append(x)
+        }
       }
       const cols = el('div', 'sb-cols')
       cols.append(col('red'), mid, col('blue'))

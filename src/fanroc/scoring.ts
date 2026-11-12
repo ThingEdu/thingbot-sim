@@ -44,6 +44,16 @@ export function scoreTally(t: FieldTally): ScoreBreakdown {
   return b
 }
 
+/**
+ * Phần trăm → số thập phân dấu phẩy kiểu Việt: 155 ⇒ "1,55"; `sign` ⇒ số có dấu "+0,05" / "−0,20" (dấu trừ U+2212), 0 ⇒ "0".
+ * Tính bằng số nguyên (multPct là số nguyên) để không lệch số thực. Dùng chung cho bảng điểm và thẻ Luật chơi.
+ */
+export function pctText(pct: number, sign = false): string {
+  const a = Math.abs(pct)
+  const s = `${Math.floor(a / 100)},${String(a % 100).padStart(2, '0')}`
+  return sign ? (pct > 0 ? `+${s}` : pct < 0 ? `−${s}` : '0') : s
+}
+
 /** Điểm của một đội: điểm trận - phạt, thấp nhất 0; thẻ đỏ = 0. */
 export function teamScore(match: number, pen: { minor: number; yellow: number; red: boolean }): number {
   return pen.red ? 0 : Math.max(0, match - 5 * pen.minor - 10 * pen.yellow)

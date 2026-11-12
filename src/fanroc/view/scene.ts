@@ -69,6 +69,7 @@ const COLORS = {
   red: '#e23b32',
   blue: '#2f68e0',
   tape: '#f2f2ee',
+  yellow: '#f2c230',
   orange: 0xff8a1f,
   green: 0x5fd83a,
   stand: 0x1f4fa8,
@@ -137,8 +138,10 @@ function fieldTexture(): THREE.CanvasTexture {
   }
   for (const a of ['red', 'blue'] as const) {
     const color = COLORS[a]
-    tape(ZONES.ladder[a], color, 0.03)
-    label('BẢO VỆ', mid(ZONES.ladder[a]).x, mid(ZONES.ladder[a]).z, color, 36)
+    // Khu vực Thang Cứu Hỏa (luật V4): ô băng keo vàng dưới đoạn Đất của thanh xà.
+    fill(ZONES.ladder[a], 'rgba(242,194,48,0.18)')
+    tape(ZONES.ladder[a], COLORS.yellow, 0.03)
+    label('THANG', mid(ZONES.ladder[a]).x, ZONES.ladder[a].z1 - 0.06, COLORS.yellow, 36)
     tape(ZONES.load[a], COLORS.tape, 0.04)
     label('TIẾP TẾ', mid(ZONES.load[a]).x, ZONES.load[a].z0 + 0.06, COLORS.tape, 34)
     tape(ZONES.start[a], color, 0.03)

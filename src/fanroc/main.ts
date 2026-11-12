@@ -33,7 +33,7 @@ import type { Mission } from './missions/types.ts'
 import { PHYSICS_DT } from './world.ts'
 import { createScene, defaultQuality, type CameraView, type Quality } from './view/scene.ts'
 import { createHud, deadZoneLines } from './view/hud.ts'
-import { countdownCue, createScoreboard, programLabel, resultView, ScoreTicker } from './ui/scoreboard.ts'
+import { countdownCue, createScoreboard, MULT_POP, programLabel, resultView, ScoreTicker } from './ui/scoreboard.ts'
 import { createSound } from './ui/sound.ts'
 import { createStore } from './store.ts'
 import { FANROC_2026 } from './season.ts'
@@ -46,7 +46,7 @@ import { fanrocRules } from './rules-data.ts'
 import { assignSeat, createSettings, defaultSeats, playerSeat, seatOf, seatOptions, type SeatMode, type SettingsCtx } from './ui/settings.ts'
 import { createWorkshopBar, Drafts, resetVerified, saveVerified, sameProgram } from './ui/workshop.ts'
 import { createRobotCards, WarningHold, type CardInfo } from './ui/robotcard.ts'
-import { createFeed, EventFeed, foulItem, scoreItem } from './ui/feed.ts'
+import { climbItem, createFeed, EventFeed, foulItem, scoreItem } from './ui/feed.ts'
 import { penaltyPoints, playAgents } from './quickmatch.ts'
 import { nextMatch, record, type Played, type TournamentState } from './tournament.ts'
 import {
@@ -1310,12 +1310,13 @@ async function start(): Promise<void> {
       // Không hiện chữ báo điểm nổi giữa màn (anh Tuấn 10/11: gây nhiễu) — vẫn kêu "ting" khi được điểm.
       board.update(out.line, [])
       if (out.pops.some((p) => p.startsWith('+'))) sound.ting()
-      // Thay vào đó: góc dưới phải trôi lần lượt từng mục cộng / trừ điểm (anh Tuấn 10/11).
-      feed.push(out.pops.map(scoreItem))
+      // Thay vào đó: góc dưới phải trôi lần lượt từng mục cộng / trừ điểm (anh Tuấn 10/11). Hệ số nhân đổi thì dòng leo
+      // xà có tên đội (bên dưới) đã nói rõ ai chạm / treo, nên bỏ dòng "+0,05 · Hệ số nhân" khỏi góc này.
+      feed.push(out.pops.filter((p) => !p.endsWith(MULT_POP)).map(scoreItem))
     }
-    // Lỗi trọng tài ghi (kèm lý do) cũng trôi ở góc dưới phải — biết vì sao đội bị trừ điểm.
+    // Lỗi trọng tài ghi (kèm lý do) và robot chạm / treo / rời xà cũng trôi ở góc dưới phải.
     for (; feedEvents < m.events.length; feedEvents++) {
-      const it = foulItem(m.events[feedEvents], teamNames)
+      const it = foulItem(m.events[feedEvents], teamNames) ?? climbItem(m.events[feedEvents], teamNames)
       if (it) feed.push([it])
     }
     feedView.render(feed.tick(now))

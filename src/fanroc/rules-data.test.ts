@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { BLOCK_SECONDS, FAULTS, fanrocRules, PER_TEAM, POINTS, signed } from './rules-data.ts'
+import { BLOCK_SECONDS, CLIMB_EXAMPLE, FAULTS, fanrocRules, PER_TEAM, POINTS, signed } from './rules-data.ts'
 import { scoreTally, teamScore, type FieldTally } from './scoring.ts'
 import { MATCH_S, RELEASE_S } from './layout.ts'
 import { TEAM_COUNT } from './tournament.ts'
@@ -34,7 +34,10 @@ test('POINTS: số điểm đọc từ scoring.ts lúc chạy (không gõ tay)',
   assert.equal(scoreTally(fl).flag, POINTS.flagFull)
   assert.equal(teamScore(100, { minor: 2, yellow: 1, red: false }), 100 - 2 * POINTS.minor - POINTS.yellow)
   // Bảng của luật hiện tại (nếu scoring.ts đổi thì thẻ đổi theo; phép thử này nhắc người sửa xem lại lời thẻ).
-  assert.deepEqual(POINTS, { fire: 5, r1: 5, r2: 10, r3: 15, flag: 20, flagFull: 40, wrong: -3, minor: 5, yellow: 10 })
+  assert.deepEqual(POINTS, {
+    fire: 5, r1: 5, r2: 10, r3: 15, flag: 20, flagFull: 40, wrong: -3, decorOrange: -3,
+    climb: { contact: 5, ground: 10, water: 20 }, minor: 5, yellow: 10,
+  })
 })
 
 test('signed: dấu cộng / dấu trừ chuẩn (−, không phải -)', () => {
@@ -43,9 +46,9 @@ test('signed: dấu cộng / dấu trừ chuẩn (−, không phải -)', () => 
   assert.equal(signed(0), '0')
 })
 
-test('thẻ Luật chơi: đủ 5 thẻ, bảng điểm có "+15" cho Rãnh 3, mỗi thẻ có hình SVG', () => {
+test('thẻ Luật chơi: đủ 6 thẻ, bảng điểm có "+15" cho Rãnh 3, mỗi thẻ có hình SVG', () => {
   const cards = fanrocRules()
-  assert.deepEqual(cards.map((c) => c.id), ['field', 'match', 'score', 'faults', 'tournament'])
+  assert.deepEqual(cards.map((c) => c.id), ['field', 'match', 'score', 'climb', 'faults', 'tournament'])
   const score = cards.find((c) => c.id === 'score')!
   const r3 = score.rows!.find((r) => /Rãnh 3/.test(r.label))
   assert.equal(r3?.value, '+15')
@@ -94,4 +97,44 @@ test('lời thẻ khớp luật chung điểm: không gọi liên minh kia là "
   assert.ok(!faults.lead.includes('0 điểm trận') && /thẻ đỏ thì đội đó được 0 điểm/.test(faults.lead), faults.lead)
   // Khớp teamScore: thẻ đỏ ⇒ điểm đội 0 dù điểm trận cao.
   assert.equal(teamScore(500, { minor: 0, yellow: 0, red: true }), 0)
+})
+
+/** Toàn bộ chữ của một thẻ, kể cả hình SVG và chữ thay hình. */
+const cardText = (c: ReturnType<typeof fanrocRules>[number]) =>
+  [c.title, c.lead, ...(c.bullets ?? []), ...(c.rows ?? []).flatMap((r) => [r.label, r.value]), c.note ?? '', c.art, c.alt].join(' ')
+
+test('thẻ Leo Thang Cứu Hỏa: 3 mức đúng số dò từ scoring.ts; ví dụ ⌈205 × 1,55⌉ = 318 tính bằng scoreTally', () => {
+  // Mức leo dò lúc chạy (multPct của một robot ở mức đó), không gõ tay.
+  assert.deepEqual(POINTS.climb, { contact: 5, ground: 10, water: 20 })
+  const card = fanrocRules().find((c) => c.id === 'climb')!
+  assert.deepEqual(card.rows!.map((r) => r.value), ['+0,05', '+0,10', '+0,20'])
+  assert.match(card.rows![0].label, /Chạm/)
+  assert.match(card.rows![1].label, /Đất/)
+  assert.match(card.rows![2].label, /Nước/)
+  // Ví dụ lấy từ scoreTally của một sân giả: đúng 205 điểm nhiệm vụ, hệ số 155 %.
+  assert.deepEqual([CLIMB_EXAMPLE.mission, CLIMB_EXAMPLE.multPct, CLIMB_EXAMPLE.total], [205, 155, 318])
+  const ex = cardText(card)
+  assert.ok(ex.includes('⌈205 × 1,55⌉ = 318'), ex)
+  assert.ok(ex.includes('THANG') && /<line|<path/.test(card.art), 'hình thẻ leo phải vẽ thanh xà và ô THANG')
+})
+
+test('thẻ Luật chơi luật V4: không còn "Vùng Bảo Vệ" / "Bảo Vệ" / "End Game" / đỗ ở bất kỳ đâu; sân vẽ 2 thanh xà và ô "THANG"', () => {
+  const cards = fanrocRules()
+  for (const c of cards) {
+    const t = cardText(c)
+    assert.doesNotMatch(t, /Bảo Vệ|BẢO VỆ|End Game|(^|\s)đỗ(\s|$|[.,])/i, c.id)
+  }
+  const field = cards.find((c) => c.id === 'field')!
+  assert.equal((field.art.match(/data-bar="(red|blue)"/g) ?? []).length, 2, 'hai thanh xà')
+  assert.equal((field.art.match(/>THANG</g) ?? []).length, 2, 'hai ô vàng THANG')
+  assert.equal((field.art.match(/data-divider/g) ?? []).length, 2, 'hai vạch Đất / Nước')
+})
+
+test('tầng trang trí: không tính điểm; bóng cam ở bất kỳ đâu trên núi −3 (dò từ scoreTally)', () => {
+  assert.equal(POINTS.decorOrange, POINTS.wrong)
+  const score = fanrocRules().find((c) => c.id === 'score')!
+  const t = cardText(score)
+  assert.ok(t.includes('không tính điểm'), t)
+  assert.ok(t.includes(`bóng cam ở bất kỳ đâu trên núi ${signed(POINTS.decorOrange)}`), t)
+  assert.ok(!/tính như ở rãnh/.test(t), 'luật cũ: bóng xanh tầng trang trí tính như rãnh dưới')
 })

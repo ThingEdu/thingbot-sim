@@ -157,25 +157,25 @@ test('Match đặt r.peers: thanh Đỏ đã có 2 robot treo (Đỏ 1, Xanh 1) 
   assert.deepEqual(robots.map((r) => r.climb.mode), ['hang', 'floor', 'hang', 'floor'])
 })
 
-test('nhật ký leo: chỉ báo khi mức leo giữ ≥ 0,5 s (chạm 1 bước rồi treo không báo "chạm"); tên robot theo liên minh và số trong liên minh', async () => {
+test('nhật ký leo: chỉ báo khi mức leo giữ ≥ 0,5 s (chạm 1 bước rồi treo không báo "chạm"); tên robot "Robot n" theo thứ tự robot của trận, như bảng điểm và mọi dòng nhật ký khác', async () => {
   const { robots, m } = await setup()
   m.t = 0
   grab(m, robots, 0, 'red', 0.2)
   run(m, all({}), 0.4)
   assert.equal(climbLog(m).length, 0, 'chưa đủ 0,5 s')
   run(m, all({}), 0.2)
-  assert.deepEqual(climbLog(m).map((e) => [e.robot, e.text]), [[0, 'Robot Đỏ 1 treo ở Khu vực Đất (+0,10)']])
+  assert.deepEqual(climbLog(m).map((e) => [e.robot, e.text]), [[0, 'Robot 1 treo ở Khu vực Đất (+0,10)']])
   run(m, only(0, { M1: 255, M2: 255 }), 2.5)
   run(m, all({}), 0.6)
-  assert.equal(climbLog(m).at(-1)?.text, 'Robot Đỏ 1 treo ở Khu vực Nước (+0,20)')
+  assert.equal(climbLog(m).at(-1)?.text, 'Robot 1 treo ở Khu vực Nước (+0,20)')
   run(m, only(0, { S2: 180 }), 0.6) // giơ móc: rơi xuống sàn, móc vẫn chạm xà
-  assert.equal(climbLog(m).at(-1)?.text, 'Robot Đỏ 1 chạm xà (+0,05)')
+  assert.equal(climbLog(m).at(-1)?.text, 'Robot 1 chạm xà (+0,05)')
   robots[0].setPose({ x: 0, z: 0.6, yaw: 0 })
   run(m, all({}), 0.6)
-  assert.equal(climbLog(m).at(-1)?.text, 'Robot Đỏ 1 rời xà')
+  assert.equal(climbLog(m).at(-1)?.text, 'Robot 1 rời xà')
   grab(m, robots, 3, 'blue', 0.2)
   run(m, all({}), 0.6)
-  assert.deepEqual(climbLog(m).at(-1), { t: climbLog(m).at(-1)!.t, robot: 3, text: 'Robot Xanh 2 treo ở Khu vực Đất (+0,10)' })
+  assert.deepEqual(climbLog(m).at(-1), { t: climbLog(m).at(-1)!.t, robot: 3, text: 'Robot 4 treo ở Khu vực Đất (+0,10)' })
   assert.equal(climbLog(m).length, 5)
 })
 

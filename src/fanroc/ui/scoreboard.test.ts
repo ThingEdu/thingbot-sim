@@ -5,9 +5,9 @@ import { RobotBody } from '../robot.ts'
 import { Match } from '../match.ts'
 import { NEUTRAL } from '../ports.ts'
 import { SEATS } from '../quickmatch.ts'
-import { teamScore, type ScoreBreakdown } from '../scoring.ts'
+import { scoreTally, teamScore, type FieldTally, type ScoreBreakdown } from '../scoring.ts'
 import type { RobotConfig } from '../robots.ts'
-import { countdownCue, phaseOf, programLabel, resultView, scoreLine, scorePops, ScoreTicker, SCORE_HZ } from './scoreboard.ts'
+import { countdownCue, multText, pctText, phaseOf, programLabel, resultView, scoreLine, scorePops, ScoreTicker, SCORE_HZ } from './scoreboard.ts'
 
 const MAKER: RobotConfig = { type: 'maker', drive: 'diff2', actuator: 'tt' }
 /** Xe Ủi: hẹp. */
@@ -172,6 +172,79 @@ test('scoreLine có tên đội ⇒ đúng một lần tally (dò tia 300 bóng)
     const again = scoreLine(m, robots)
     assert.equal(n, 2)
     assert.deepEqual(again, line)
+  } finally {
+    w.rapier.free()
+  }
+})
+
+/** Sân giả: 205 điểm nhiệm vụ (13 cam, Núi A đủ 3 rãnh + cờ, Núi B 4 bóng Rãnh 3, Núi C 1 bóng Rãnh 2) + leo 4 robot. */
+const fake205 = (climbs: FieldTally['climbs']): FieldTally => {
+  const mtn = [0, 1, 2, 3].map(() => [{ g: 0, o: 0 }, { g: 0, o: 0 }, { g: 0, o: 0 }])
+  mtn[0].forEach((x) => (x.g = 1))
+  mtn[1][2].g = 4
+  mtn[2][1].g = 1
+  return { fire: { o: 13, g: 0 }, mtn, decorO: 0, flags: [true, false, false, false], climbs }
+}
+
+test('pctText / multText: số thập phân dấu phẩy; hệ số 1,00 ⇒ không có dòng nhỏ', () => {
+  assert.equal(pctText(155), '1,55')
+  assert.equal(pctText(100), '1,00')
+  assert.equal(pctText(5, true), '+0,05')
+  assert.equal(pctText(-20, true), '−0,20')
+  const s = scoreTally(fake205({ red: ['water', 'ground'], blue: ['water', 'contact'] }))
+  assert.deepEqual([s.mission, s.multPct, s.total], [205, 155, 318])
+  assert.equal(multText(s), '205 × 1,55')
+  assert.equal(multText(bd({ mission: 205, multPct: 100, total: 205 })), null)
+  // Điểm nhiệm vụ ≤ 0 không nhân hệ số (scoring.ts): chỉ báo hệ số đang có.
+  assert.equal(multText(bd({ mission: -6, wrong: -6, multPct: 105, total: -6 })), '× 1,05')
+})
+
+test('scorePops: hệ số nhân đổi (leo xà) cũng báo nổi "+0,05 · Hệ số nhân" / "−0,20 · Hệ số nhân"', () => {
+  assert.deepEqual(scorePops(ZERO, bd({ multPct: 105 })), ['+0,05 · Hệ số nhân'])
+  assert.deepEqual(scorePops(bd({ multPct: 155 }), bd({ multPct: 135 })), ['−0,20 · Hệ số nhân'])
+  assert.deepEqual(scorePops(bd({ fire: 5, multPct: 110 }), bd({ fire: 10, multPct: 120 })), ['+5 · Chữa Cháy', '+0,10 · Hệ số nhân'])
+})
+
+test('ScoreTicker: robot treo lên xà giữa trận (chỉ hệ số đổi) ⇒ có báo nổi', async () => {
+  const { w, robots, m } = await setup()
+  try {
+    const climbs: FieldTally['climbs'] = { red: ['none', 'none'], blue: ['none', 'none'] }
+    m.tally = () => fake205(climbs)
+    m.t = 0
+    run(m, 4, 0.1)
+    const tk = new ScoreTicker()
+    tk.tick(0, m, robots, [], TEAMS)
+    tk.tick(1000, m, robots, [], TEAMS) // mốc trong lúc thi đấu
+    climbs.red[0] = 'ground'
+    const out = tk.tick(2000, m, robots, [], TEAMS)
+    assert.deepEqual(out?.pops, ['+0,10 · Hệ số nhân'])
+    assert.equal(out?.line.mult, '205 × 1,10')
+  } finally {
+    w.rapier.free()
+  }
+})
+
+test('resultView luật V4: Điểm nhiệm vụ, Hệ số nhân "× 1,55", phép tính ⌈205 × 1,55⌉ = 318, Leo xà từng robot', async () => {
+  const { w, robots, m } = await setup()
+  try {
+    // Thứ tự ghế: Đỏ 1, Xanh 1, Đỏ 2, Xanh 2.
+    m.tally = () => fake205({ red: ['water', 'ground'], blue: ['contact', 'none'] })
+    const v = resultView(m, robots, [], TEAMS)
+    const item = (label: string) => v.items.find((x) => x.label === label)?.value
+    assert.equal(item('Điểm nhiệm vụ'), '205')
+    assert.equal(item('Hệ số nhân'), '× 1,35')
+    assert.equal(item('Chữa Cháy'), '+65')
+    assert.equal(v.formula, '⌈205 × 1,35⌉ = 277')
+    assert.ok(!v.items.some((x) => /Bảo Vệ|đỗ|%/.test(x.label + x.value)), JSON.stringify(v.items))
+    assert.deepEqual(v.climbs, [
+      { name: 'Dế Xanh', level: 'Nước', value: '+0,20' },
+      { name: 'Kiến Lửa', level: 'Đất', value: '+0,10' },
+      { name: 'Chuồn Chuồn', level: 'Chạm', value: '+0,05' },
+      { name: 'Ong Vàng', level: '—', value: '0' },
+    ])
+    // Hệ số 1,00: không có phép nhân.
+    m.tally = () => fake205({ red: ['none', 'none'], blue: ['none', 'none'] })
+    assert.equal(resultView(m, robots, [], TEAMS).formula, null)
   } finally {
     w.rapier.free()
   }

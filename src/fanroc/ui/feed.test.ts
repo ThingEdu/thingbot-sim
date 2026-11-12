@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { EventFeed, FEED_GAP_MS, FEED_LIFE_MS, FEED_MAX, FEED_QUEUE_MAX, foulItem, scoreItem } from './feed.ts'
+import { climbItem, EventFeed, FEED_GAP_MS, FEED_LIFE_MS, FEED_MAX, FEED_QUEUE_MAX, foulItem, scoreItem } from './feed.ts'
 
 const it = (text: string) => scoreItem(text)
 
@@ -38,4 +38,14 @@ test('foulItem: lỗi trọng tài ⇒ tên đội + lý do; trừ điểm đỏ
   assert.equal(foulItem({ robot: 0, text: 'Robot 1 cắm cờ Núi A' }, names), null)
   assert.equal(foulItem({ robot: null, text: 'End Game: còn 30 giây' }, names), null)
   assert.equal(scoreItem('−3 · Bóng sai chỗ').tone, 'minus')
+})
+
+test('climbItem: dòng leo xà của Match ⇒ tên đội + mức; lên mức xanh, rời xà đỏ; sự kiện khác (kể cả lỗi) bỏ qua', () => {
+  const names = ['Dế Xanh', 'Kiến Lửa', 'Ong Vàng', 'Chuồn Chuồn']
+  assert.deepEqual(climbItem({ robot: 3, text: 'Robot 4 treo ở Khu vực Nước (+0,20)' }, names), { text: 'Chuồn Chuồn treo ở Khu vực Nước (+0,20)', tone: 'plus' })
+  assert.deepEqual(climbItem({ robot: 0, text: 'Robot 1 chạm xà (+0,05)' }, names), { text: 'Dế Xanh chạm xà (+0,05)', tone: 'plus' })
+  assert.deepEqual(climbItem({ robot: 1, text: 'Robot 2 rời xà' }, names), { text: 'Kiến Lửa rời xà', tone: 'minus' })
+  assert.equal(climbItem({ robot: 0, text: 'Robot 1 cắm cờ Núi A' }, names), null)
+  assert.equal(climbItem({ robot: 0, text: 'Robot 1 leo núi (P12): cảnh cáo' }, names), null)
+  assert.equal(climbItem({ robot: null, text: 'Hết giờ — điểm trận 318' }, names), null)
 })

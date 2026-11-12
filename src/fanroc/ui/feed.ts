@@ -1,7 +1,8 @@
 // Dòng báo cộng / trừ điểm góc dưới phải màn trận (anh Tuấn 10/11): mỗi lần điểm trận đổi ("+5 · Chữa Cháy") hoặc trọng
 // tài ghi lỗi ("Kiến Lửa vươn ra ngoài rào (S02): thẻ vàng (−10)") thêm một dòng; các dòng hiện LẦN LƯỢT, dòng sau cách
-// dòng trước FEED_GAP_MS để kịp đọc vì sao được / bị trừ điểm, mỗi dòng ở lại FEED_LIFE_MS rồi mờ đi.
-// Phần thuần (EventFeed, foulItem) chạy được trong Node (feed.test.ts); createFeed dựng DOM.
+// dòng trước FEED_GAP_MS để kịp đọc vì sao được / bị trừ điểm, mỗi dòng ở lại FEED_LIFE_MS rồi mờ đi. Luật V4: robot
+// chạm / treo / rời Thang Cứu Hỏa cũng thêm một dòng ("Dế Xanh treo ở Khu vực Nước (+0,20)").
+// Phần thuần (EventFeed, foulItem, climbItem) chạy được trong Node (feed.test.ts); createFeed dựng DOM.
 
 /** Khoảng cách tối thiểu giữa hai dòng mới hiện, ms. */
 export const FEED_GAP_MS = 1500
@@ -59,6 +60,17 @@ export function foulItem(e: { robot: number | null; text: string }, names: strin
   if (e.robot === null || !/: (cảnh cáo|lỗi nhẹ|thẻ vàng|thẻ đỏ)/.test(e.text)) return null
   const text = e.text.replace(/^Robot (\d+)/, (all, n) => names[Number(n) - 1] ?? all)
   return { text, tone: /\(−\d+\)/.test(e.text) && !/luyện tập/.test(e.text) ? 'minus' : 'warn' }
+}
+
+/**
+ * Dòng báo cho một sự kiện leo xà của Match ("Robot 1 treo ở Khu vực Nước (+0,20)", "Robot 2 rời xà"), "Robot n" đổi
+ * thành tên đội; sự kiện khác ⇒ null. Lên mức (có "+0,…") xanh, rời xà đỏ.
+ */
+export function climbItem(e: { robot: number | null; text: string }, names: string[]): FeedItem | null {
+  const m = /^Robot (\d+) (chạm xà|treo ở|rời xà)/.exec(e.text)
+  if (e.robot === null || !m) return null
+  const text = e.text.replace(/^Robot (\d+)/, (all, n) => names[Number(n) - 1] ?? all)
+  return { text, tone: m[2] === 'rời xà' ? 'minus' : 'plus' }
 }
 
 // ---------- DOM ----------
