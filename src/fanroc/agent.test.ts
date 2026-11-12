@@ -123,7 +123,7 @@ test('pha quay theo thanh: robot treo ngay sau chỗ bám (vừa ngoài 0,32) �
   // chỗ bám + 0,325 (vừa ngoài "thân treo phủ chỗ bám" 0,32): đuôi thân treo cách chỗ bám 0,175 < nửa đường chéo Đỏ 1
   // (0,19). Đỏ 1 đứng ở chỗ bám, vuông góc với thanh: quay theo thanh góc xe sượt thân treo. (Thanh CAD lắp sân: thân treo
   // trong 0,32 quanh chỗ bám thì agent chờ ở điểm chờ, nên cảnh "nhích vào thân treo rồi kẹt" của bản trước không còn dựng
-  // được; giới hạn giờ CLIMB_ALIGN_MAX_S vẫn giữ trong agent.ts cho cảnh kẹt khác.)
+  // được; giới hạn giờ CLIMB_ALIGN_MAX_S có phép thử riêng ngay dưới: bánh kẹt.)
   const s0 = LADDER.divider - 0.06
   const at = (s: number) => pointAt('red', s)
   robots[0].setPose({ ...at(0.43), yaw: barYaw('red') })
@@ -151,6 +151,40 @@ test('pha quay theo thanh: robot treo ngay sau chỗ bám (vừa ngoài 0,32) �
   assert.ok(leftAlign > 0, 'không lần nào rời pha quay theo thanh')
   assert.equal(r.climb.mode, 'hang', `Đỏ 1 không bám được: ${agent.doing}`)
   assert.ok(longest < 3.5, `đứng ở pha quay theo thanh liền ${longest.toFixed(1)} s`)
+})
+
+// R163: giới hạn giờ của pha quay theo thanh (CLIMB_ALIGN_MAX_S = 2,5 s). Dò 8 chỗ đỗ một robot sàn quanh chỗ bám, 15
+// thân treo ngay sau chỗ bám và 72 thế đứng sát rào: không thế nào làm robot máy kẹt thật (góc xe đẩy được robot sàn, quay
+// được tại chỗ). Nên dựng kẹt ở chính robot: bánh không ăn (cổng bánh bị bỏ qua, như động cơ đứt dây / bánh trượt) — agent
+// ra lệnh quay mà hướng không đổi, không tiến độ ⇒ sau 2,5 s phải bỏ pha quay đi lại từ đầu, không đứng đó tới hết trận.
+test('pha quay theo thanh không tiến (bánh không ăn): quá CLIMB_ALIGN_MAX_S thì bỏ, đi lại từ đầu — không đứng ở pha quay quá 3 s', async () => {
+  const w = await FanrocWorld.create(1)
+  const robots = [MAKER, MAKER, MAKER, MAKER].map((c, i) => new RobotBody(w, c, i < 2 ? 'red' : 'blue', (i % 2) as 0 | 1))
+  const m = new Match(w, robots, TEAMS, { seed: 1 })
+  m.t = 0
+  const idle: PortValues[] = robots.map(() => ({ ...NEUTRAL }))
+  m.step(PHYSICS_DT, idle) // sang pha thi đấu
+  m.t = MATCH_S - 20
+  const r = robots[1]
+  r.setPose({ ...pointAt('red', LADDER.divider - 0.06), yaw: barYaw('red') + Math.PI / 2 }) // ở chỗ bám, vuông góc thanh
+  const apply = r.apply.bind(r)
+  r.apply = (_ports, dt) => apply({ ...NEUTRAL }, dt) // bánh không ăn lệnh
+  const agent = new Agent(r, MAKER, 'hard', 1)
+  const view = { world: w, robots, match: m, humans: [] }
+  let run = 0
+  let longest = 0
+  let gaveUp = 0
+  let last = ''
+  for (let k = 0; k < 12 * 60 && m.phase === 'play'; k++) {
+    m.step(PHYSICS_DT, [{ ...NEUTRAL }, agent.update(view, PHYSICS_DT), ...idle.slice(2)])
+    const d = agent.doing
+    if (last === 'climb:align' && d === 'climb:go') gaveUp++
+    run = d === 'climb:align' ? run + PHYSICS_DT : 0
+    longest = Math.max(longest, run)
+    last = d
+  }
+  assert.ok(gaveUp >= 1, 'không lần nào bỏ pha quay theo thanh')
+  assert.ok(longest > 2 && longest < 3, `đứng ở pha quay theo thanh liền ${longest.toFixed(2)} s (giới hạn 2,5 s)`)
 })
 
 // Chặn hồi quy: Dễ seed 1 trước vòng sửa omni (b1999f1) được 162 điểm nhiệm vụ, trước Task 5 (về đỗ, fd9da6c) 111; khi
