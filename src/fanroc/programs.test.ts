@@ -14,7 +14,6 @@ import { decodePorts, type PortValues } from './ports.ts'
 import { RobotLink } from './link.ts'
 import { FanrocWorld, PHYSICS_DT } from './world.ts'
 import { RobotBody } from './robot.ts'
-import { ZONES } from './layout.ts'
 import { ROBOTS, type RobotConfig, type RobotType } from './robots.ts'
 import type { Command, Message } from '../sim-worker.ts'
 
@@ -277,18 +276,19 @@ test('Chương trình lỗi giữa trận (chia cho 0) ⇒ báo lỗi tiếng Vi
   assert.ok(at(trace, 0.9).ports.M1 > 0, 'trước lỗi robot phải đang chạy')
 })
 
-const inside = (r: { x0: number; x1: number; z0: number; z1: number }, p: { x: number; z: number }) => p.x >= r.x0 && p.x <= r.x1 && p.z >= r.z0 && p.z <= r.z1
-
+// Luật V4: Auto mẫu kết thúc bằng leo Thang Cứu Hỏa. Mọi robot mẫu (cấu hình mặc định, thêm Mẫu Maker mecanum) đều
+// phải tới núi, xả bóng, rồi đang treo trên thanh đỏ (Mặt Đất hoặc Nước) lúc hết 30 s — không còn bỏ qua.
 for (const cfg of [...TYPES.map(defaultConfig), { type: 'maker', drive: 'mecanum', actuator: 'tt' } as RobotConfig])
-  test(`Auto ${name(cfg)} từ ô Robot 1: tới Ngọn Núi A, mở cửa xả, rồi vào hẳn Vùng Bảo Vệ đỏ`, async (t) => {
+  test(`Auto ${name(cfg)} từ ô Robot 1: tới Ngọn Núi A, mở cửa xả, rồi leo Thang Cứu Hỏa đỏ (treo ở Mặt Đất / Nước)`, async () => {
     const T = AUTO_TIMES
-    const { robot, trace } = await onField(cfg, code(sample(cfg, 'auto')), 16)
+    const { robot, link, trace } = await onField(cfg, code(sample(cfg, 'auto')), 30)
+    assert.notEqual(link.state, 'error', link.error ?? '')
     const atMountain = at(trace, T.toMountain)
     assert.ok(atMountain.z < 0.95, `chưa tới núi: z = ${atMountain.z.toFixed(3)}`)
-    const corners = robot.footprint()
-    // Luật V4 (Task 2): cột Thang Cứu Hỏa ở rào cạnh chặn lối ép rào của Auto cũ với họ Maker 2 bánh; Task 6 viết lại
-    // phần cuối Auto thành leo xà nên bước "vào hẳn Vùng Bảo Vệ" chỉ còn ghi lại, không chặn.
-    if (!corners.every((p) => inside(ZONES.ladder.red, p))) t.skip(`chờ Task 6 (Auto leo xà): dừng ở ${JSON.stringify(robot.pose)}`)
+    if (ROBOTS[cfg.type].servos.S3) assert.equal(at(trace, T.toMountain + T.dump / 2).ports.S3, 180, 'đang xả: cửa S3 phải mở')
+    const { level, bar } = robot.climbLevel
+    assert.ok(level === 'ground' || level === 'water', `chưa leo xà: ${level}, dừng ở ${JSON.stringify(robot.pose)}`)
+    assert.equal(bar, 'red')
   })
 
 test('TeleOp Maker Nâng: L2 / R2 / L1 đưa cửa lồng S1 tới 0° / 120° / 180° (Rãnh 1 / 2 / 3)', () => {

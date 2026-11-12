@@ -15,7 +15,8 @@
 //   xanh (180°); servo giữ nguyên chỗ cho tới lần bấm sau. ○ mở cửa S3 của ngăn đang chọn.
 //
 // Mẫu Auto chạy một lần trong «khi Arduino khởi động» (FANROC không có giai đoạn tự động riêng, RE04): đi thẳng tới
-// Ngọn Núi A gần nhất, mở cửa xả 2 giây, lùi lại, sang rào trái, xuôi theo rào rồi vào Vùng Bảo Vệ đỏ.
+// Ngọn Núi A gần nhất, mở cửa xả 2 giây, lùi lại, sang rào trái, xuôi theo rào tới ô Thang đỏ, quay theo thanh xà,
+// giơ móc rồi hạ móc để treo lên Thang Cứu Hỏa (Mặt Đất), tiến tiếp để trượt sang đoạn Nước (luật V4).
 // Thời gian tính cho Robot 1 (đỏ, ô xuất phát trái); robot ở ô khác phải sửa số giây.
 import { portMap, ROBOTS, type RobotConfig, type RobotType } from './robots.ts'
 import { MY_BLOCKS_CATEGORY } from './procedures.ts'
@@ -241,14 +242,25 @@ const CHUTE_MID = 120
 /** Tốc độ của Auto (TT có vùng chết 20 %: 60 % ⇒ ≈ 0,28 m/s). */
 const AUTO_SPEED = 60
 /**
- * Giây chạy từng chặng, đo trên sân mô phỏng cho Robot 1 (phép thử programs.test.ts kiểm tra robot vào hẳn Vùng Bảo
- * Vệ). Chạy theo giờ thì lệch dần, nên mẫu ép xe vào rào trái hai lần để xe tự thẳng hàng rồi lùi ra một đoạn ngắn.
+ * Giây chạy từng chặng, đo trên sân mô phỏng cho Robot 1 (phép thử programs.test.ts kiểm tra robot đang treo trên
+ * Thang Cứu Hỏa đỏ lúc hết 30 s). Chạy theo giờ thì lệch dần, nên mẫu ép xe vào rào trái hai lần để xe tự thẳng hàng
+ * rồi lùi ra một đoạn ngắn: lần ép thứ hai đặt tâm xe ngay dưới thanh xà (giữa ô Thang), nơi móc bám được.
  */
 export const AUTO_TIMES = {
   toMountain: 1.3, dump: 2, back: 0.6,
   /** Quay 90° tại chỗ (đế 2 bánh): tỉ lệ với bề ngang xe, giây cho mỗi mét bề ngang. */
   turnPerWidth: 2.75,
-  toWall: 2.4, offWall: 0.3, toSafe: 4.4, press: 1, settle: 0.25,
+  toWall: 2.4, offWall: 0.3, toLadder: 4.4, press: 1, settle: 0.25,
+  /**
+   * Quay phải 45° cho mũi xe xuôi theo thanh (từ đầu rào sang đầu Hộp Phân Phối), giây cho mỗi mét nhịp quay: bề
+   * ngang với đế 2 bánh, bề ngang + bề dài với đế 4 bánh (cùng tốc độ bánh thì quay chậm hơn theo tỉ lệ đó). Lý thuyết
+   * là nửa turnPerWidth; đo trên sân cần thêm chút vì xe tăng / giảm tốc quay (mọi mẫu lệch thanh trong ±3°).
+   */
+  align: 1.6,
+  /** Giơ móc rồi tiến chạm thanh (vẫn trong đoạn Mặt Đất); hạ móc là bám. */
+  hookUp: 0.5,
+  /** Đang treo: tiến cho móc trượt dọc thanh qua vạch Đất / Nước (0,15 m/s × phần tốc độ bánh). */
+  slide: 5,
 }
 
 /** Lệnh cho các bánh: đế 2 bánh (trái, phải) hoặc 4 bánh (trước trái, trước phải, sau trái, sau phải), −1…1. */
@@ -269,16 +281,27 @@ function auto(cfg: RobotConfig): object {
   const right = [1, -1]
   const strafeLeft = [-1, 1, 1, -1] // đế 4 bánh: ngang S < 0 (xem `mix`)
   const strafeRight = [1, -1, -1, 1]
+  const rotateRight = [1, -1, 1, -1] // đế 4 bánh: xoay T > 0 (xem `mix`)
   const leg = (w: number[], s: number) => [...wheels(cfg, w), wait(s)]
-  // Sau khi xả: lùi khỏi núi, sang rào trái (ép cho thẳng), lùi ra, xuôi theo rào tới hàng Vùng Bảo Vệ, ép rào lần nữa.
+  // Sau khi xả: lùi khỏi núi, sang rào trái (ép cho thẳng), lùi ra, xuôi theo rào tới hàng ô Thang, ép rào lần nữa.
   const route = four
-    ? [...leg(back, T.back), ...leg(strafeLeft, T.toWall), ...leg(strafeRight, T.offWall), ...leg(fwd, T.toSafe), ...leg(strafeLeft, T.press), ...leg(strafeRight, T.settle)]
+    ? [...leg(back, T.back), ...leg(strafeLeft, T.toWall), ...leg(strafeRight, T.offWall), ...leg(fwd, T.toLadder), ...leg(strafeLeft, T.press), ...leg(strafeRight, T.settle)]
     : [
         ...leg(back, T.back), ...leg(left, turn), ...leg(fwd, T.toWall), ...leg(back, T.offWall), ...leg(right, turn),
-        ...leg(fwd, T.toSafe), ...leg(left, turn), ...leg(fwd, T.press), ...leg(back, T.settle),
+        ...leg(fwd, T.toLadder), ...leg(left, turn), ...leg(fwd, T.press), ...leg(back, T.settle),
       ]
+  // Quay theo thanh: đế 4 bánh đang hướng vào sân, quay phải 45°; đế 2 bánh đang hướng vào rào, quay phải 90° + 45°.
+  const align = four
+    ? leg(rotateRight, Math.round(T.align * (def.size.w + def.size.l) * 100) / 100)
+    : leg(right, Math.round((turn + T.align * def.size.w) * 100) / 100)
+  // Leo xà: giơ móc, tiến chạm thanh, hạ móc (bám ở đoạn Mặt Đất), bánh vẫn tiến nên móc trượt sang đoạn Nước.
+  const hook = servoPin(def.hook.port)
+  const climb = [servo(hook, 180), ...leg(fwd, T.hookUp), servo(hook, 0), wait(T.slide)]
   const dump = def.servos.S3 ? [servo(3, 180), wait(T.dump), servo(3, 0)] : [wait(T.dump)]
-  const setup = [plain('thingBotC3_init'), ...servoSetup(cfg.type), ...leg(fwd, T.toMountain), ...wheels(cfg, stop), ...dump, ...route, ...wheels(cfg, stop)]
+  const setup = [
+    plain('thingBotC3_init'), ...servoSetup(cfg.type), ...leg(fwd, T.toMountain), ...wheels(cfg, stop), ...dump, ...route, ...align, ...climb,
+    ...wheels(cfg, stop),
+  ]
   return program(hat('event_whenarduinobegin', 30, 30, chain(...setup)), hat('event_whenarduinoloop', 30, below(setup.length)))
 }
 
