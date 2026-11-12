@@ -273,6 +273,9 @@ test('Thang Cứu Hỏa: cột hộp 20×20 cao 0,638 chắn tia ngang ở y = 0
       const hitBox = w.rapier.castRay(new RAPIER.Ray({ x: 0, y: 0.3, z: b.z + dz }, dir), 2, true)
       const wantBox = Math.abs(b.x) - LADDER.post / 2
       assert.ok(hitBox && Math.abs(hitBox.timeOfImpact - wantBox) < 0.002, `cột ở x = ${b.x}: toi ${hitBox?.timeOfImpact}, mong ${wantBox}`)
+      // y = 0,60 sát dưới kẹp (0,608): chỉ cột hộp mới chắn được, nên chiều cao cột phải ≥ 0,60.
+      const hitTop = w.rapier.castRay(new RAPIER.Ray({ x: 0, y: 0.6, z: b.z + dz }, dir), 2, true)
+      assert.ok(hitTop && Math.abs(hitTop.timeOfImpact - wantBox) < 0.002, `cột cao y = 0,60 ở x = ${b.x}: toi ${hitTop?.timeOfImpact}, mong ${wantBox}`)
       // y = 0,64 đã trên đỉnh cột (0,638) nhưng trong kẹp (0,608…0,673): trúng mặt trụ Ø35.
       const hitClamp = w.rapier.castRay(new RAPIER.Ray({ x: 0, y: 0.64, z: b.z + dz }, dir), 2, true)
       const wantClamp = Math.abs(b.x) - Math.sqrt(LADDER.clampR ** 2 - dz ** 2)
