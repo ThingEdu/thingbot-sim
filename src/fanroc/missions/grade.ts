@@ -203,21 +203,22 @@ export type RunState = {
   pressed: boolean
   /** R95: chương trình đang ở khối «đợi» (`restWaits`) — nhiệm vụ lập trình không chấm vì đứng yên. */
   waiting?: boolean
-  /** Robot của em đã treo liên tục trên Thang Cứu Hỏa bao lâu (s; 0 / thiếu = không treo). */
-  hangFor?: number
+  /** Robot của em đã treo liên tục ở Khu vực Nước bao lâu (s; 0 / thiếu = không treo ở Nước). */
+  waterFor?: number
 }
 export type GradeReason = 'pressed' | 'maxTime' | 'rest' | 'error'
 
 /**
  * Đã tới lúc chấm chưa (R57 + R59 + R95; hợp đồng đầy đủ ở RunRecord, types.ts): trả lý do, hoặc null nếu chạy tiếp.
- * Luật V4: nhiệm vụ lập trình mà robot đã treo ≥ REST_S và đứng yên ≥ REST_S thì chấm cả khi chương trình đang «đợi»
- * (đứng yên từ trước lúc bám không tính: vừa bám chưa chấm, để còn kịp trượt sang Nước).
+ * Luật V4: nhiệm vụ lập trình mà robot đã treo ở Khu vực NƯỚC (mức cao nhất) ≥ REST_S và đứng yên ≥ REST_S thì chấm cả
+ * khi chương trình đang «đợi». Treo ở Đất / chạm thì vẫn theo R95: chương trình còn đợi là còn chạy (em hạ móc, đợi,
+ * rồi mới cho bánh tiến để trượt sang Nước — không bị chấm 2 sao giữa chừng).
  * `record` chỉ được gọi khi cần (nhiệm vụ lái đứng yên: xét các điều kiện ⭐ trên trạng thái hiện tại).
  */
 export function shouldGrade(m: Mission, s: RunState, record: () => RunRecord): GradeReason | null {
   if (s.pressed) return 'pressed'
   if (s.elapsed >= m.maxTime - 1e-9) return 'maxTime'
   if (m.kind === 'match' || !s.hasMoved || s.elapsed - s.lastMoveTime < REST_S) return null
-  if (m.kind === 'program') return s.waiting && (s.hangFor ?? 0) < REST_S - 1e-9 ? null : 'rest'
+  if (m.kind === 'program') return s.waiting && (s.waterFor ?? 0) < REST_S - 1e-9 ? null : 'rest'
   return grade(m, record()).done ? 'rest' : null
 }

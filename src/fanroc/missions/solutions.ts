@@ -55,9 +55,10 @@ const OFF_WALL = 0.5
  * Mẫu Maker (programs.ts AUTO_TIMES, đo trên sân), bỏ đoạn tới Núi A xả bóng (chỉ tiến 1,3 − 0,6 s), lùi khỏi rào lâu
  * hơn (OFF_WALL): tiến ra một đoạn, sang rào trái ép cho thẳng, xuôi theo rào tới ô vàng, ép rào lần nữa, quay theo
  * thanh, giơ móc, tiến chạm thanh, hạ móc, tiến để trượt qua vạch sang Nước. `slide` = số giây «đợi» cho trượt (dài
- * quá thì robot trượt tới cuối thanh rồi treo đứng yên trong lúc chương trình còn đợi — phép thử N8d).
+ * quá thì robot trượt tới cuối thanh rồi treo đứng yên trong lúc chương trình còn đợi — phép thử N8d). `pause` > 0: hạ
+ * móc rồi dừng bánh, đợi `pause` giây (treo Đất, đứng yên) rồi mới tiến để trượt.
  */
-export const climb = (slide: number = AUTO_TIMES.slide) => {
+export const climb = (slide: number = AUTO_TIMES.slide, pause = 0) => {
   const T = AUTO_TIMES
   const turn = Math.round(T.turnPerWidth * ROBOTS.maker.size.w * 100) / 100
   const hook = ROBOTS.maker.hook.port
@@ -66,7 +67,7 @@ export const climb = (slide: number = AUTO_TIMES.slide) => {
     ...leg(-1, 1, turn), ...leg(1, 1, T.toWall), ...leg(-1, -1, OFF_WALL), ...leg(1, -1, turn),
     ...leg(1, 1, T.toLadder), ...leg(-1, 1, turn), ...leg(1, 1, T.press), ...leg(-1, -1, T.settle),
     ...leg(1, -1, Math.round((turn + T.align * ROBOTS.maker.size.w) * 100) / 100),
-    servo(hook, 180), ...leg(1, 1, T.hookUp), servo(hook, 0), wait(slide),
+    servo(hook, 180), ...leg(1, 1, T.hookUp), servo(hook, 0), ...(pause > 0 ? [...leg(0, 0, pause), ...wheels(1, 1)] : []), wait(slide),
     ...wheels(0, 0),
   ])
 }

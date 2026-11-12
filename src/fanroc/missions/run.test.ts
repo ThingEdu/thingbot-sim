@@ -7,6 +7,7 @@ import { MissionRun, type RunView } from './run.ts'
 import { NEUTRAL } from '../ports.ts'
 import { MOUNTAINS, type Pose } from '../layout.ts'
 import type { FieldTally } from '../scoring.ts'
+import type { Climb } from '../ladder.ts'
 
 const byN = (n: number) => MISSIONS.find((m) => m.n === n)!
 const DT = 1 / 240
@@ -69,18 +70,20 @@ test('R95: đang ở khối «đợi» thì đứng yên không chấm — chỉ
   assert.equal(run.reason, 'maxTime')
 })
 
-test('luật V4: robot đang treo trên Thang Cứu Hỏa (RunView.hanging) và đứng yên 1 s ⇒ chấm "rest" dù đang ở khối «đợi»', () => {
+test('luật V4: robot treo ở Nước (RunView.climb) và đứng yên 1 s ⇒ chấm "rest" dù đang ở khối «đợi»; treo Đất thì không', () => {
   const m = byN(11)
-  const v = Object.assign(field(m.start), { hanging: false })
+  const v = Object.assign(field(m.start), { climb: 'none' as Climb })
   const run = new MissionRun(m, { blocks: { blocks: [] } }, v)
   drive(run, v, 0.5, () => (v.pose.x -= 0.2 * DT))
   assert.equal(drive(run, v, 2, () => {}, true), null, 'đứng sàn, đang đợi: không chấm (R95)')
-  v.hanging = true // vừa bám (tư thế gần như không đổi): đã đứng yên lâu nhưng chưa treo đủ 1 s ⇒ chưa chấm
-  assert.equal(drive(run, v, 0.5, () => {}, true), null, 'vừa bám đã chấm, chưa kịp trượt sang Nước')
+  v.climb = 'ground' // bám ở Đất, đứng yên trong lúc chương trình còn đợi (sắp cho bánh tiến) ⇒ không chấm
+  assert.equal(drive(run, v, 2, () => {}, true), null, 'treo Đất mà đang đợi: không chấm (R95)')
+  v.climb = 'water' // vừa sang Nước (tư thế gần như không đổi): đã đứng yên lâu nhưng chưa ở Nước đủ 1 s ⇒ chưa chấm
+  assert.equal(drive(run, v, 0.5, () => {}, true), null, 'vừa sang Nước đã chấm')
   const out = drive(run, v, 3, () => {}, true)
-  assert.ok(out, 'treo đứng yên mà không được chấm')
+  assert.ok(out, 'treo Nước đứng yên mà không được chấm')
   assert.equal(run.reason, 'rest')
-  assert.ok(out.t > 3.4 && out.t < 3.6, `chấm lúc ${out.t} (bám lúc 2,5 s)`)
+  assert.ok(out.t > 5.4 && out.t < 5.6, `chấm lúc ${out.t} (sang Nước lúc 4,5 s)`)
 })
 
 test('bấm Chấm: chấm ngay, một lần; chưa chạy cũng chấm được', () => {

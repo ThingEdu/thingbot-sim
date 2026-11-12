@@ -6,6 +6,7 @@ import type { Pose } from '../layout.ts'
 import type { PortValues } from '../ports.ts'
 import type { MatchEvent } from '../match.ts'
 import type { FieldTally } from '../scoring.ts'
+import type { Climb } from '../ladder.ts'
 import { grade, shouldGrade, touchesMountain, type GradeReason } from './grade.ts'
 import type { GradeResult, Mission, RunRecord } from './types.ts'
 
@@ -14,8 +15,9 @@ export interface RunView {
   readonly pose: Pose
   readonly ports: PortValues
   readonly events: readonly MatchEvent[]
-  /** Robot đang treo trên Thang Cứu Hỏa (luật V4: treo mà đứng yên ≥ 1 s là được chấm, kể cả khi đang «đợi»). */
-  readonly hanging?: boolean
+  /** Mức leo Thang Cứu Hỏa của robot em lúc này, chỉ tính thanh của liên minh mình (luật V4: treo ở Nước mà đứng yên
+   *  ≥ 1 s là được chấm, kể cả khi chương trình đang «đợi»). */
+  readonly climb?: Climb
   footprint(): { x: number; z: number }[]
   /** Đếm bóng trên sân (dò tia trên mọi bóng — tốn, chỉ gọi khi cần). */
   tally(): FieldTally
@@ -32,8 +34,8 @@ export class MissionRun {
   reason: GradeReason | null = null
   record: RunRecord | null = null
   private t = 0
-  /** Lúc (s) robot bắt đầu treo liên tục tới giờ; null = không treo. */
-  private hangT: number | null = null
+  /** Lúc (s) robot bắt đầu treo ở Nước liên tục tới giờ; null = không treo ở Nước. */
+  private waterT: number | null = null
   private cache: { t: number; rec: RunRecord } | null = null
 
   readonly mission: Mission
@@ -57,9 +59,9 @@ export class MissionRun {
     this.t += dt
     this.trail.add(this.t, v.pose, v.ports)
     if (!this.touched && touchesMountain(v.footprint())) this.touched = true
-    this.hangT = v.hanging ? (this.hangT ?? this.t) : null
+    this.waterT = v.climb === 'water' ? (this.waterT ?? this.t) : null
     const tr = this.trail
-    const why = shouldGrade(this.mission, { elapsed: tr.time, hasMoved: tr.hasMoved, lastMoveTime: tr.lastMoveTime, pressed: false, waiting, hangFor: this.hangT === null ? 0 : this.t - this.hangT }, () => this.recent(v))
+    const why = shouldGrade(this.mission, { elapsed: tr.time, hasMoved: tr.hasMoved, lastMoveTime: tr.lastMoveTime, pressed: false, waiting, waterFor: this.waterT === null ? 0 : this.t - this.waterT }, () => this.recent(v))
     return why ? this.finish(why, v) : null
   }
 

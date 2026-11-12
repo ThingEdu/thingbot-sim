@@ -13,7 +13,7 @@ import { MISSION_SEED, MISSIONS } from './data.ts'
 import { climb, straight, turtle } from './solutions.ts'
 import { grade, loopEmpty, restWaits, shouldGrade, touchesMountain, type RunState } from './grade.ts'
 import type { Goal, Mission, RunRecord } from './types.ts'
-import { defaultConfig, sample, teleopButtons, TOOLBOX_OPCODES } from '../programs.ts'
+import { AUTO_TIMES, defaultConfig, sample, teleopButtons, TOOLBOX_OPCODES } from '../programs.ts'
 import { ROBOTS } from '../robots.ts'
 import { MissionRun } from './run.ts'
 import { argumentReporter, procedureCall, procedureState } from '../procedures.ts'
@@ -385,18 +385,18 @@ test('luật V4: không nhiệm vụ nào còn nói Vùng Bảo Vệ / End Game 
   assert.ok(m12.hints.some((h) => h.when === 'score' && /Thang Cứu Hỏa/.test(h.text)))
 })
 
-test('shouldGrade (luật V4): nhiệm vụ lập trình đang treo trên Thang Cứu Hỏa và đứng yên ≥ 1 s ⇒ chấm, kể cả đang ở khối «đợi»', () => {
+test('shouldGrade (luật V4): nhiệm vụ lập trình đang treo ở Nước và đứng yên ≥ 1 s ⇒ chấm, kể cả đang ở khối «đợi»', () => {
   const st = (o: Partial<RunState>): RunState => ({ elapsed: 20, hasMoved: true, lastMoveTime: 10, pressed: false, ...o })
   const never = () => {
     throw new Error('không được dựng bản ghi')
   }
   const p = byN(11)
   assert.equal(shouldGrade(p, st({ waiting: true }), never), null, 'đứng sàn mà đang đợi: R95 không chấm')
-  assert.equal(shouldGrade(p, st({ waiting: true, hangFor: 5 }), never), 'rest')
-  assert.equal(shouldGrade(p, st({ waiting: true, hangFor: 5, lastMoveTime: 19.5 }), never), null, 'mới đứng 0,5 s')
-  assert.equal(shouldGrade(p, st({ waiting: true, hangFor: 0.5 }), never), null, 'mới bám 0,5 s (đứng yên từ trước khi bám)')
+  assert.equal(shouldGrade(p, st({ waiting: true, waterFor: 5 }), never), 'rest')
+  assert.equal(shouldGrade(p, st({ waiting: true, waterFor: 5, lastMoveTime: 19.5 }), never), null, 'mới đứng 0,5 s')
+  assert.equal(shouldGrade(p, st({ waiting: true, waterFor: 0.5 }), never), null, 'mới sang Nước 0,5 s (đứng yên từ trước)')
   const m10 = byN(10)
-  assert.equal(shouldGrade(m10, st({ hangFor: 5 }), () => record(m10)), null, 'nhiệm vụ lái chưa đạt ⭐ thì đang treo cũng không chấm')
+  assert.equal(shouldGrade(m10, st({ waterFor: 5 }), () => record(m10)), null, 'nhiệm vụ lái chưa đạt ⭐ thì đang treo cũng không chấm')
 })
 
 test('dọn Khu Chữa Cháy (nhiệm vụ 9) và trận đầu (nhiệm vụ 12) đọc tally', () => {
@@ -482,7 +482,7 @@ async function runMission(m: Mission, program: object) {
       get pose() { return robot.pose },
       get ports() { return ports },
       get events() { return g.match.events },
-      get hanging() { return robot.climb.mode === 'hang' },
+      get climb() { const c = robot.climbLevel; return c.bar === robot.alliance ? c.level : 'none' },
       footprint: () => robot.footprint(),
       tally: () => g.match.tally(),
     }
@@ -508,6 +508,14 @@ test('nhiệm vụ 11 có lời giải: tới ô vàng, quay theo thanh, giơ m�
   t.diagnostic(`chấm lúc ${r.at.toFixed(2)} s (${r.why}), mức ${r.rec.tally?.climbs.red[0]}, chỗ bám s = ${r.s.toFixed(3)} m, ${r.result.stars} sao`)
   assert.equal(r.why, 'rest', 'chương trình xong thì robot đứng yên và được chấm trước maxTime')
   assert.deepEqual([r.result.done, r.result.stars], [true, 3], JSON.stringify(r.result.goals))
+})
+
+test('nhiệm vụ 11: hạ móc rồi «đợi 2 giây» (treo Đất, đứng yên) rồi mới tiến ⇒ không bị chấm ở Đất, trượt tới Nước, 3 sao', async (t) => {
+  const m = byN(11)
+  const r = await runMission(m, climb(AUTO_TIMES.slide, 2))
+  t.diagnostic(`chấm lúc ${r.at.toFixed(2)} s (${r.why}), mức ${r.rec.tally?.climbs.red[0]}, s = ${r.s.toFixed(3)} m, ${r.result.stars} sao`)
+  assert.equal(r.rec.tally?.climbs.red[0], 'water', 'bị chấm giữa lúc đợi ở Đất')
+  assert.deepEqual([r.why, r.result.stars], ['rest', 3])
 })
 
 // ---------- Hợp đồng với match.ts và thời điểm chấm (R57) ----------
