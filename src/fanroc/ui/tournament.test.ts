@@ -5,7 +5,7 @@ import { SEATS } from '../quickmatch.ts'
 import type { RobotConfig } from '../robots.ts'
 import {
   entrantLabel, machinesFor, matchLine, matchSeed, newTournament, pendingMachines, played, playersIn, progressText, recorded,
-  saveTournamentVerified, seatIds, standingRows,
+  multText, saveTournamentVerified, seatIds, standingRows,
 } from './tournament.ts'
 
 const maker: RobotConfig = { type: 'maker', drive: 'diff2', actuator: 'tt' }
@@ -13,7 +13,7 @@ const co: RobotConfig = { type: 'co', drive: 'omni', actuator: 'tt' }
 const one = (seed = 3, perTeam = 4) => newTournament({ names: ['Tuấn', 'Minh'], cfgs: [maker, co], players: 1, perTeam, seed })
 /** Ghi trận i với điểm trận `score`, mọi đội không phạt. */
 const play = (s: TournamentState, i: number, score: number, pen: Record<string, number> = {}) =>
-  record(s, i, played(seatIds(s.schedule[i]), seatIds(s.schedule[i]).map((id) => ({ score: Math.max(0, score - (pen[id] ?? 0)), penalty: pen[id] ?? 0 })), score))
+  record(s, i, played(seatIds(s.schedule[i]), seatIds(s.schedule[i]).map((id) => ({ score: Math.max(0, score - (pen[id] ?? 0)), penalty: pen[id] ?? 0 })), score, 100))
 
 test('newTournament: 1 bạn ⇒ 7 đội máy theo MACHINE_TEAMS, 2 bạn ⇒ 6; robot người chơi là bản sao', () => {
   assert.equal(machinesFor(1).length, 7)
@@ -44,8 +44,8 @@ test('seatIds theo thứ tự ghế SEATS; playersIn cho ghế của từng bạ
 })
 
 test('played: điểm / phạt theo id đội; matchSeed ổn định, khác nhau theo trận', () => {
-  const p = played(['a', 'b', 'c', 'd'], [{ score: 10, penalty: 0 }, { score: 5, penalty: 5 }, { score: 10, penalty: 0 }, { score: 0, penalty: 10 }], 10)
-  assert.deepEqual(p, { matchScore: 10, teams: { a: { score: 10, penalty: 0 }, b: { score: 5, penalty: 5 }, c: { score: 10, penalty: 0 }, d: { score: 0, penalty: 10 } } })
+  const p = played(['a', 'b', 'c', 'd'], [{ score: 10, penalty: 0 }, { score: 5, penalty: 5 }, { score: 10, penalty: 0 }, { score: 0, penalty: 10 }], 10, 135)
+  assert.deepEqual(p, { matchScore: 10, multPct: 135, teams: { a: { score: 10, penalty: 0 }, b: { score: 5, penalty: 5 }, c: { score: 10, penalty: 0 }, d: { score: 0, penalty: 10 } } })
   const s = one()
   assert.equal(matchSeed(s, 2), matchSeed(one(), 2))
   assert.equal(new Set(s.schedule.map((_, i) => matchSeed(s, i))).size, s.schedule.length)
@@ -140,4 +140,21 @@ test('saveTournamentVerified: đọc lại đúng ⇒ true; bộ nhớ đầy (g
   assert.equal(saveTournamentVerified(stale, play(s, 0, 10)), false)
   assert.equal(saveTournamentVerified(good, null), true)
   assert.equal(kept, null)
+})
+
+test('multText: tổng hệ số (phần trăm) ra chữ 2 số lẻ, dấu phẩy thập phân', () => {
+  assert.equal(multText(515), '5,15')
+  assert.equal(multText(480), '4,80')
+  assert.equal(multText(200), '2,00')
+  assert.equal(multText(0), '0,00')
+})
+
+test('standingRows: multSum của hàng = tổng hệ số các trận được tính; played ghi multPct', () => {
+  let s = one()
+  const ids = seatIds(s.schedule[0])
+  s = record(s, 0, played(ids, ids.map(() => ({ score: 100, penalty: 0 })), 100, 135))
+  const rows = standingRows(s, () => '')
+  for (const id of ids) assert.equal(rows.find((r) => r.id === id)!.multSum, 135)
+  const other = s.entrants.find((e) => !ids.includes(e.id))!
+  assert.equal(rows.find((r) => r.id === other.id)!.multSum, 0)
 })

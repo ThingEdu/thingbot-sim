@@ -1,13 +1,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { MACHINE_TEAMS, createTournament, nextMatch, record, standings, type Played, type TournamentState } from './tournament.ts'
+import { MACHINE_TEAMS, createTournament, isOldRules, nextMatch, record, standings, type Played, type TournamentState } from './tournament.ts'
 
 const robot = { type: 'maker', drive: 'diff2', actuator: 'tt' } as const
 const mk = (perTeam = 4, seed = 7, np = 2) =>
   createTournament({ players: Array.from({ length: np }, (_, i) => ({ name: `Em ${i}`, robot, player: i as 0 | 1 })), perTeam, seed })
 
 /** Dựng giải 8 đội với điểm tuỳ ý: scores[id] = [[điểm, phạt], …] theo thứ tự trận của đội đó. */
-function withScores(scores: Record<string, [number, number?][]>): TournamentState {
+function withScores(scores: Record<string, [number, number?, number?][]>): TournamentState {
   const s = mk(4)
   const results: Played[] = []
   const ids = s.entrants.map((e) => e.id)
@@ -15,7 +15,7 @@ function withScores(scores: Record<string, [number, number?][]>): TournamentStat
   for (let m = 0; m < n; m++) {
     const teams: Played['teams'] = {}
     for (const id of ids) if (scores[id]?.[m]) teams[id] = { score: scores[id][m][0], penalty: scores[id][m][1] ?? 0 }
-    results.push({ teams, matchScore: 0 })
+    results.push({ teams, matchScore: 0, multPct: 100 })
   }
   return { ...s, results }
 }
@@ -98,7 +98,7 @@ test('bằng tất cả ⇒ bốc thăm theo seed, tieDraw = true, ổn định'
 test('nextMatch sau 3 record = 3; record bất biến; JSON khứ hồi dùng lại được', () => {
   let s = mk(4)
   const orig = s
-  for (let i = 0; i < 3; i++) s = record(s, i, { teams: { p0: { score: 10, penalty: 0 } }, matchScore: 10 })
+  for (let i = 0; i < 3; i++) s = record(s, i, { teams: { p0: { score: 10, penalty: 0 } }, matchScore: 10, multPct: 100 })
   assert.equal(nextMatch(s), 3)
   assert.equal(nextMatch(orig), 0)
   assert.equal(orig.results[0], null)
@@ -106,14 +106,14 @@ test('nextMatch sau 3 record = 3; record bất biến; JSON khứ hồi dùng l�
   assert.equal(nextMatch(back), 3)
   assert.equal(standings(back).length, 8)
   let done = back
-  for (let i = 3; i < 8; i++) done = record(done, i, { teams: {}, matchScore: 0 })
+  for (let i = 3; i < 8; i++) done = record(done, i, { teams: {}, matchScore: 0, multPct: 100 })
   assert.equal(nextMatch(done), null)
 })
 
 test('giữa giải: xếp theo tổng thô các trận đã đấu, provisional, không mất điểm trận mới', () => {
   let s = mk(4)
   const m0 = s.schedule[0]
-  s = record(s, 0, { teams: { [m0.red[0]]: { score: 50, penalty: 0 }, [m0.red[1]]: { score: 50, penalty: 0 }, [m0.blue[0]]: { score: 20, penalty: 0 }, [m0.blue[1]]: { score: 20, penalty: 0 } }, matchScore: 70 })
+  s = record(s, 0, { teams: { [m0.red[0]]: { score: 50, penalty: 0 }, [m0.red[1]]: { score: 50, penalty: 0 }, [m0.blue[0]]: { score: 20, penalty: 0 }, [m0.blue[1]]: { score: 20, penalty: 0 } }, matchScore: 70, multPct: 100 })
   const st = standings(s)
   assert.ok(st.every((x) => x.provisional))
   assert.equal(rankOf(st, m0.red[0]).total, 50)
@@ -124,7 +124,7 @@ test('giữa giải: xếp theo tổng thô các trận đã đấu, provisional
   // 3 trận: không đội nào mất điểm trận mới nhất
   for (let i = 1; i < 3; i++) {
     const m = s.schedule[i]
-    s = record(s, i, { teams: Object.fromEntries([...m.red, ...m.blue].map((id) => [id, { score: 10, penalty: 0 }])), matchScore: 0 })
+    s = record(s, i, { teams: Object.fromEntries([...m.red, ...m.blue].map((id) => [id, { score: 10, penalty: 0 }])), matchScore: 0, multPct: 100 })
   }
   const st3 = standings(s)
   const n = (id: string) => s.results.filter((r) => r?.teams[id]).length
@@ -135,7 +135,7 @@ test('giữa giải: xếp theo tổng thô các trận đã đấu, provisional
 test('đủ kết quả: provisional = false và áp luật E.2', () => {
   let s = mk(4)
   s.schedule.forEach((m, i) => {
-    s = record(s, i, { teams: Object.fromEntries([...m.red, ...m.blue].map((id) => [id, { score: 10 + i, penalty: 0 }])), matchScore: 0 })
+    s = record(s, i, { teams: Object.fromEntries([...m.red, ...m.blue].map((id) => [id, { score: 10 + i, penalty: 0 }])), matchScore: 0, multPct: 100 })
   })
   const st = standings(s)
   assert.ok(st.every((x) => !x.provisional && x.counted.length === 4))
@@ -144,4 +144,77 @@ test('đủ kết quả: provisional = false và áp luật E.2', () => {
 test('machines tuỳ chọn thay MACHINE_TEAMS', () => {
   const s = createTournament({ players: [{ name: 'A', robot }, { name: 'B', robot }], perTeam: 4, seed: 1, machines: MACHINE_TEAMS.slice(0, 5).concat(MACHINE_TEAMS.slice(0, 1).map((m) => ({ ...m, name: 'Khác' }))) })
   assert.equal(s.entrants[7].name, 'Khác')
+})
+
+// ── Luật V4: hoà điểm xếp hạng ⇒ Tổng Hệ số nhân trước ──
+/** Hệ số nhân là của CẢ trận (chung bốn đội), nên bài thử V4 ghi mỗi lượt của mỗi đội thành một "trận" riêng để đặt hệ số riêng. */
+function withMults(scores: Record<string, [number, number, number][]>): TournamentState {
+  const s = mk(4)
+  const results: Played[] = []
+  for (const [id, list] of Object.entries(scores)) for (const [score, penalty, multPct] of list) results.push({ teams: { [id]: { score, penalty } }, matchScore: score, multPct })
+  return { ...s, results }
+}
+/** 8 đội, mỗi đội 2 trận; p0..p3 được chỉnh, còn lại điểm thấp rời rạc. */
+const lows: Record<string, [number, number, number][]> = { p0: [[1, 0, 100], [1, 0, 100]], p1: [[10, 0, 100], [10, 0, 100]], m0: [[1, 0, 100], [1, 0, 100]], m1: [[2, 0, 100], [2, 0, 100]], m2: [[3, 0, 100], [3, 0, 100]], m3: [[4, 0, 100], [4, 0, 100]], m4: [[5, 0, 100], [5, 0, 100]], m5: [[6, 0, 100], [6, 0, 100]] }
+
+test('V4: bằng điểm xếp hạng ⇒ tổng Hệ số nhân cao hơn xếp trên (ví dụ luật: C 900 / 5,15 trên B 900 / 4,80)', () => {
+  const st = standings(withMults({
+    ...lows,
+    // B (p0): 600 + 300, hệ số 240 + 240 = 480, trận cao nhất 600. C (m5): 450 + 450, hệ số 257 + 258 = 515, trận cao nhất 450.
+    // Chỉ Tổng Hệ số nhân mới đẩy C lên trên B (trận cao nhất lại có lợi cho B).
+    p0: [[600, 0, 240], [300, 0, 240]],
+    m5: [[450, 0, 257], [450, 0, 258]],
+  }))
+  const b = rankOf(st, 'p0'), c = rankOf(st, 'm5')
+  assert.equal(b.total, 900)
+  assert.equal(c.total, 900)
+  assert.equal(b.multSum, 480)
+  assert.equal(c.multSum, 515)
+  assert.ok(c.rank < b.rank)
+  assert.equal(c.tieDraw, false)
+})
+
+test('V4: hệ số nhân đứng TRƯỚC trận cao nhất (đội hệ số cao thắng dù trận cao nhất thấp hơn)', () => {
+  const st = standings(withMults({
+    ...lows,
+    p0: [[600, 0, 100], [300, 0, 100]], // best 600, hệ số 200
+    m5: [[450, 0, 150], [450, 0, 150]], // best 450, hệ số 300
+  }))
+  assert.ok(rankOf(st, 'm5').rank < rankOf(st, 'p0').rank)
+})
+
+test('V4: hệ số bằng ⇒ trận cao nhất; vẫn bằng ⇒ ít phạt; tất cả bằng ⇒ bốc thăm', () => {
+  const a = standings(withMults({ ...lows, p0: [[600, 0, 150], [300, 0, 150]], m5: [[450, 0, 150], [450, 0, 150]] }))
+  assert.ok(rankOf(a, 'p0').rank < rankOf(a, 'm5').rank)
+  const b = standings(withMults({ ...lows, p0: [[500, 30, 150], [400, 0, 150]], m5: [[500, 0, 150], [400, 30, 150]] }))
+  assert.equal(rankOf(b, 'p0').total, rankOf(b, 'm5').total)
+})
+
+test('V4: hệ số chỉ cộng các trận được tính (trận bị bỏ không góp hệ số)', () => {
+  // p0 đấu 3 trận, các đội khác 2 ⇒ chuẩn 2, bỏ trận thấp nhất (điểm 5, hệ số 180).
+  const st = standings(withMults({
+    ...lows,
+    p0: [[5, 0, 180], [300, 0, 110], [300, 0, 120]],
+  }))
+  const p0 = rankOf(st, 'p0')
+  assert.deepEqual(p0.counted, [300, 300])
+  assert.equal(p0.multSum, 230)
+})
+
+test('V4: hệ số nằm trong same() ⇒ khác hệ số thì không đánh dấu bốc thăm', () => {
+  const st = standings(withMults({ ...lows, p0: [[100, 0, 120], [100, 0, 100]], m5: [[100, 0, 110], [100, 0, 100]] }))
+  assert.equal(rankOf(st, 'p0').tieDraw, false)
+  assert.equal(rankOf(st, 'm5').tieDraw, false)
+})
+
+test('isOldRules: giải kiểu bản 0.8 (kết quả không có multPct) là luật cũ; giải mới / chưa đấu thì không', () => {
+  const s = mk(4)
+  assert.equal(isOldRules(s), false)
+  const old = { ...s, results: s.results.map((r, i) => (i === 0 ? ({ teams: { p0: { score: 10, penalty: 0 } }, matchScore: 10 } as unknown as Played) : r)) }
+  assert.equal(isOldRules(old), true)
+  assert.equal(isOldRules(record(s, 0, { teams: {}, matchScore: 10, multPct: 100 })), false)
+  // không đổi dữ liệu gốc, xếp hạng không sập
+  const before = JSON.stringify(old)
+  assert.equal(standings(old).length, 8)
+  assert.equal(JSON.stringify(old), before)
 })

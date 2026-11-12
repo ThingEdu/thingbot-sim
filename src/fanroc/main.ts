@@ -48,7 +48,7 @@ import { createWorkshopBar, Drafts, resetVerified, saveVerified, sameProgram } f
 import { createRobotCards, WarningHold, type CardInfo } from './ui/robotcard.ts'
 import { climbItem, createFeed, EventFeed, foulItem, scoreItem } from './ui/feed.ts'
 import { penaltyPoints, playAgents } from './quickmatch.ts'
-import { nextMatch, record, type Played, type TournamentState } from './tournament.ts'
+import { isOldRules, nextMatch, record, type Played, type TournamentState } from './tournament.ts'
 import {
   createTournamentScreen, matchSeed, newTournament, pendingMachines, played, playersIn, progressText, SAVE_TOUR_FAILED,
   saveTournamentVerified, seatIds, standingRows, type PitView,
@@ -1116,6 +1116,7 @@ async function start(): Promise<void> {
     if (screen !== 'tournament') return
     // Ghi danh, Thử phím: chưa có giải (bốc thăm mới tạo); các màn khác cần giải.
     if (!tour && v !== 'corrupt' && v !== 'keytest') v = 'register'
+    if (tour && isOldRules(tour) && v !== 'register' && v !== 'keytest' && v !== 'corrupt') v = 'old'
     if (tour && v === 'pit' && nextMatch(tour) === null) v = 'podium'
     setPlayersCount(tour ? tourPlayers(tour) : reg.players)
     if (v === 'register')
@@ -1124,6 +1125,7 @@ async function start(): Promise<void> {
       const st = seats.read().status
       tScreen.keytest(names, [padText(st[0], 1), padText(st[1], 2)])
     } else if (v === 'corrupt') tScreen.corrupt()
+    else if (v === 'old') tScreen.old()
     else if (tour && v === 'schedule') tScreen.schedule(tour)
     else if (tour && v === 'podium') tScreen.podium(tour, standingRows(tour, (e) => tourLabel(e.player ?? 0)))
     else if (tour) {
@@ -1153,7 +1155,7 @@ async function start(): Promise<void> {
   }
   /** Vào trận kế tiếp của giải (trận có người chơi; trận máy trước đó đã chạy xong). */
   const playTour = () => {
-    if (!tour || machineBusy) return
+    if (!tour || machineBusy || isOldRules(tour)) return
     const i = nextMatch(tour)
     if (i === null || !playersIn(tour, i).length) return
     for (const x of playersIn(tour, i)) tourRobot(x.player)
@@ -1162,7 +1164,7 @@ async function start(): Promise<void> {
   }
   /** Ghi kết quả trận i, lưu (đọc lại), chạy tiếp các trận máy, vẽ lại màn giải. */
   const commitTour = (i: number, p: Played) => {
-    if (!tour || tour.results[i] !== null) return
+    if (!tour || isOldRules(tour) || tour.results[i] !== null) return
     tour = record(tour, i, p)
     tourSaveFailed = !saveTournamentVerified(store, tour)
     runMachines()
@@ -1173,7 +1175,7 @@ async function start(): Promise<void> {
     if (!tour || game === replacing || m !== game.match || m.phase !== 'end' || nextMatch(tour) !== tourIndex) return
     const r = m.result()
     const teams = r.teams.map((t, k) => ({ score: t.score, penalty: penaltyPoints(m.pens[k], r.score.total) }))
-    commitTour(tourIndex, played(seatIds(tour.schedule[tourIndex]), teams, r.score.total))
+    commitTour(tourIndex, played(seatIds(tour.schedule[tourIndex]), teams, r.score.total, r.score.multPct))
   }
   /** Trận máy lỗi (không dựng được sân…): báo ở Pit kèm "Thử lại" (R133), không tự chạy lại vòng vòng. */
   let machineError: string | null = null
@@ -1184,7 +1186,7 @@ async function start(): Promise<void> {
   }
   /** Chạy ngầm các trận toàn máy từ trận kế tiếp (từng lát, sân / nút vẫn mượt) và ghi ngay khi xong. */
   const runMachines = () => {
-    if (machineRun || machineError !== null || !tour || !pendingMachines(tour).length) return
+    if (machineRun || machineError !== null || !tour || isOldRules(tour) || !pendingMachines(tour).length) return
     const token = tourToken
     machineRun = true
     void (async () => {
@@ -1199,7 +1201,7 @@ async function start(): Promise<void> {
           const es = seatIds(t.schedule[i]).map((id) => t.entrants.find((e) => e.id === id)!)
           const r = await playAgents({ cfgs: es.map((e) => e.robot), skills: es.map((e) => e.skill ?? 'medium'), teams: es.map((e) => e.name), seed: matchSeed(t, i), sliceMs: MACHINE_SLICE_MS })
           if (!tour || token !== tourToken) return
-          commitTour(i, played(seatIds(t.schedule[i]), r.teams, r.match))
+          commitTour(i, played(seatIds(t.schedule[i]), r.teams, r.match, r.multPct))
         }
       } catch (e) {
         machineError = e instanceof Error ? e.message : String(e)

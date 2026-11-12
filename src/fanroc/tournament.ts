@@ -6,9 +6,9 @@ import type { RobotConfig, RobotType } from './robots.ts'
 
 export type Entrant = { id: string; name: string; kind: 'player' | 'machine'; robot: RobotConfig; skill?: Skill; player?: 0 | 1 }
 export type Slot = { red: [string, string]; blue: [string, string] } // id đội
-export type Played = { teams: Record<string, { score: number; penalty: number }>; matchScore: number }
+export type Played = { teams: Record<string, { score: number; penalty: number }>; matchScore: number; multPct: number }
 export interface TournamentState { version: 1; seed: number; perTeam: number; entrants: Entrant[]; schedule: Slot[]; results: (Played | null)[] }
-export type Standing = { id: string; rank: number; total: number; best: number; penalty: number; counted: number[]; tieDraw: boolean; provisional: boolean }
+export type Standing = { id: string; rank: number; total: number; best: number; multSum: number; penalty: number; counted: number[]; tieDraw: boolean; provisional: boolean }
 
 export const TEAM_COUNT = 8
 
@@ -60,17 +60,25 @@ export function record(s: TournamentState, i: number, p: Played): TournamentStat
   return { ...s, results }
 }
 
+/** Giải lưu từ bản trước luật V4 (kết quả chưa có hệ số nhân của trận): chỉ đọc, không đổi, không chơi tiếp. */
+export function isOldRules(s: TournamentState): boolean {
+  return s.results.some((r) => r !== null && !Number.isFinite((r as Partial<Played>).multPct))
+}
+
 /** Xếp hạng luật mục E (khi giải đã xong); giữa giải: tổng thô các trận đã đấu, provisional = true.
- * tổng điểm; số trận lệch ⇒ chuẩn = ít nhất, bỏ các trận thấp nhất; hoà ⇒ best, ít phạt, bốc thăm. */
+ * tổng điểm; số trận lệch ⇒ chuẩn = ít nhất, bỏ các trận thấp nhất.
+ * Hoà điểm xếp hạng (luật V4): tổng Hệ số nhân của các trận được tính (cao trước) → trận cao nhất → ít phạt → bốc thăm
+ * (thay cho "Ban Tổ chức quyết định"). multSum tính bằng phần trăm (515 = 5,15). */
 export function standings(s: TournamentState): Standing[] {
-  const per = new Map<string, { scores: number[]; penalty: number }>()
-  s.entrants.forEach((e) => per.set(e.id, { scores: [], penalty: 0 }))
+  const per = new Map<string, { scores: number[]; mults: number[]; penalty: number }>()
+  s.entrants.forEach((e) => per.set(e.id, { scores: [], mults: [], penalty: 0 }))
   for (const r of s.results) {
     if (!r) continue
     for (const [id, t] of Object.entries(r.teams)) {
       const a = per.get(id)
       if (!a) continue
       a.scores.push(t.score)
+      a.mults.push(Number.isFinite(r.multPct) ? r.multPct : 0)
       a.penalty += t.penalty
     }
   }
@@ -85,12 +93,13 @@ export function standings(s: TournamentState): Standing[] {
     const idx = a.scores.map((v, k) => k).sort((x, y) => a.scores[x] - a.scores[y] || x - y)
     const dropped = new Set(idx.slice(0, drop))
     const counted = a.scores.filter((_, k) => !dropped.has(k))
-    return { id: e.id, total: counted.reduce((x, y) => x + y, 0), best, penalty: a.penalty, counted, key: draw() }
+    const multSum = a.mults.filter((_, k) => !dropped.has(k)).reduce((x, y) => x + y, 0)
+    return { id: e.id, total: counted.reduce((x, y) => x + y, 0), multSum, best, penalty: a.penalty, counted, key: draw() }
   })
-  rows.sort((x, y) => y.total - x.total || y.best - x.best || x.penalty - y.penalty || x.key - y.key)
-  const same = (x: (typeof rows)[0], y: (typeof rows)[0]) => x.total === y.total && x.best === y.best && x.penalty === y.penalty
+  rows.sort((x, y) => y.total - x.total || y.multSum - x.multSum || y.best - x.best || x.penalty - y.penalty || x.key - y.key)
+  const same = (x: (typeof rows)[0], y: (typeof rows)[0]) => x.total === y.total && x.multSum === y.multSum && x.best === y.best && x.penalty === y.penalty
   return rows.map((r, k) => ({
-    id: r.id, rank: k + 1, total: r.total, best: r.best, penalty: r.penalty, counted: r.counted, provisional,
+    id: r.id, rank: k + 1, total: r.total, multSum: r.multSum, best: r.best, penalty: r.penalty, counted: r.counted, provisional,
     tieDraw: (k > 0 && same(rows[k - 1], r)) || (k < rows.length - 1 && same(r, rows[k + 1])),
   }))
 }

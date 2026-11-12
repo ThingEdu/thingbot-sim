@@ -34,6 +34,8 @@ export interface QuickOpts {
 
 export interface QuickResult {
   match: number
+  /** Hệ số nhân của trận (phần trăm, 100…180). */
+  multPct: number
   teams: { team: string; score: number; penalty: number }[]
   tally: FieldTally
   /** Ghế của từng phần tử trong teams (Đỏ/Xanh, slot). */
@@ -77,7 +79,7 @@ export async function playAgents(o: QuickOpts): Promise<QuickResult> {
       const p = m.pens[i]
       return { team: t.team, score: t.score, penalty: penaltyPoints(p, r.score.total) }
     })
-    return { match: r.score.total, teams, tally: m.tally(), seats: order, matchObj: m }
+    return { match: r.score.total, multPct: r.score.multPct, teams, tally: m.tally(), seats: order, matchObj: m }
   } finally {
     w.rapier.free()
   }

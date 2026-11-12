@@ -40,8 +40,8 @@ export function playersIn(s: TournamentState, i: number): { player: 0 | 1; seat:
 }
 
 /** Kết quả một trận theo id đội (cùng thứ tự với `teams`). */
-export function played(ids: string[], teams: { score: number; penalty: number }[], matchScore: number): Played {
-  return { matchScore, teams: Object.fromEntries(ids.map((id, k) => [id, { score: teams[k].score, penalty: teams[k].penalty }])) }
+export function played(ids: string[], teams: { score: number; penalty: number }[], matchScore: number, multPct: number): Played {
+  return { matchScore, multPct, teams: Object.fromEntries(ids.map((id, k) => [id, { score: teams[k].score, penalty: teams[k].penalty }])) }
 }
 
 /** Các trận toàn máy liền nhau từ trận kế tiếp (chạy ngầm trước khi tới trận có người chơi). */
@@ -79,8 +79,10 @@ export type StandingRow = {
   scores: string
   total: number
   best: number
+  /** Tổng Hệ số nhân các trận được tính, phần trăm (515 = 5,15). */
+  multSum: number
   penalty: number
-  /** Hoà hết tiêu chí (tổng, trận cao nhất, phạt) với đội kề bên ⇒ thứ tự do bốc thăm. */
+  /** Hoà hết tiêu chí (tổng, hệ số, trận cao nhất, phạt) với đội kề bên ⇒ thứ tự do bốc thăm. */
   tie: boolean
   provisional: boolean
 }
@@ -91,7 +93,7 @@ export function standingRows(s: TournamentState, program: (e: Entrant) => string
     const e = entrant(s, r.id)
     return {
       id: r.id, rank: r.rank, name: e.name, label: entrantLabel(e, e.kind === 'player' ? program(e) : undefined), player: e.kind === 'player',
-      scores: r.counted.length ? r.counted.join(' + ') : '—', total: r.total, best: r.best, penalty: r.penalty, tie: r.tieDraw, provisional: r.provisional,
+      scores: r.counted.length ? r.counted.join(' + ') : '—', total: r.total, multSum: r.multSum, best: r.best, penalty: r.penalty, tie: r.tieDraw, provisional: r.provisional,
     }
   })
 }
@@ -117,7 +119,7 @@ export const SAVE_TOUR_FAILED = 'Không lưu được giải — tải lại tra
 export const KEYS_NOTE = 'Một số bàn phím không nhận nhiều phím bấm cùng lúc'
 
 // ---------- DOM ----------
-export type TourView = 'register' | 'keytest' | 'schedule' | 'pit' | 'podium' | 'corrupt'
+export type TourView = 'register' | 'keytest' | 'schedule' | 'pit' | 'podium' | 'corrupt' | 'old'
 
 export interface RegisterView {
   players: 1 | 2
@@ -171,6 +173,8 @@ export interface TournamentScreen {
   pit(v: PitView): void
   podium(s: TournamentState, rows: StandingRow[]): void
   corrupt(): void
+  /** Giải lưu từ trước luật V4: chỉ báo, kèm nút giải mới. */
+  old(): void
   hide(): void
 }
 
@@ -265,16 +269,19 @@ const alliances = (l: { red: string[]; blue: string[] }) => {
   return f
 }
 
+/** Tổng hệ số nhân (phần trăm) ra chữ: 515 ⇒ "5,15" (dấu phẩy thập phân như phần còn lại của game). */
+export const multText = (pct: number): string => (pct / 100).toFixed(2).replace('.', ',')
+
 /** Bảng xếp hạng (Pit, bục trao giải). */
 function table(rows: StandingRow[]): HTMLElement {
   const wrap = el('div', 'tn-wrap')
   const t = el('table', 'tn-table')
   t.dataset.role = 'standings'
   const hr = el('tr')
-  for (const h of ['Hạng', 'Đội', 'Điểm các trận', 'Điểm xếp hạng', 'Trận cao nhất', 'Phạt']) hr.append(el('th', undefined, h))
+  for (const h of ['Hạng', 'Đội', 'Điểm các trận', 'Điểm xếp hạng', 'Hệ số', 'Trận cao nhất', 'Phạt']) hr.append(el('th', undefined, h))
   t.append(hr)
   /** Cùng nhóm hoà (tổng, trận cao nhất, phạt đều bằng) với dòng trên. */
-  const sameAsPrev = (k: number) => k > 0 && rows[k - 1].total === rows[k].total && rows[k - 1].best === rows[k].best && rows[k - 1].penalty === rows[k].penalty
+  const sameAsPrev = (k: number) => k > 0 && rows[k - 1].total === rows[k].total && rows[k - 1].multSum === rows[k].multSum && rows[k - 1].best === rows[k].best && rows[k - 1].penalty === rows[k].penalty
   rows.forEach((r, k) => {
     const tr = el('tr')
     tr.dataset.player = String(r.player)
@@ -295,7 +302,7 @@ function table(rows: StandingRow[]): HTMLElement {
     } else team.textContent = r.label
     const total = el('td', 'n')
     total.append(el('b', undefined, String(r.total)))
-    tr.append(rank, team, el('td', 'n', r.scores), total, el('td', 'n', String(r.best)), el('td', 'n', r.penalty ? `−${r.penalty}` : '0'))
+    tr.append(rank, team, el('td', 'n', r.scores), total, el('td', 'n', multText(r.multSum)), el('td', 'n', String(r.best)), el('td', 'n', r.penalty ? `−${r.penalty}` : '0'))
     t.append(tr)
   })
   wrap.append(t)
@@ -561,6 +568,11 @@ export function createTournamentScreen(root: HTMLElement, act: TourActions): Tou
         head('GIẢI ĐẤU', 'Không đọc được giải đang dở — dữ liệu trong trình duyệt bị hỏng. Bắt đầu giải mới nhé.'),
         acts(btn('Giải mới', act.newTour, 'main'), homeBtn()),
       )
+    },
+    old() {
+      const n = el('div', 'tn-note', 'Giải này đấu theo luật cũ (trước V4).')
+      n.dataset.role = 'old-rules'
+      put('old', head('GIẢI ĐẤU', 'Giải đang dở được lưu từ bản trước nên không xếp hạng được theo luật mới. Em bắt đầu giải mới nhé.'), n, acts(btn('Giải mới', act.newTour, 'main'), homeBtn()))
     },
     hide() {
       box.hidden = true

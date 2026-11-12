@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { createStore, defaultSettings, keys, type KV } from './store.ts'
 import { defaultConfig } from './programs.ts'
 import { FANROC_2026 } from './season.ts'
-import { createTournament, record, type TournamentState } from './tournament.ts'
+import { createTournament, isOldRules, record, type TournamentState } from './tournament.ts'
 
 const fake = (): KV & { m: Map<string, string> } => {
   const m = new Map<string, string>()
@@ -74,7 +74,7 @@ test('JSON sai dạng: mặc định; giải ⇒ corrupt; vắng ⇒ null', () =
 test('giải: dạng sâu sai (seed, perTeam, phần tử entrants / schedule / results) ⇒ corrupt; giải đúng, có kết quả ⇒ đọc được', () => {
   const kv = fake()
   const s = createStore('s', kv)
-  const played = record(T, 0, { matchScore: 120, teams: Object.fromEntries(T.schedule[0].red.concat(T.schedule[0].blue).map((id) => [id, { score: 120, penalty: 0 }])) })
+  const played = record(T, 0, { matchScore: 120, multPct: 100, teams: Object.fromEntries(T.schedule[0].red.concat(T.schedule[0].blue).map((id) => [id, { score: 120, penalty: 0 }])) })
   const put = (v: unknown) => kv.m.set(keys('s').tournament, JSON.stringify(v))
   put(played)
   assert.deepEqual(s.tournament(), played)
@@ -163,4 +163,16 @@ test('cài đặt robot sai loại / đế không có / cơ cấu lạ ⇒ mặc
   const st = createStore('s', kv).settings()
   assert.deepEqual(st.robot, ui)
   assert.deepEqual(st.robot2, co)
+})
+
+test('giải lưu bản 0.8 (kết quả không có multPct) vẫn đọc được nguyên vẹn, không bị coi là hỏng', () => {
+  const kv = fake()
+  const s = createStore('s', kv)
+  const ids = T.schedule[0].red.concat(T.schedule[0].blue)
+  const old = { ...T, results: T.results.map((r, i) => (i === 0 ? { matchScore: 120, teams: Object.fromEntries(ids.map((id) => [id, { score: 120, penalty: 0 }])) } : r)) }
+  kv.m.set(keys('s').tournament, JSON.stringify(old))
+  const got = s.tournament()
+  assert.notEqual(got, 'corrupt')
+  assert.deepEqual(got, old)
+  assert.equal(isOldRules(got as TournamentState), true)
 })
