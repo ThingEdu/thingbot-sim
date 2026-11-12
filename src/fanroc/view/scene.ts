@@ -43,11 +43,25 @@ export interface FanrocScene {
   trail(segments: Trail['segments'] | null, path?: { x: number; z: number }[]): void
   /** Số hình vệt + đường gợi ý đang có trên sân (phép thử: 0 ngoài màn nhiệm vụ). */
   readonly trailObjects: number
+  /**
+   * Phép thử (R166): hộp bao (toạ độ thế giới, m) từng phần lá cờ đang kẹp trên hình robot `i` — đế, cột, lá — đúng như
+   * đang vẽ; null khi robot không cầm cờ.
+   */
+  heldFlag(i: number): { part: string; min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } }[] | null
+  /**
+   * Phép thử: camera nhìn thẳng từ trên xuống điểm (x, z) từ độ cao `h`, khung nhìn dọc vừa `span` m ở mặt sàn (cao và
+   * hẹp ⇒ gần như chiếu thẳng, vật cao không bị phóng ra ngoài như góc nhìn thường). Đổi góc camera là về như cũ.
+   */
+  lookDown(x: number, z: number, h: number, span: number): void
+  /** Phép thử: camera đặt ở `from` nhìn vào `to` với góc nhìn dọc `fov` độ (ảnh chụp kiểm tra cận cảnh). */
+  lookFrom(from: { x: number; y: number; z: number }, to: { x: number; y: number; z: number }, fov: number): void
   quality(q: Quality): void
   dispose(): void
 }
 
 // ---------- Số đo phần hình (không ảnh hưởng vật lý) ----------
+/** Góc nhìn dọc của camera, độ. */
+const FOV = 42
 /** Hộp Phân Phối theo CAD (FINDINGS.md): hộp mica đứng trên giá móc qua rào phía xa. */
 const BOX = { x0: -0.2266, x1: 0.2234, z0: -1.4917, z1: -1.2005, y0: 0.4209, y1: 0.7758 }
 /** Đáy tầng dưới (xanh) và tấm giữa (đáy tầng trên, cam): cao độ ở mép trước, độ dốc về phía sau. */
@@ -358,7 +372,7 @@ export function createScene(el: HTMLElement): FanrocScene {
 
   const scene = new THREE.Scene()
   scene.background = new THREE.Color(COLORS.background)
-  const camera = new THREE.PerspectiveCamera(42, 1, 0.01, 50)
+  const camera = new THREE.PerspectiveCamera(FOV, 1, 0.01, 50)
   const controls = new OrbitControls(camera, renderer.domElement)
   controls.enableDamping = true
   controls.maxPolarAngle = Math.PI * 0.49
@@ -806,6 +820,7 @@ export function createScene(el: HTMLElement): FanrocScene {
       renderer.render(scene, camera)
     },
     camera(v, robot = 0) {
+      if (camera.fov !== FOV) ((camera.fov = FOV), camera.updateProjectionMatrix())
       view = v
       followIdx = robot
       if (v === 'field') setFieldView()
@@ -822,6 +837,35 @@ export function createScene(el: HTMLElement): FanrocScene {
     trail: setTrail,
     get trailObjects() {
       return trailGroup.children.length
+    },
+    heldFlag(i) {
+      const v = robotViews[i]
+      if (!v) return null
+      v.model.group.updateMatrixWorld(true)
+      let flag: THREE.Object3D | null = null
+      v.model.group.traverse((o) => {
+        if (o.userData.flag && o.visible) flag = o
+      })
+      if (!flag) return null
+      const out: { part: string; min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } }[] = []
+      ;(flag as THREE.Object3D).traverse((o) => {
+        if (!(o instanceof THREE.Mesh)) return
+        const b = new THREE.Box3().setFromObject(o)
+        out.push({ part: String(o.userData.part ?? o.name), min: { x: b.min.x, y: b.min.y, z: b.min.z }, max: { x: b.max.x, y: b.max.y, z: b.max.z } })
+      })
+      return out
+    },
+    lookDown(x, z, h, span) {
+      this.lookFrom({ x, y: h, z: z + 1e-3 }, { x, y: 0, z }, (2 * Math.atan(span / 2 / h) * 180) / Math.PI)
+    },
+    lookFrom(from, to, fov) {
+      view = 'field'
+      goal = null
+      camera.fov = fov
+      camera.updateProjectionMatrix()
+      camera.position.set(from.x, from.y, from.z)
+      controls.target.set(to.x, to.y, to.z)
+      camera.lookAt(to.x, to.y, to.z)
     },
     dispose() {
       ro.disconnect()

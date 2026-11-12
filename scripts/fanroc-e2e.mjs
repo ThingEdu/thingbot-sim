@@ -787,6 +787,21 @@ async function gameTests() {
     await page.waitForTimeout(1500) // bóng bắt đầu xả, camera vào chỗ
     await shot(page, 'r162-start.png')
     if (process.env.FANROC_START_SHOT) await page.screenshot({ path: process.env.FANROC_START_SHOT })
+    // R166: lá cờ Xe Cắm Cờ (Kiến Lửa, ghế 2) ĐANG VẼ lúc xuất phát — đế, cột, lá — nằm trong khung xe nhìn từ trên.
+    const fl = await page.evaluate(() => ({ parts: window.__fanroc.heldFlag(2), fp: window.__fanroc.robots[2].footprint() }))
+    expect(fl.parts && fl.parts.length === 3, `không thấy lá cờ đang kẹp trên hình Xe Cắm Cờ: ${JSON.stringify(fl.parts)}`)
+    const xs = fl.fp.map((c) => c.x)
+    const zs = fl.fp.map((c) => c.z)
+    for (const p of fl.parts) {
+      const inside = p.min.x >= Math.min(...xs) - 1e-3 && p.max.x <= Math.max(...xs) + 1e-3 && p.min.z >= Math.min(...zs) - 1e-3 && p.max.z <= Math.max(...zs) + 1e-3
+      expect(inside, `cờ (${p.part}) vẽ ngoài khung: x ${p.min.x.toFixed(3)}…${p.max.x.toFixed(3)}, z ${p.min.z.toFixed(3)}…${p.max.z.toFixed(3)} / khung x ${Math.min(...xs).toFixed(3)}…${Math.max(...xs).toFixed(3)}, z ${Math.min(...zs).toFixed(3)}…${Math.max(...zs).toFixed(3)}`)
+    }
+    if (process.env.FANROC_FLAG_TOP) {
+      const p = await page.evaluate(() => window.__fanroc.robots[2].pose)
+      await page.evaluate(([x, z]) => window.__fanroc.lookDown(x, z, 20, 1.2), [p.x, p.z])
+      await page.waitForTimeout(500)
+      await page.screenshot({ path: process.env.FANROC_FLAG_TOP })
+    }
     await page.evaluate(() => window.__fanroc.editors.setConfig(0, { type: 'sort', drive: 'diff2', actuator: 'tt' }))
     await go(page, 'match')
     const t1 = await types()

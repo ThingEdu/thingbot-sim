@@ -399,6 +399,10 @@ async function start(): Promise<void> {
     ;(window as unknown as { __fanroc: unknown }).__fanroc = {
       world: game.world, robots: game.robots, match: game.match, humans: game.humans, setSpeed, editors, session: game, shell, store,
       go: (s: Screen, arg?: GoArg) => go(s, arg),
+      /** Phép thử (R166): hộp bao lá cờ đang kẹp như đang vẽ; camera nhìn thẳng xuống. */
+      heldFlag: (i: number) => scene.heldFlag(i),
+      lookDown: (x: number, z: number, h: number, span: number) => scene.lookDown(x, z, h, span),
+      lookFrom: (from: { x: number; y: number; z: number }, to: { x: number; y: number; z: number }, fov: number) => scene.lookFrom(from, to, fov),
       /** Giải đấu: trạng thái, ghế của từng bạn ở trận giải đang chơi, đặt seed bốc thăm cho phép thử. */
       tour: {
         get state() {

@@ -69,6 +69,10 @@ export function makeFlag(): THREE.Group {
   pole.position.y = F.baseH + F.pole / 2
   const f = new THREE.Mesh(new THREE.PlaneGeometry(F.clothW, F.clothH), flagMat)
   f.position.set(F.clothW / 2, F.baseH + F.pole - F.clothH / 2, 0)
+  base.userData.part = 'đế'
+  pole.userData.part = 'cột'
+  f.userData.part = 'lá'
+  g.userData.flag = true
   g.add(base, pole, f)
   return g
 }
@@ -226,10 +230,12 @@ function buildCo(cfg: RobotConfig, g: THREE.Group): Omit<Parts, 'wheels'> {
   g.add(lift, actBox(cfg, 0, 170, -40))
   // S1 tay kẹp vươn tới trước, S2 kẹp cờ.
   const arm = new THREE.Group()
-  // Gốc tay lùi vào thân (R166): tay thu thì đầu tay (z 125) và cờ (≤ 136) đều trong mũi khung (140).
-  arm.position.set(70, 80, 80)
+  // Gốc tay lùi vào thân (R166): tay thu thì đầu tay (z 125) và cờ (≤ 136) đều trong mũi khung (140). x, y theo kẹp.
+  arm.position.set(0, 200, 80)
   arm.add(box(6, 6, 50, M.grey, 0, 0, 20), cadPart('servo', 0, 0, -8))
-  g.add(arm)
+  // Cột đỡ tay từ tấm đế (y 52) lên khớp tay: tay + cờ đang kẹp gắn vào xe, không lơ lửng (R166). Cao 1 mm, kéo theo y kẹp.
+  const mast = box(8, 1, 8, M.alu, 0, 0, 80)
+  g.add(arm, mast)
   const k = claw(g, 18)
   return {
     claw: k.claw,
@@ -240,7 +246,12 @@ function buildCo(cfg: RobotConfig, g: THREE.Group): Omit<Parts, 'wheels'> {
       door.position.y = 30 + Math.sin(a) * 25
       door.position.z = 50 + Math.sin(a) * 28
       k.claw.position.copy(p.grip3).multiplyScalar(1000)
-      // Cần tay kéo dài từ khớp tới kẹp.
+      // Cần tay chạy thẳng từ khớp (trong thân) tới kẹp, cùng độ cao và cùng trục với kẹp: cờ đang kẹp nhìn là gắn
+      // trên đầu tay, không lơ lửng tách khỏi xe (R166).
+      arm.position.x = k.claw.position.x
+      arm.position.y = k.claw.position.y
+      mast.scale.y = Math.max(1, arm.position.y - 52)
+      mast.position.y = (arm.position.y + 52) / 2
       arm.scale.z = Math.max(1, (k.claw.position.z - arm.position.z) / 46)
       k.set(p.grip)
       k.flag.visible = p.hasFlag
