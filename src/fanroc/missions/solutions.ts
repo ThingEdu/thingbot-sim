@@ -12,7 +12,6 @@ const wait = (s: number | B): B => ({
   type: 'control_wait',
   inputs: { DURATION: typeof s === 'number' ? { shadow: { type: 'math_positive_number', fields: { NUM: s } } } : { shadow: { type: 'math_positive_number', fields: { NUM: 1 } }, block: s } },
 })
-const div = (a: B, b: number): B => ({ type: 'operator_divide', inputs: { NUM1: { ...num(0), block: a }, NUM2: num(b) } })
 const repeat = (n: number, body: B[]): B => ({ type: 'control_repeat', inputs: { TIMES: { shadow: { type: 'math_whole_number', fields: { NUM: n } } }, SUBSTACK: { block: chain(body) } } })
 const defs = (...states: object[]) => states.map((s) => (s as { blocks: { blocks: B[] } }).blocks.blocks[0]).map((b, i) => ({ ...b, x: 460, y: 30 + i * 320 }))
 const prog = (begin: B[], extra: B[] = []) => ({
@@ -34,16 +33,23 @@ const tienGiay = (pause: number) =>
 export const forward = (seconds: number[]) => prog(seconds.map((s) => procedureCall('tiến', [s]) as B), defs(tienGiay(0)))
 
 /**
- * Nhiệm vụ 7 (và bản sửa của nhiệm vụ 8): «tiến (giây)» với số giây = cạnh `side` mét ÷ 0,275 m/s, «rẽ trái (độ)» chia
- * cho số đo của nhiệm vụ 4 ở tốc độ 60 (131 °/s), «lặp lại 4».
+/** Số giây «rẽ trái» cho `deg` độ: deg ÷ số độ xoay trong 1 giây (nhiệm vụ 4, 131 °/s ở tốc độ 60), làm tròn 2 chữ số. */
+export const turnSeconds = (deg: number, degPerS = 131) => Math.round((deg / degPerS) * 100) / 100
+/** Định nghĩa «rẽ trái (giây)» (R167): M1 lùi 60, M2 tiến 60, đợi (giây), dừng — không có cảm biến góc nên quay theo thời gian. */
+const reTraiGiay = (pause: number) =>
+  procedureState('rẽ trái', ['giây'], [motor(1, 'backward', 60), motor(2, 'forward', 60), wait(argumentReporter('giây') as B), motor(1, 'forward', 0), motor(2, 'forward', 0), ...(pause > 0 ? [wait(pause)] : [])])
+
+/** Nhiệm vụ 6: gọi «rẽ trái (giây)» lần lượt với từng số giây trong `seconds` (hai lần gọi ⇒ ⭐⭐⭐). */
+export const turnLeft = (seconds: number[]) => prog(seconds.map((s) => procedureCall('rẽ trái', [s]) as B), defs(reTraiGiay(0.3)))
+
+/**
+ * Nhiệm vụ 7 (và bản sửa của nhiệm vụ 8): «tiến (giây)» với số giây = cạnh `side` mét ÷ 0,275 m/s, «rẽ trái (`turn`)»,
+ * «lặp lại 4». `turn` mặc định 90° ÷ 131 °/s (số đo nhiệm vụ 4) = 0,69 s.
  */
-export const turtle = (side: number, degPerS: number) =>
+export const turtle = (side: number, turn = turnSeconds(90)) =>
   prog(
-    [repeat(4, [procedureCall('tiến', [secondsFor(side)]) as B, procedureCall('rẽ trái', [90]) as B])],
-    defs(
-      tienGiay(0.3),
-      procedureState('rẽ trái', ['độ'], [motor(1, 'backward', 60), motor(2, 'forward', 60), wait(div(argumentReporter('độ') as B, degPerS)), motor(1, 'forward', 0), motor(2, 'forward', 0), wait(0.3)]),
-    ),
+    [repeat(4, [procedureCall('tiến', [secondsFor(side)]) as B, procedureCall('rẽ trái', [turn]) as B])],
+    defs(tienGiay(0.3), reTraiGiay(0.3)),
   )
 
 const servo = (port: string, angle: number): B => ({ type: 'thingBotC3_setServoAngle', fields: { SERVO: port.slice(1) }, inputs: { ANGLE: num(angle) } })

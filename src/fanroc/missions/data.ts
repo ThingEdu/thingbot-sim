@@ -86,7 +86,6 @@ const motor = (m: 1 | 2, dir: 'forward' | 'backward', speed: number): B => ({ ty
 const arg = (name: string): B => argumentReporter(name) as B
 const waitFor = (value: B): B => ({ type: 'control_wait', inputs: { DURATION: { ...shadow('math_positive_number', 'NUM', 1), block: value } } })
 const wait = (s: number): B => ({ type: 'control_wait', inputs: { DURATION: shadow('math_positive_number', 'NUM', s) } })
-const divide = (a: B, b: number): B => ({ type: 'operator_divide', inputs: { NUM1: { ...num(0), block: a }, NUM2: num(b) } })
 /** Định nghĩa khối của em `name(param)` có thân `body` (khối mũ, đặt bên phải chương trình). */
 const define = (name: string, param: string, body: B[], y: number): B => ({
   ...(procedureState(name, [param], body) as { blocks: { blocks: B[] } }).blocks.blocks[0],
@@ -96,14 +95,14 @@ const define = (name: string, param: string, body: B[], y: number): B => ({
 const call = (name: string, value: number): B => procedureCall(name, [value]) as B
 
 /**
- * Nhiệm vụ 8 — chương trình bị sai: «tiến (2.55)» đúng (0,70 m ÷ 0,275 m/s, R161), nhưng «rẽ trái (độ)» chia cho 100 °/s (số đoán, chưa đo) trong khi robot quay ~131 °/s,
- * nên mỗi góc robot quay quá ~ 28° và vệt không khép (phép thử grade.test.ts chạy nó trên sân để chắc chắn).
+ * Nhiệm vụ 8 — chương trình bị sai: «tiến (2.55)» đúng (0,70 m ÷ 0,275 m/s, R161), nhưng «rẽ trái (0.9)» lấy 90° ÷ 100 °/s (số đoán, chưa đo)
+ * trong khi robot quay ~131 °/s (90° ⇒ 0,69 s, R167), nên mỗi góc robot quay quá ~ 28° và vệt không khép (phép thử grade.test.ts chạy nó trên sân để chắc chắn).
  */
 const BUGGY_SQUARE = program(
-  [{ type: 'control_repeat', inputs: { TIMES: shadow('math_whole_number', 'NUM', 4), SUBSTACK: { block: chain([call('tiến', 2.55), call('rẽ trái', 90)]) } } }],
+  [{ type: 'control_repeat', inputs: { TIMES: shadow('math_whole_number', 'NUM', 4), SUBSTACK: { block: chain([call('tiến', 2.55), call('rẽ trái', 0.9)]) } } }],
   [
     define('tiến', 'giây', [motor(1, 'forward', 60), motor(2, 'forward', 60), waitFor(arg('giây')), motor(1, 'forward', 0), motor(2, 'forward', 0), wait(0.3)], 30),
-    define('rẽ trái', 'độ', [motor(1, 'backward', 60), motor(2, 'forward', 60), waitFor(divide(arg('độ'), 100)), motor(1, 'forward', 0), motor(2, 'forward', 0), wait(0.3)], 330),
+    define('rẽ trái', 'giây', [motor(1, 'backward', 60), motor(2, 'forward', 60), waitFor(arg('giây')), motor(1, 'forward', 0), motor(2, 'forward', 0), wait(0.3)], 330),
   ],
 )
 
@@ -247,21 +246,23 @@ export const MISSIONS: Mission[] = [
     ],
   },
   {
-    id: 'khoi-re', stage: 2, n: 6, title: 'Khối "rẽ phải/trái (độ)"',
-    goal: 'Tạo khối của em «rẽ trái (độ)» và dùng nó cho robot quay trái đúng 90° tại chỗ.',
+    // R167: như nhiệm vụ 5, robot không có cảm biến góc nên khối rẽ theo số giây. Giữ id 'khoi-re' (tiến độ đã lưu).
+    id: 'khoi-re', stage: 2, n: 6, title: 'Khối "rẽ phải/trái (giây)"',
+    goal: 'Tạo khối của em «rẽ trái (giây)» rồi tính số giây để robot quay trái đúng 90° tại chỗ.',
     robot: MAKER, start: CORNER, balls: false, toolbox: TOOLBOX_TURTLE, starter: EMPTY, kind: 'program', maxTime: 40,
     guide: [
-      'Bấm mục "Khối của em", bấm "Tạo một khối", đặt tên "rẽ trái", bấm "+ Thêm ô số" và đổi tên ô thành "độ".',
-      'Kéo khối vào ngay dưới khối hồng «định nghĩa rẽ trái (độ)»: M1 lùi 60, M2 tiến 60, đợi (độ ÷ số độ xoay trong 1 giây em đo), rồi dừng.',
-      'Gọi «rẽ trái (90)». Robot phải quay mặt sang trái, vẫn đứng tại chỗ.',
-      'Muốn ⭐⭐⭐: quay 90° bằng hai lần gọi, ví dụ «rẽ trái (45)» hai lần. Thử làm thêm «rẽ phải (độ)» nhé.',
+      'Robot không đo được mình đã quay bao nhiêu độ, nên khối rẽ cũng chạy theo số giây, giống «tiến (giây)».',
+      'Bấm mục "Khối của em", bấm "Tạo một khối", đặt tên "rẽ trái", bấm "+ Thêm ô số" và đổi tên ô thành "giây".',
+      'Kéo khối vào ngay dưới khối hồng «định nghĩa rẽ trái (giây)»: M1 lùi 60, M2 tiến 60, đợi (giây), rồi dừng.',
+      'Tính số giây: 90 ÷ số độ robot xoay được trong 1 giây (số em đo ở nhiệm vụ 4). Gọi «rẽ trái (số giây đó)». Robot phải quay mặt sang trái, vẫn đứng tại chỗ.',
+      'Muốn ⭐⭐⭐: quay 90° bằng hai lần gọi, mỗi lần nửa số giây (45°). Thử làm thêm «rẽ phải (giây)» nhé.',
     ],
     goals: [{ type: 'turn', deg: 90, tol: 5 }, { type: 'return', tol: 0.05 }, { type: 'paramBlock' }],
     stars: { two: [{ type: 'turn', deg: 90, tol: 2 }], three: [{ type: 'paramBlock', calls: 2 }] },
     hints: [
-      { when: 'paramBlock', text: 'Chương trình cần khối của em có ô số — tạo khối «rẽ trái» với ô "độ" rồi gọi nó.' },
-      { when: 'turnOver', text: 'Robot quay quá {d}° — 90° cần ít thời gian hơn.' },
-      { when: 'turnUnder', text: 'Robot còn thiếu {d}° — thử tăng thời gian đợi.' },
+      { when: 'paramBlock', text: 'Chương trình cần khối của em có ô số — tạo khối «rẽ trái» với ô "giây" rồi gọi nó.' },
+      { when: 'turnOver', text: 'Robot quay quá {d}° — giảm số giây.' },
+      { when: 'turnUnder', text: 'Robot còn thiếu {d}° — tăng số giây một chút.' },
       { when: 'return', text: 'Robot trôi khỏi chỗ {d} cm — hai bánh cần cùng tốc độ, ngược chiều.' },
     ],
   },
@@ -271,9 +272,9 @@ export const MISSIONS: Mission[] = [
     robot: MAKER, start: SQUARE_A.start, balls: false, toolbox: TOOLBOX_TURTLE, starter: EMPTY, kind: 'program', maxTime: 40, path: SQUARE_A.path,
     guide: [
       'Một hình vuông là 4 lần: đi một cạnh rồi rẽ trái 90°. Robot rẽ trái nên đi ngược chiều kim đồng hồ quanh núi.',
-      'Tạo lại hai khối của em «tiến (giây)» và «rẽ trái (độ)» như nhiệm vụ 5 và 6.',
+      'Tạo lại hai khối của em «tiến (giây)» và «rẽ trái (giây)» như nhiệm vụ 5 và 6.',
       'Tính số giây đi hết một cạnh 0,72 m: 0,72 ÷ quãng đi được trong 1 giây (số đo nhiệm vụ 4).',
-      'Dùng «lặp lại 4» bọc quanh «tiến (số giây đó)» và «rẽ trái (90)».',
+      'Dùng «lặp lại 4» bọc quanh «tiến (số giây đó)» và «rẽ trái (số giây quay 90°)».',
       'Bấm ▶, xem vệt có khép lại không. Robot về càng sát chỗ cũ, em càng được nhiều sao.',
     ],
     ...closedLoop(2.4),
@@ -291,13 +292,13 @@ export const MISSIONS: Mission[] = [
     guide: [
       'Bấm ▶ và quan sát vệt. Robot sai ở cạnh hay ở góc rẽ?',
       'Mỗi màu vệt là một lệnh động cơ. Đếm xem robot quay được bao nhiêu độ ở mỗi góc.',
-      'Đọc lại từng khối của em: số em chia có đúng với số đo ở nhiệm vụ 4 không?',
+      'Đọc lại số giây em gọi «tiến» và «rẽ trái»: có đúng với số đo ở nhiệm vụ 4 không?',
       'Sửa một chỗ, chạy lại, so vệt mới với vệt cũ.',
     ],
     ...closedLoop(2.3),
     hints: [
       { when: 'measure', text: 'Robot chưa đi hết vòng — có đủ 4 cạnh và 4 lần rẽ chưa?' },
-      { when: 'return', text: 'Vệt chưa khép, còn cách chỗ xuất phát {d} cm. Robot quay quá — 90° cần ít thời gian hơn?' },
+      { when: 'return', text: 'Vệt chưa khép, còn cách chỗ xuất phát {d} cm. Robot quay quá — «rẽ trái» cần ít giây hơn?' },
       { when: 'uses', text: 'Đã khép vòng! Giữ «lặp lại 4» để được ⭐⭐⭐.' },
       { when: 'paramBlock', text: 'Đã khép vòng! Giữ khối của em có ô số để được ⭐⭐⭐.' },
     ],

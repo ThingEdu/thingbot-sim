@@ -432,7 +432,7 @@ async function main() {
     // ⇒ lời nhắc cũ được xoá (trước đây còn treo mãi).
     const warn = () => page.evaluate(() => { const w = document.querySelectorAll('.fe-warn')[0]; return w.hidden ? '' : w.textContent })
     const tbParam = async () => {
-      await page.evaluate((state) => window.__fanroc.editors.load(0, state), turtle(0.72, 131))
+      await page.evaluate((state) => window.__fanroc.editors.load(0, state), turtle(0.72, 0.68))
       await Promise.all([page.waitForEvent('download', { timeout: 10000 }), runBtn(page, 'Tải .tb để nạp ThingBot').click()])
       const w = await warn()
       expect(/chưa nạp được lên ThingBot thật/.test(w), `tải .tb có khối ô số mà không nhắc: "${w}"`)
@@ -676,7 +676,7 @@ async function missionTests() {
     const g2 = await page.locator('.mi-guide p').innerText()
     expect(g2 === MISSIONS[6].guide[0], 'HƯỚNG DẪN không trượt sang bước hướng dẫn đầu')
     await page.locator('.mi-guide button', { hasText: 'Đóng' }).click()
-    await page.evaluate((state) => window.__fanroc.editors.load(0, state), turtle(0.72, 131))
+    await page.evaluate((state) => window.__fanroc.editors.load(0, state), turtle(0.72, 0.68))
     await runBtn(page, 'Chạy').click()
     await page.waitForFunction(() => window.__fanroc.mission?.result, null, { timeout: 45000 })
     const r = await page.evaluate(() => ({ ...window.__fanroc.mission }))

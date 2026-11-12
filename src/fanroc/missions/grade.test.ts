@@ -10,7 +10,7 @@ import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
 import { MISSION_SEED, MISSIONS } from './data.ts'
-import { climb, forward, secondsFor, straight, turtle } from './solutions.ts'
+import { climb, forward, secondsFor, straight, turnLeft, turnSeconds, turtle } from './solutions.ts'
 import { grade, loopEmpty, restWaits, shouldGrade, touchesMountain, type RunState } from './grade.ts'
 import type { Goal, Mission, RunRecord } from './types.ts'
 import { AUTO_TIMES, defaultConfig, sample, teleopButtons, TOOLBOX_OPCODES } from '../programs.ts'
@@ -184,7 +184,7 @@ test('12 nhiệm vụ, id duy nhất, n = 1..12, chặng và tên đúng bảng 
   assert.deepEqual(MISSIONS.map((m) => m.n), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
   assert.deepEqual(MISSIONS.map((m) => m.stage), [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 4])
   assert.deepEqual(MISSIONS.map((m) => m.title), [
-    'Làm quen robot', 'Đi thẳng', 'Cong và xoay', 'Đo robot', 'Khối "tiến (giây)"', 'Khối "rẽ phải/trái (độ)"', 'Hình vuông', 'Gỡ lỗi',
+    'Làm quen robot', 'Đi thẳng', 'Cong và xoay', 'Đo robot', 'Khối "tiến (giây)"', 'Khối "rẽ phải/trái (giây)"', 'Hình vuông', 'Gỡ lỗi',
     'Dọn Khu Chữa Cháy', 'Cắm cờ', 'Leo Thang Cứu Hỏa', 'Trận đầu tiên',
   ])
   assert.equal(byN(12).kind, 'match')
@@ -249,7 +249,9 @@ test('nhiệm vụ 10 dùng vị trí lỗ cờ Núi A (holeCentres) làm điể
 })
 
 // ---------- Bộ chấm: khép vòng (nhiệm vụ 7) ----------
-const SOLVED = turtle(0.72, 131)
+// «rẽ trái (0.69)» (90° ÷ 131 °/s) cũng 3 sao nhưng mỗi góc quay dư ~0,4°, thân sượt chân Núi A (R167); học sinh xem vệt
+// chỉnh xuống 0,68 thì không chạm. Lời giải mẫu dùng 0,68.
+const SOLVED = turtle(0.72, 0.68)
 
 test('nhiệm vụ 7: cuối cách đầu 0,10 m ⇒ 1 sao; 0,05 m ⇒ 2 sao', () => {
   assert.deepEqual([grade(M7, record(M7, { end: at(M7.start, 0.1) })).stars, grade(M7, record(M7, { end: at(M7.start, 0.1) })).done], [1, true])
@@ -300,7 +302,7 @@ test('đi thẳng (nhiệm vụ 2): hụt ⇒ gợi ý "hụt {d} cm", quá ⇒ 
 
 test('quay (nhiệm vụ 6): quá ⇒ "quay quá", thiếu ⇒ "thiếu"; ⭐⭐ cần sai ≤ 2°', () => {
   const m = byN(6)
-  const p = prog([procedureCall('rẽ trái', [90]) as B], defs(procedureState('rẽ trái', ['độ'], [])))
+  const p = prog([procedureCall('rẽ trái', [90]) as B], defs(procedureState('rẽ trái', ['giây'], [])))
   const r = (d: number) => grade(m, record(m, { end: at(m.start, 0, 0, (d * Math.PI) / 180), program: p }))
   assert.equal(r(90).stars, 2)
   assert.equal(r(93).stars, 1)
@@ -443,7 +445,21 @@ test('nhiệm vụ 5 «tiến (giây)» (R161): hai lần gọi tiến(0,4 m ÷ 
   assert.match(long.hint ?? '', /^Đi quá \d+ cm — giảm số giây\.$/)
 })
 
-test('nhiệm vụ 7 có lời giải: «lặp lại 4» + tiến (0,72 ÷ 0,275 = 2.62 giây) + rẽ trái (90) chạy trên sân đạt ≥ 2 sao', async (t) => {
+test('nhiệm vụ 6 «rẽ trái (giây)» (R167): rẽ trái(90° ÷ 131) chạy trên sân đạt 2 sao, hai lần gọi nửa số giây 3 sao; quá nhiều giây ⇒ «giảm số giây»', async (t) => {
+  const m = byN(6)
+  assert.equal(m.id, 'khoi-re', 'giữ id để tiến độ đã lưu còn nguyên')
+  const one = grade(m, await runOnField(m, turnLeft([turnSeconds(90)])))
+  const half = turnSeconds(45)
+  const two = grade(m, await runOnField(m, turnLeft([half, half])))
+  t.diagnostic(`một lần ${turnSeconds(90)} s: ${one.stars} sao ${one.hint ?? ''}; hai lần ${half} s: ${two.stars} sao ${two.hint ?? ''}`)
+  assert.equal(one.stars, 2)
+  assert.equal(two.stars, 3)
+  const over = grade(m, await runOnField(m, turnLeft([turnSeconds(120)])))
+  assert.equal(over.done, false)
+  assert.match(over.hint ?? '', /^Robot quay quá \d+° — giảm số giây\.$/)
+})
+
+test('nhiệm vụ 7 có lời giải: «lặp lại 4» + tiến (0,72 ÷ 0,275 = 2.62 giây) + rẽ trái (0.68 giây) chạy trên sân đạt ≥ 2 sao; rẽ trái (90° ÷ 131 = 0.69) cũng 3 sao', async (t) => {
   const r = await runOnField(M7, SOLVED)
   const g = grade(M7, r)
   t.diagnostic(`sai số cuối ${(err(r) * 100).toFixed(1)} cm, quãng ${r.trail.distance.toFixed(2)} m, góc ${r.trail.turned.toFixed(0)}°, dừng lúc ${r.trail.time.toFixed(2)} s, chấm lúc ${r.gradedAt.toFixed(2)} s (${r.why}), ${g.stars} sao`)
@@ -453,15 +469,16 @@ test('nhiệm vụ 7 có lời giải: «lặp lại 4» + tiến (0,72 ÷ 0,275
   assert.ok(g.stars >= 2, `${g.stars} sao: ${JSON.stringify(g.goals)}`)
   assert.equal(g.stars, 3)
   assert.equal(r.touchedMountain, false, 'hình vuông quanh Núi A không chạm chân núi')
+  assert.equal(grade(M7, await runOnField(M7, turtle(0.72))).stars, 3, 'số giây tính thẳng 90 ÷ 131 = 0,69 vẫn 3 sao')
 })
 
-test('nhiệm vụ 8: chương trình có sẵn chạy trên sân cho vệt không khép; sửa số chia góc rẽ thì đạt ≥ 2 sao', async (t) => {
+test('nhiệm vụ 8: chương trình có sẵn chạy trên sân cho vệt không khép; sửa số giây «rẽ trái» thì đạt ≥ 2 sao', async (t) => {
   const m = byN(8)
   const bad = await runOnField(m, m.starter!)
   const gb = grade(m, bad)
   t.diagnostic(`chương trình sai: sai số cuối ${(err(bad) * 100).toFixed(1)} cm, ${gb.stars} sao — ${gb.hint}`)
   assert.equal(gb.done, false)
-  const good = await runOnField(m, turtle(0.7, 131))
+  const good = await runOnField(m, turtle(0.7))
   const gg = grade(m, good)
   t.diagnostic(`đã sửa: sai số cuối ${(err(good) * 100).toFixed(1)} cm, chạm núi ${good.touchedMountain}, chấm lúc ${good.gradedAt.toFixed(2)} s (${good.why}), ${gg.stars} sao`)
   assert.ok(gg.stars >= 2, `${gg.stars} sao`)

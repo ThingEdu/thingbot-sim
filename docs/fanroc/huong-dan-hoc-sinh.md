@@ -81,7 +81,7 @@ vụ chia 4 chặng. Làm theo thứ tự hay nhảy cóc đều được.
 | Chặng | Nhiệm vụ |
 |---|---|
 | 1 · Hai bánh xe | 1 Làm quen robot · 2 Đi thẳng · 3 Cong và xoay · 4 Đo robot |
-| 2 · Con rùa robot | 5 Khối "tiến (giây)" · 6 Khối "rẽ phải/trái (độ)" · 7 Hình vuông · 8 Gỡ lỗi |
+| 2 · Con rùa robot | 5 Khối "tiến (giây)" · 6 Khối "rẽ phải/trái (giây)" · 7 Hình vuông · 8 Gỡ lỗi |
 | 3 · Việc trên sân | 9 Dọn Khu Chữa Cháy · 10 Cắm cờ (Xe Cắm Cờ) · 11 Leo Thang Cứu Hỏa |
 | 4 · Thi đấu | 12 Trận đầu tiên |
 
