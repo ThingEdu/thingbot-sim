@@ -347,3 +347,29 @@ Quy tắc `stepClimb` (đúng spec):
   lịch sử.
 - [ ] Xem bằng mắt: một Trận lẻ mức Khó tới hết giờ thấy 4 robot treo, bảng điểm "× 1,80".
 - [ ] Commit `fanroc: tài liệu theo luật V4`. Không bump version, không tag (hỏi anh trước khi làm bản 0.9).
+
+### Task 4b: Thanh xà theo CAD sân mới (anh gửi 12/11, `~/Downloads/Full sân Fanroc`)
+
+CAD là các tệp STEP rời, mỗi tệp một chi tiết, toạ độ riêng (không có vị trí lắp). Số đọc được:
+- **Part 38**: thanh xà, ống Ø20 dày 2 mm, dài 1,400 m giữa tâm hai cột, trục cao 0,6575 m.
+- **Part 34** (×4): cột nhôm hộp 20×20, cao 0,638 m.
+- **Part 37** (×4): kẹp đầu cột, trụ Ø35 cao 65 mm (y 0,608…0,673), lỗ Ø21 đón ống.
+- **Part 35**: đế cột.
+
+Vị trí đặt theo Hình 1 của luật (CAD không có), số tính tay đã kiểm:
+- cột phía Hộp Phân Phối: (∓0,202; −1,19), sát mép hộp;
+- cột phía rào: (∓1,19; −0,198);
+- vạch: chỗ thanh cắt mép z = −0,6088 của Khu Chữa Cháy, cách cột rào 0,580 m, x ≈ ∓0,781;
+- thanh đi qua tâm ô vàng (lệch 9 mm).
+
+Ruling (ledger): kích thước theo CAD. Vạch theo định nghĩa của luật ("ngay trên mép Khu Chữa Cháy"); số "khoảng 430 / 870" trong luật chỉ là tham khảo.
+
+**Files:** `src/fanroc/layout.ts` (LADDER, LADDERS), `layout.test.ts`, `ladder.test.ts`, `world.ts` (cột hộp 20×20 cao 0,638 + kẹp Ø35), `view/scene.ts` (vẽ cột, kẹp, ống Ø20), spec (mục Sân).
+- `LADDER = { y: 0.6575, divider: <tính từ LADDERS, ≈0.580>, rodR: 0.010, post: 0.020, postH: 0.638, clampR: 0.0175, clampH: 0.065 }`. `divider` tính bằng hàm từ hình học (giao với z = −0,6088), không gõ tay.
+- Test layout:
+  - `ladderLen` = 1,400 ± 0,002;
+  - vạch cách `a` 0,580 ± 0,005 và nằm trong `ZONES.fire[0]`;
+  - tâm ô vàng cách trục thanh < 0,02;
+  - đầu `b` cách mép Hộp Phân Phối (x = ±0,202) < 0,005.
+- Mọi test Task 1–4 phụ thuộc 1,300 / 0,43 / 0,65 sửa theo số mới, không nới dung sai.
+- Commit `fanroc: thanh xà theo CAD sân (1,4 m, Ø20, cột 20×20)`.
