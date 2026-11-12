@@ -8,6 +8,27 @@ export type Climb = 'none' | 'contact' | 'ground' | 'water'
  *  gap = khoảng cách tối thiểu giữa hai robot treo; end = chừa ở hai đầu thanh; hangY = độ rủ của thân robot khi treo (m). */
 export const HOOK = { upDeg: 150, downDeg: 30, tol: 0.06, slideV: 0.15, gap: 0.3, end: 0.05, hangY: 0.12 }
 
+/**
+ * Hình móc (vẽ bằng khối, chưa có CAD; anh Tuấn 12/11: không được có cơ cấu thò ra ngoài khung lúc xuất phát): cần ống lồng
+ * THẲNG ĐỨNG ở tâm nóc xe, đầu chữ J. `reach` = thanh ngang của chữ J vươn ra khỏi trục cần, `t` = dày thanh ngang,
+ * `drop` = nhánh rủ xuống của chữ J.
+ */
+export const HOOK_TIP = { reach: 0.044, t: 0.008, drop: 0.03 }
+
+/**
+ * Độ cao đỉnh móc (mặt trên thanh ngang chữ J) trong hệ thân xe (gốc ở đáy thân), m — nguồn chung cho hình 3D và R01.
+ * - Đứng sàn: cần lồng rút hết ở 0° (đỉnh móc ngang nóc `h`, không cao hơn), duỗi dần theo góc servo, từ `HOOK.upDeg` trở
+ *   lên thì đỉnh móc cao hơn trục thanh xà 3 cm.
+ * - Đang treo (thân rủ ở `HOOK.hangY`): cần dài đúng từ nóc thân tới trục thanh xà, thanh ngang chữ J nằm trên trục thanh.
+ * Cần không bao giờ nằm ngang nên móc luôn ở trong khung w × l (nhìn từ trên chỉ thò `HOOK_TIP.reach` khỏi tâm).
+ */
+export function hookTop(def: { size: { h: number } }, deg: number, hanging: boolean): number {
+  const { h } = def.size
+  if (hanging) return LADDER.y - HOOK.hangY + HOOK_TIP.t / 2
+  const frac = Math.max(0, Math.min(1, deg / HOOK.upDeg))
+  return h + frac * (LADDER.y + 0.03 - h)
+}
+
 /** % điểm leo của mỗi mức. */
 export const CLIMB_PCT: Record<Climb, number> = { none: 0, contact: 5, ground: 10, water: 20 }
 

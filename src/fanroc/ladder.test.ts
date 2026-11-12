@@ -1,8 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { CLIMB_PCT, HOOK, barYaw, climbOf, ladderLen, pointAt, project, slideRange, stepClimb, type ClimbState } from './ladder.ts'
+import { CLIMB_PCT, HOOK, HOOK_TIP, barYaw, hookTop, climbOf, ladderLen, pointAt, project, slideRange, stepClimb, type ClimbState } from './ladder.ts'
 import { FIELD, LADDER } from './layout.ts'
-import { ROBOTS } from './robots.ts'
+import { ROBOTS, ruleChecks } from './robots.ts'
 
 const FLOOR: ClimbState = { mode: 'floor', bar: null, s: 0 }
 type Inp = Parameters<typeof stepClimb>[1]
@@ -154,4 +154,33 @@ test('stepClimb với range: treo không trượt ra khỏi đoạn; đang ở n
   const p = on(0.1)
   const g = stepClimb(FLOOR, inp({ hookDeg: HOOK.downDeg, lastHookDeg: HOOK.upDeg + 5, x: p.x, z: p.z, range }))
   assert.deepEqual(g, { mode: 'hang', bar: 'red', s: 0.3 })
+})
+
+// ---------- Móc thu gọn trong thân lúc xuất phát (anh Tuấn 12/11) ----------
+test('hookTop: mọi mẫu robot — 0° đỉnh móc ≤ nóc và trong khung; giơ (≥ upDeg, 180°) cao hơn trục thanh ≥ 2 cm; treo thì tới trục thanh', () => {
+  for (const d of Object.values(ROBOTS)) {
+    const { w, l, h } = d.size
+    assert.ok(hookTop(d, 0, false) <= h + 1e-9, `${d.type}: móc thu cao ${hookTop(d, 0, false)} > nóc ${h}`)
+    assert.ok(HOOK_TIP.reach <= Math.min(w, l) / 2, `${d.type}: chữ J thò khỏi khung nhìn từ trên`)
+    for (const deg of [HOOK.upDeg, 180]) assert.ok(hookTop(d, deg, false) >= LADDER.y + 0.02, `${d.type} ${deg}°`)
+    // Giơ dần: tăng đơn điệu theo góc, không vượt mức giơ hết.
+    let last = -Infinity
+    for (let deg = 0; deg <= 180; deg += 10) {
+      const y = hookTop(d, deg, false)
+      assert.ok(y >= last && y <= LADDER.y + 0.03 + 1e-9, `${d.type} ${deg}°: ${y}`)
+      last = y
+    }
+    // Đang treo: thân rủ ở HOOK.hangY, cần dài đúng trục thanh − nóc thân; chữ J nằm trên trục thanh.
+    const pole = hookTop(d, 0, true) - HOOK_TIP.t / 2 - h
+    assert.ok(Math.abs(pole - (LADDER.y - (HOOK.hangY + h))) < 1e-9, `${d.type} cần treo ${pole}`)
+  }
+})
+
+test('ruleChecks R01 tính cả móc đã thu: mọi mẫu vẫn ≤ 300 × 300 × 850', () => {
+  for (const d of Object.values(ROBOTS)) {
+    const r01 = ruleChecks({ type: d.type, drive: d.drives[0], actuator: 'tt' }, 0).find((c) => /^R01/.test(c.text))
+    assert.ok(r01 && r01.ok === true && /móc đã thu/.test(r01.text), `${d.type}: ${JSON.stringify(r01)}`)
+    const mm = (m: number) => Math.round(m * 1000)
+    assert.ok(r01.text.includes(`× ${mm(Math.max(d.size.h, hookTop(d, 0, false)))} mm`), r01.text)
+  }
 })

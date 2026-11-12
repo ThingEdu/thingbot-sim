@@ -11,7 +11,7 @@ import { servo360, type PortValues } from '../ports.ts'
 import { FLAG_LEN, buildRobotModel, makeFlag, type RobotModel } from './robotModels.ts'
 import { cadToModel, chuteExitModel, chuteSlot } from './cadModel.ts'
 import { TRAIL_COLORS, type Trail } from '../trail.ts'
-import { HOOK, pointAt } from '../ladder.ts'
+import { HOOK_TIP, hookTop, pointAt } from '../ladder.ts'
 import mesh from '../assets/mountain-mesh.json' with { type: 'json' }
 
 /** Ba góc chọn được ở ⚙ (`field | follow | driver`) và `orbit`: quay chậm quanh sân, nền của màn chính. */
@@ -295,7 +295,11 @@ function buildLadders(): THREE.Group {
   return g
 }
 
-/** Móc leo xà vẽ bằng khối đơn giản (chưa có CAD): cần đứng ở tâm nóc xe, đầu móc chữ J. */
+/**
+ * Móc leo xà vẽ bằng khối đơn giản (chưa có CAD): cần ống lồng thẳng đứng ở tâm nóc xe, đầu móc chữ J. Ở 0° cần rút hết,
+ * đỉnh móc ngang nóc xe (không thò ra ngoài khung lúc xuất phát); độ cao đỉnh móc lấy từ `hookTop` (ladder.ts) — cùng số
+ * với ô kiểm tra R01.
+ */
 interface Hook {
   group: THREE.Group
   /** Góc servo móc (độ), robot đang treo, chiều cao thân xe (m). */
@@ -305,24 +309,26 @@ interface Hook {
 function makeHook(): Hook {
   const m = mat(0xf2c230, { roughness: 0.5 })
   const group = new THREE.Group()
-  const pivot = new THREE.Group()
-  group.add(pivot)
-  const poleGeo = new THREE.CylinderGeometry(0.006, 0.006, 1, 8).translate(0, 0.5, 0)
-  const pole = new THREE.Mesh(poleGeo, m)
+  // Ống lồng: ống ngoài to (nửa dưới) + ống trong nhỏ (cả đoạn), cùng mọc từ nóc xe lên.
+  const outer = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 1, 10).translate(0, 0.5, 0), m)
+  const inner = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 1, 8).translate(0, 0.5, 0), m)
   const tip = new THREE.Group()
   // Chữ J: thanh ngang ngắn rồi thanh rủ xuống, ôm thanh xà từ trên.
-  tip.add(box3(0.04, 0.008, 0.012, m, 0.02, 0, 0), box3(0.008, 0.03, 0.012, m, 0.04, -0.015, 0))
-  pivot.add(pole, tip)
+  const { reach, t, drop } = HOOK_TIP
+  tip.add(box3(reach, t, 0.012, m, reach / 2, 0, 0), box3(t, drop, 0.012, m, reach - t / 2, -drop / 2, 0))
+  group.add(outer, inner, tip)
   return {
     group,
     set(deg, hanging, h) {
-      const frac = Math.max(0, Math.min(1, deg / HOOK.upDeg))
-      // Đứng sàn: giơ hết thì đầu móc cao hơn thanh 3 cm; đang treo: cần vừa chạm thanh (robot rủ ở HOOK.hangY).
-      const len = hanging ? LADDER.y - HOOK.hangY - h : LADDER.y + 0.03 - h
-      pivot.position.y = h
-      pivot.rotation.x = hanging ? 0 : (1 - frac) * (Math.PI / 2)
-      pole.scale.y = Math.max(0.01, len)
-      tip.position.y = len
+      const top = hookTop({ size: { h } }, deg, hanging)
+      // Tâm thanh ngang chữ J; cần dài từ nóc xe tới đó (0 khi đã thu).
+      const y = top - HOOK_TIP.t / 2
+      const len = Math.max(0, y - h)
+      tip.position.y = y
+      outer.position.y = inner.position.y = h
+      outer.visible = inner.visible = len > 0.002
+      inner.scale.y = Math.max(0.001, len)
+      outer.scale.y = Math.max(0.001, len / 2)
     },
   }
 }

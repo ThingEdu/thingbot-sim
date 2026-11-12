@@ -3,6 +3,7 @@
 import type { PortValues } from './ports.ts'
 import type { Ps2Button } from './programs.ts'
 import { ZONES } from './layout.ts'
+import { HOOK_TIP, hookTop } from './ladder.ts'
 
 export type RobotType = 'maker' | 'makerLift' | 'makerIntake' | 'makerPro' | 'ui' | 'co' | 'sort'
 export type Drive = 'diff2' | 'omni' | 'mecanum'
@@ -191,11 +192,14 @@ export function ruleChecks(cfg: RobotConfig, extendNow: number, armFrac = 0): { 
   // Móc ở cổng ngoài `servos` (Xe Cắm Cờ: S4) vẫn là một servo.
   const hookExtra = def.hook.port in def.servos ? 0 : 1
   const servos = Object.keys(def.servos).length + (s360 ? mechCount : 0) + hookExtra
-  const { w, l, h } = def.size
+  // R01 tính cả móc đã thu (0°): cần ống lồng đứng ở tâm nóc, thanh ngang chữ J vươn HOOK_TIP.reach khỏi tâm.
+  const w = Math.max(def.size.w, 2 * HOOK_TIP.reach)
+  const l = Math.max(def.size.l, 2 * HOOK_TIP.reach)
+  const h = Math.max(def.size.h, hookTop(def, 0, false))
   const startOk = Math.max(w, l) <= 0.3 + 1e-9 && h <= 0.85 + 1e-9
   const extent = Math.max(w, l) + extendNow + armFrac * (def.arm?.reach ?? 0) + Math.max(0, chuteExit(def, armFrac)?.reach ?? 0)
   const out: { ok: boolean | 'note'; text: string }[] = [
-    { ok: startOk, text: `R01 kích thước xuất phát: ${mm(w)} × ${mm(l)} × ${mm(h)} mm (giới hạn 300 × 300 × 850 mm)` },
+    { ok: startOk, text: `R01 kích thước xuất phát (cả móc đã thu): ${mm(w)} × ${mm(l)} × ${mm(h)} mm (giới hạn 300 × 300 × 850 mm)` },
     { ok: extent <= 0.5 + 1e-9, text: `Mở rộng một chiều: ${mm(extent)} mm / 500 mm` },
     { ok: motors <= 4, text: `Động cơ TT: ${motors} / 4` },
     { ok: servos <= 5, text: `Servo: ${servos} / 5` },
