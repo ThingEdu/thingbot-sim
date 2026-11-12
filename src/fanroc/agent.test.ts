@@ -9,6 +9,7 @@ import { NEUTRAL, type PortValues } from './ports.ts'
 import type { RobotConfig } from './robots.ts'
 import type { Climb } from './ladder.ts'
 import { MATCH_S } from './layout.ts'
+import { barYaw, pointAt } from './ladder.ts'
 
 /** Cổng bánh của Mẫu Maker diff2 (M1 trái, M2 phải). */
 const WHEELS = ['M1', 'M2'] as const
@@ -106,6 +107,40 @@ test('móc ở cổng khác S2 (Xe Phân Loại S1 — trùng servo cũ của to
   }
 })
 
+test('pha quay theo thanh có giới hạn giờ: nhích vào thân robot đang treo (kẹt) thì quay lại đi tới chỗ bám, không đứng mãi', async () => {
+  const w = await FanrocWorld.create(1)
+  const robots = [MAKER, MAKER, MAKER, MAKER].map((c, i) => new RobotBody(w, c, i < 2 ? 'red' : 'blue', (i % 2) as 0 | 1))
+  const m = new Match(w, robots, TEAMS, { seed: 1 })
+  m.t = 0
+  const idle: PortValues[] = robots.map(() => ({ ...NEUTRAL }))
+  m.step(PHYSICS_DT, idle) // sang pha thi đấu
+  m.t = MATCH_S - 13 // vừa tới giờ đi leo (ETA ≈ 6 s bám + 8 s dư mức Vừa)
+  // Đỏ 0 (không agent) treo ở 0,55: thân treo từ 0,40 chắn đầu xe Đỏ 1 đứng ở 0,25 (chỗ bám của nó 0,265).
+  const at = (s: number) => pointAt('red', s)
+  robots[0].setPose({ ...at(0.55), yaw: barYaw('red') })
+  m.step(PHYSICS_DT, [{ ...NEUTRAL, S2: 180 }, ...idle.slice(1)])
+  m.step(PHYSICS_DT, [{ ...NEUTRAL, S2: 0 }, ...idle.slice(1)])
+  assert.equal(robots[0].climb.mode, 'hang')
+  const r = robots[1]
+  r.setPose({ ...at(0.25), yaw: barYaw('red') })
+  const agent = new Agent(r, MAKER, 'medium', 1)
+  const view = { world: w, robots, match: m, humans: [] }
+  let run = 0
+  let longest = 0
+  let leftAlign = 0
+  let last = ''
+  for (let k = 0; k < 12 * 60 && m.phase === 'play'; k++) {
+    m.step(PHYSICS_DT, [{ ...NEUTRAL }, agent.update(view, PHYSICS_DT), ...idle.slice(2)])
+    const d = agent.doing
+    run = d === 'climb:align' ? run + PHYSICS_DT : 0
+    longest = Math.max(longest, run)
+    if (last === 'climb:align' && d !== 'climb:align') leftAlign++
+    last = d
+  }
+  assert.ok(leftAlign > 0, 'không lần nào rời pha quay theo thanh')
+  assert.ok(longest < 3.5, `đứng ở pha quay theo thanh liền ${longest.toFixed(1)} s`)
+})
+
 test('wheelCmd: lệnh bánh không rơi vào vùng chết 20 % (|v| < 10 ⇒ 0, còn lại ≥ 25), kẹp ±100', () => {
   for (let v = -150; v <= 150; v += 0.5) {
     const w = wheelCmd(v)
@@ -186,9 +221,12 @@ test('mẫu cải tiến (R142, 1 trận Khó, 4 robot cùng mẫu): Maker Nâng
   const intake = await play1('makerIntake')
   const pro = await play1('makerPro', 'omni')
   for (const [name, r] of [['Maker Nâng', lift], ['Maker Hút', intake], ['Maker Pro', pro]] as const) {
-    console.log(`${name}: ${r.match} (Mẫu Maker cùng seed: ${base})`)
+    console.log(`${name}: ${r.match} = ${r.matchObj.result().score.mission} × ${r.matchObj.result().score.multPct} % (Mẫu Maker cùng seed: ${base}); leo ${[...r.tally.climbs.red, ...r.tally.climbs.blue].join(', ')}`)
     assert.ok(r.match > base, `${name} ${r.match} ≤ Mẫu Maker ${base}`)
   }
+  // Đế omni (4 bánh, quay chậm hơn ~2 lần) cũng leo được như đế 2 bánh: Khó ⇒ cả 4 robot sang Nước.
+  assert.deepEqual([...pro.tally.climbs.red, ...pro.tally.climbs.blue], ['water', 'water', 'water', 'water'], 'Maker Pro omni')
+  assert.equal(pro.matchObj.result().score.multPct, 180)
   // Hút trên sân: số bóng xanh lên núi nhiều hơn số Human Player nạp.
   const loaded = intake.matchObj.events.filter((e) => e.text.includes('nhận bóng')).length
   const onMtn = intake.tally.mtn.reduce((s, tiers) => s + tiers[0].g + tiers[1].g + tiers[2].g, 0)
