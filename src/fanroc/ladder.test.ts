@@ -76,3 +76,33 @@ test('hai robot cùng thanh không gần nhau hơn 0.3', () => {
   for (let i = 0; i < 600; i++) st = stepClimb(st, inp({ hookDeg: HOOK.downDeg, lastHookDeg: HOOK.downDeg, drive: -1, others }))
   assert.ok(Math.abs(st.s - HOOK.end) < 1e-9)
 })
+
+test('điều kiện bám: móc không có chuyển giơ->hạ, móc 90°, lệch d = 0.08 hay s < 0 đều không bám', () => {
+  const p = on(0.2)
+  // (a) móc đã hạ sẵn từ trước (không có bước chuyển từ ≥ upDeg)
+  assert.equal(stepClimb(FLOOR, inp({ hookDeg: HOOK.downDeg, lastHookDeg: HOOK.downDeg, x: p.x, z: p.z })).mode, 'floor')
+  assert.equal(stepClimb(FLOOR, inp({ hookDeg: HOOK.downDeg, lastHookDeg: HOOK.upDeg - 20, x: p.x, z: p.z })).mode, 'floor')
+  // (b) móc mới hạ tới 90° (chưa ≤ downDeg)
+  assert.equal(stepClimb(FLOOR, inp({ hookDeg: 90, lastHookDeg: HOOK.upDeg + 5, x: p.x, z: p.z })).mode, 'floor')
+  // (c) lệch ngang 0.08 > tol
+  const far = on(0.2, 0.08)
+  assert.equal(grab(far.x, far.z).mode, 'floor')
+  // (d) trước đầu a (s < 0) dù d = 0
+  const before = pointAt('red', -0.05)
+  assert.equal(grab(before.x, before.z).mode, 'floor')
+  // đối chứng: cùng cách gọi ở chỗ hợp lệ thì bám
+  assert.equal(grab(p.x, p.z).mode, 'hang')
+})
+
+test('contact chỉ khi móc giơ: móc 90° hay đã hạ sát thanh thì none', () => {
+  const p = on(0.2)
+  assert.equal(climbOf(FLOOR, 90, p.x, p.z).level, 'none')
+  assert.equal(climbOf(FLOOR, HOOK.downDeg, p.x, p.z).level, 'none')
+})
+
+test('lái tiến mãi thì dừng ở cách đầu b một đoạn end', () => {
+  const p = on(0.2)
+  let st = grab(p.x, p.z)
+  for (let i = 0; i < 60 * 20; i++) st = stepClimb(st, inp({ hookDeg: HOOK.downDeg, lastHookDeg: HOOK.downDeg, drive: 1 }))
+  assert.ok(Math.abs(st.s - (ladderLen('red') - HOOK.end)) < 1e-9, `s = ${st.s}`)
+})
