@@ -19,7 +19,7 @@ const TEAMS = ['Đội 1', 'Đội 2', 'Đội 3', 'Đội 4']
 type Played = {
   score: number; flags: number; loads: { t: number; text: string }[]; deadZone: number
   /** Mức leo được tính lúc hết giờ [Đỏ 0, Đỏ 1, Xanh 0, Xanh 1], hệ số %, các lỗi bị bắt trong 40 s cuối (lúc leo). */
-  climbs: Climb[]; multPct: number; lateFouls: string[]
+  climbs: Climb[]; multPct: number; mission: number; lateFouls: string[]
 }
 
 /**
@@ -41,17 +41,18 @@ async function play(skill: Skill, seed: number): Promise<Played> {
     deadZone,
     climbs: [...r.tally.climbs.red, ...r.tally.climbs.blue],
     multPct: m.result().score.multPct,
+    mission: m.result().score.mission,
     lateFouls: m.events.filter((e) => e.t >= MATCH_S - 40 && FOUL.test(e.text)).map((e) => `${e.t.toFixed(1)} ${e.text}`),
   }
 }
 /** Dòng sự kiện của trọng tài (phạt / cảnh cáo). */
 const FOUL = /\((S02|G15|P12|P10)\)/
 
-const SEEDS = [1, 2, 3]
+const SEEDS = [1, 2, 3, 4, 5, 6]
 const LEVELS: Skill[] = ['easy', 'medium', 'hard']
 const NAME: Record<Skill, string> = { easy: 'Dễ', medium: 'Vừa', hard: 'Khó' }
 const t0 = performance.now()
-/** 3 trận mỗi mức, cùng 3 seed thế giới cho cả ba mức (so sánh trên cùng sân). */
+/** 6 trận mỗi mức, cùng 6 seed thế giới cho cả ba mức (so sánh trên cùng sân). */
 const byLevel = new Map<Skill, Promise<Played[]>>()
 const level = (s: Skill) => {
   let p = byLevel.get(s)
@@ -61,8 +62,10 @@ const level = (s: Skill) => {
 const avg = (xs: Played[]) => xs.reduce((s, x) => s + x.score, 0) / xs.length
 
 // Luật V4: điểm trận = điểm nhiệm vụ × hệ số leo xà (Dễ chạm 120 %, Vừa treo Đất 140 %, Khó treo Nước 180 % khi đủ
-// 4 robot). Số đo 12/11 (Task 5, sau sửa omni): Dễ −9 / 76 / 116, Vừa 96 / 145 / 241, Khó 440 / 197 / 161.
-test('điểm trận trung bình (3 trận, 4 Mẫu Maker diff2): Khó > Vừa > Dễ', async () => {
+// 4 robot). Điểm nhiệm vụ của Mẫu Maker (chỉ ủi bóng + nhận bóng Human Player) lệch rất mạnh theo seed (Dễ 3…240), 3 trận
+// không đủ để so ba mức nên lấy 6 seed. Số đo 12/11 (Task 5, vòng sửa 2): Dễ 237 / 89 / 240 / 130 / 3 / 10 (118,2),
+// Vừa 89 / 189 / 261 / 154 / 127 / 87 (151,2), Khó 290 / 141 / 252 / 170 / 242 / 276 (228,5).
+test('điểm trận trung bình (6 trận, 4 Mẫu Maker diff2): Khó > Vừa > Dễ', async () => {
   const res: Partial<Record<Skill, Played[]>> = {}
   for (const s of LEVELS) res[s] = await level(s)
   const a = Object.fromEntries(LEVELS.map((s) => [s, avg(res[s]!)])) as Record<Skill, number>
@@ -139,6 +142,30 @@ test('pha quay theo thanh có giới hạn giờ: nhích vào thân robot đang 
   }
   assert.ok(leftAlign > 0, 'không lần nào rời pha quay theo thanh')
   assert.ok(longest < 3.5, `đứng ở pha quay theo thanh liền ${longest.toFixed(1)} s`)
+})
+
+// Chặn hồi quy: Dễ seed 1 trước vòng sửa omni (b1999f1) được 162 điểm nhiệm vụ, trước Task 5 (về đỗ, fd9da6c) 111; khi
+// lùi-trong-chỗ-chật bị giới hạn chỉ cho việc leo, Dễ rơi xuống −9 (cùng hệ số 120 %). Sàn 100: dưới cả hai mốc cũ một
+// quãng (cho phép lệch do đổi chiến thuật), trên xa mức hỏng.
+test('Mẫu Maker Dễ seed 1: điểm nhiệm vụ không dưới 100 (chặn hồi quy lái ở chỗ chật)', async () => {
+  const [easy] = await level('easy')
+  console.log(`Dễ seed 1: điểm trận ${easy.score} = ${easy.mission} × ${easy.multPct} %`)
+  assert.ok(easy.mission >= 100, `điểm nhiệm vụ ${easy.mission}`)
+})
+
+test('lái ở chỗ chật (hành lang giữa Núi A và Núi C): đích ở sau lưng ⇒ lùi thẳng về đích, không quay tại chỗ', async () => {
+  const w = await FanrocWorld.create(1)
+  const robots = [MAKER, MAKER, MAKER, MAKER].map((c, i) => new RobotBody(w, c, i < 2 ? 'red' : 'blue', (i % 2) as 0 | 1))
+  const r = robots[0]
+  r.setPose({ x: -0.37, z: 0, yaw: -Math.PI / 2 }) // giữa hành lang, mũi hướng +x (đông)
+  const agent = new Agent(r, MAKER, 'medium', 1) as unknown as { aim(q: { x: number; z: number }, v: number): void; cmd: { fwd: number; turn: number } }
+  agent.aim({ x: -0.9, z: 0.02 }, 60) // đích ở phía tây, sau lưng
+  assert.ok(agent.cmd.fwd < 0, `lệnh tiến ${agent.cmd.fwd} (phải lùi)`)
+  assert.ok(Math.abs(agent.cmd.turn) < 20, `lệnh quay ${agent.cmd.turn}`)
+  // Ngoài sân trống thì vẫn quay tại chỗ như cũ.
+  r.setPose({ x: 0.9, z: 0.0, yaw: -Math.PI / 2 })
+  agent.aim({ x: 0.4, z: 0.02 }, 60)
+  assert.equal(agent.cmd.fwd, 0)
 })
 
 test('wheelCmd: lệnh bánh không rơi vào vùng chết 20 % (|v| < 10 ⇒ 0, còn lại ≥ 25), kẹp ±100', () => {

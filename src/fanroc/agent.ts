@@ -1484,9 +1484,8 @@ export class Agent {
     const e = wrap(yawTo(r.pose, q) - r.pose.yaw + this.noise)
     // Đích ở phía sau mà chỗ đứng chật (hành lang giữa hai núi / sát rào: quay tại chỗ là kẹt) ⇒ lùi thẳng về đích.
     const back = wrap(e - Math.PI)
-    // Chỉ khi đi leo cuối trận (giờ gấp, hay phải đi qua hành lang hẹp); các việc khác giữ cách lái cũ.
-    const tight = this.task?.kind === 'climb' &&
-      (mountainClearance(r.pose.x, r.pose.z) < TURN_CLEAR || wallClearance(r.pose.x, r.pose.z) < TURN_CLEAR)
+    // Dùng cho mọi việc (không chỉ đi leo): bỏ ra thì robot máy mức Dễ mất hẳn điểm nhiệm vụ (seed 1: 197 → −9).
+    const tight = mountainClearance(r.pose.x, r.pose.z) < TURN_CLEAR || wallClearance(r.pose.x, r.pose.z) < TURN_CLEAR
     if (tight && Math.abs(e) > TURN_IN_PLACE && Math.abs(back) <= TURN_IN_PLACE) {
       this.cmd.fwd = -speed * Math.max(0.4, 1 - Math.abs(back) / 1.2)
       this.cmd.turn = Math.max(-35, Math.min(35, K_TURN * back))
