@@ -165,6 +165,9 @@ test('hookTop: mọi mẫu robot — 0° đỉnh móc ≤ nóc và trong khung; 
     assert.ok(hookTop(d, 0, false) <= h + 1e-9, `${d.type}: móc thu cao ${hookTop(d, 0, false)} > nóc ${h}`)
     assert.ok(HOOK_TIP.reach <= Math.min(w, l) / 2, `${d.type}: chữ J thò khỏi khung nhìn từ trên`)
     for (const deg of [HOOK.upDeg, 180]) assert.ok(hookTop(d, deg, false) >= LADDER.y + 0.02, `${d.type} ${deg}°`)
+    // Móc hạ (≤ HOOK.downDeg, như vật lý leo) là cần rút hết; trên downDeg mới duỗi.
+    for (const deg of [10, 20, HOOK.downDeg]) assert.equal(hookTop(d, deg, false), h, `${d.type} ${deg}°: móc hạ mà cần còn duỗi`)
+    assert.ok(hookTop(d, HOOK.downDeg + 1, false) > h, `${d.type}: trên downDeg cần phải duỗi`)
     // Giơ dần: tăng đơn điệu theo góc, không vượt mức giơ hết.
     let last = -Infinity
     for (let deg = 0; deg <= 180; deg += 10) {
@@ -209,6 +212,10 @@ test('stepHook: cài chốt thì servo < upDeg không nhúc nhích; 180° lò xo
   assert.ok(full - down.top < a.top - h, 'tời phải chậm hơn lò xo')
   st = run(st, 0, 1)
   assert.deepEqual(st, { latched: true, top: h }, 'về 0° phải gập lại, cài chốt')
+  // Về HOOK.downDeg (30°, móc hạ) là đủ gập, cài chốt; dừng ở 31° thì cần còn duỗi, chưa cài.
+  const up = run({ latched: false, top: full }, 180, 0.1)
+  assert.deepEqual(run(up, HOOK.downDeg, 1), { latched: true, top: h }, 'servo 30° (móc hạ) mà chưa cài chốt lại')
+  assert.equal(run(up, HOOK.downDeg + 1, 1).latched, false)
   // Đã cài chốt lại: 90° không bật móc.
   assert.deepEqual(run(st, 90, 0.5), { latched: true, top: h })
   // Đang treo: cần dài đúng tới trục thanh.
