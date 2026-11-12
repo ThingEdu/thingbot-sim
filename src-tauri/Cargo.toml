@@ -1,6 +1,6 @@
 [package]
 name = "thingbot-fanroc-game"
-version = "0.8.0"
+version = "0.9.0"
 description = "ThingBot FanRoc Game — game mô phỏng độc lập (gói desktop Tauri 2)"
 authors = ["ThingEdu"]
 license = "AGPL-3.0-only"
