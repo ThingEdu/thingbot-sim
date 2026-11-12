@@ -61,7 +61,7 @@ const level = (s: Skill) => {
 const avg = (xs: Played[]) => xs.reduce((s, x) => s + x.score, 0) / xs.length
 
 // Luật V4: điểm trận = điểm nhiệm vụ × hệ số leo xà (Dễ chạm 120 %, Vừa treo Đất 140 %, Khó treo Nước 180 % khi đủ
-// 4 robot). Số đo 12/11 (Task 5): Dễ 187 / 53 / 206, Vừa 72 / 229 / 213, Khó 283 / 168 / 281.
+// 4 robot). Số đo 12/11 (Task 5, sau sửa omni): Dễ −9 / 76 / 116, Vừa 96 / 145 / 241, Khó 440 / 197 / 161.
 test('điểm trận trung bình (3 trận, 4 Mẫu Maker diff2): Khó > Vừa > Dễ', async () => {
   const res: Partial<Record<Skill, Played[]>> = {}
   for (const s of LEVELS) res[s] = await level(s)
