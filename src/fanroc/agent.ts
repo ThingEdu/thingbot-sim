@@ -1,7 +1,8 @@
 // Agent đồng đội FANROC mức Dễ / Vừa / Khó (spec §4.6). Agent chỉ ra lệnh qua PortValues — lái M1/M2 (hoặc 4 bánh),
 // cơ cấu theo portMap — nên chịu đúng vật lý của chương trình học sinh: không dịch chuyển tức thời, không cầm bóng bằng tay.
 // Chiến thuật theo bản thử 2D (docs/superpowers/specs/fanroc-spike/sim.js, decide()): cắm cờ trước, chọn rãnh theo giá trị
-// kỳ vọng, gỡ bóng xanh khỏi Khu Chữa Cháy (khó), về đỗ sát giờ, không nhận bóng khi không còn đủ giờ đi giao.
+// kỳ vọng, gỡ bóng xanh khỏi Khu Chữa Cháy (khó), leo Thang Cứu Hỏa sát giờ (luật V4), không nhận bóng khi không còn đủ giờ
+// đi giao.
 // Không đồ hoạ: chạy được trong Node.
 import { mulberry32, type FanrocWorld } from './world.ts'
 import type { RobotBody, Vec2 } from './robot.ts'
@@ -11,8 +12,10 @@ import type { HumanPlayer } from './human.ts'
 import { FIELD, MATCH_S, MOUNTAINS, MOUNTAIN_FOOT, ZONES, toMountain, type Rect } from './layout.ts'
 import { NEUTRAL, type PortValues } from './ports.ts'
 import { LIFT_AXIS, portMap, type PortMap, type RobotConfig } from './robots.ts'
+import { HOOK, barYaw, ladderLen, pointAt, project, type Climb } from './ladder.ts'
 
 export type Skill = 'easy' | 'medium' | 'hard'
+type Alliance = 'red' | 'blue'
 export type AgentView = { world: FanrocWorld; robots: RobotBody[]; match: Match; humans: HumanPlayer[] }
 
 // ---------- Tham số theo mức (gom một chỗ) ----------
@@ -23,10 +26,10 @@ interface SkillDef {
   noise: number
   /** Xác suất mỗi giây lỡ tay mở cửa xả khi đang chở bóng. */
   dropPerS: number
-  /** Xác suất quên về đỗ cả trận. */
-  forgetPark: number
-  /** Về đỗ khi thời gian còn ≤ thời gian đi + chừng này giây. */
-  parkMargin: number
+  /** Mức leo Thang Cứu Hỏa cuối trận: contact = chỉ giơ móc chạm xà, ground = treo Đất, water = treo rồi trượt sang Nước. */
+  climbTarget: Climb
+  /** Đi leo khi thời gian còn ≤ thời gian ước tính (đi + bám + trượt) + chừng này giây. */
+  climbMargin: number
   /** Chỉ đi cắm cờ sau chừng này giây thi đấu (khó: ngay từ đầu). */
   flagAfter: number
   /** Mở kẹp khi điểm kẹp cách tâm lỗ ≤ chừng này (luật vật lý: cắm được khi ≤ 0.025). */
@@ -50,15 +53,15 @@ interface SkillDef {
 
 const SKILLS: Record<Skill, SkillDef> = {
   easy: {
-    speed: 0.6, noise: 0.3, dropPerS: 0.05, forgetPark: 0.35, parkMargin: 6, flagAfter: 60, flagTol: 0.04, flagTries: 1,
+    speed: 0.6, noise: 0.3, dropPerS: 0.05, climbTarget: 'contact', climbMargin: 6, flagAfter: 60, flagTol: 0.04, flagTries: 1,
     selective: false, wrongColor: 0.3, grooves: [0, 1], ev: false, clearFire: false, load: false, herdOrange: false,
   },
   medium: {
-    speed: 0.75, noise: 0, dropPerS: 0, forgetPark: 0, parkMargin: 6, flagAfter: 30, flagTol: 0.024, flagTries: 2,
-    selective: false, wrongColor: 0, grooves: [0, 1], ev: false, clearFire: false, load: true, herdOrange: false,
+    speed: 0.75, noise: 0, dropPerS: 0, climbTarget: 'ground', climbMargin: 8, flagAfter: 30, flagTol: 0.024, flagTries: 2,
+    selective: false, wrongColor: 0, grooves: [0, 1], ev: false, clearFire: false, load: true, herdOrange: true,
   },
   hard: {
-    speed: 1, noise: 0, dropPerS: 0, forgetPark: 0, parkMargin: 3, flagAfter: 0, flagTol: 0.024, flagTries: 6,
+    speed: 1, noise: 0, dropPerS: 0, climbTarget: 'water', climbMargin: 8, flagAfter: 0, flagTol: 0.024, flagTries: 6,
     selective: true, wrongColor: 0, grooves: [0, 1, 2], ev: true, clearFire: true, load: true, herdOrange: true,
   },
 }
@@ -129,11 +132,48 @@ const GROOVE3_FULL = 6
 /** Vùng miệng hút mà agent canh bóng sai màu (lớn hơn miệng thật trong robot.ts một chút). */
 const MOUTH_DEPTH = 0.06
 const MOUTH_HALF_W = 0.115
-/** Về đỗ: bắt đầu tính giờ khi còn chừng này giây; điểm vào cách chỗ đỗ PARK_PRE; quay + vào chỗ mất PARK_DOCK_S. */
-const PARK_LOOK_S = 60
-const PARK_PRE = 0.35
-const PARK_DOCK_S = 6
-const PARK_GO_MAX_S = 20
+/**
+ * Leo Thang Cứu Hỏa: bắt đầu tính giờ khi còn CLIMB_LOOK_S giây; quay theo thanh + giơ / hạ móc mất chừng CLIMB_GRAB_S;
+ * đi tới chỗ bám quá CLIMB_GO_MAX_S thì lập lại nhiệm vụ. Tâm xe (điểm móc) phải cách trục thanh ≤ CLIMB_TOL và cách chỗ
+ * bám dọc thanh ≤ CLIMB_ALONG mới giơ móc (luật bám: ≤ HOOK.tol); giơ móc giữ CLIMB_UP_S rồi hạ.
+ */
+const CLIMB_LOOK_S = 60
+const CLIMB_GRAB_S = 6
+const CLIMB_GO_MAX_S = 20
+const CLIMB_TOL = 0.035
+const CLIMB_ALONG = 0.05
+/** Quay xong mà chỗ bám lệch dọc thanh hơn chừng này thì nhích tới / lùi. */
+const CLIMB_NUDGE = 0.008
+const CLIMB_UP_S = 0.3
+/** Tốc độ ước tính khi đi tới chỗ bám, phần của tốc độ chạy đường dài. */
+const CLIMB_V = 0.6
+/** Dải dưới thanh xà (cách trục) coi như thuộc túi khi lập đường đi leo. */
+const CLIMB_BAND = 0.2
+/** Robot treo đi sau giữ khoảng này (HOOK.gap + dư) với robot đi trước khi trượt; trên sàn dưới thanh: một thân xe + dư. */
+const CLIMB_FOLLOW_GAP = HOOK.gap + 0.02
+/** Điểm chờ khi chỗ bám đang có robot đứng: cách chỗ bám vào trong sân chừng này (thử từ xa tới gần cho tới khi quay tại chỗ được). */
+const CLIMB_WAIT_R = [0.45, 0.4, 0.35, 0.3]
+
+type ClimbLevel = Exclude<Climb, 'none'>
+/**
+ * Chỗ bám `s0` và chỗ dừng `target` (m dọc thanh tính từ cột phía rào, thanh CAD 1,400 m, vạch Đất/Nước ≈ 0,580) theo mức
+ * và ô robot. Ràng buộc đo trên sân:
+ * - thân xe đứng sàn dọc thanh không chạm rào khi s ≥ 0,256; treo dọc thanh không vươn ra ngoài rào (S02) khi
+ *   0,248 ≤ s ≤ 1,15;
+ * - chỉ bám được ở đoạn Đất (s ≤ vạch 0,5798); treo ở s > vạch + 0,01 là Nước;
+ * - hai robot treo cách nhau ≥ HOOK.gap (0,3); thân treo (đáy y 0,12) thấp hơn nóc xe đứng sàn (0,216) nên robot treo
+ *   và robot đứng dưới thanh phải cách nhau ≥ một thân xe (0,3) dọc thanh.
+ * Hai chỗ bám 0,265 và 0,565 cách nhau đúng một thân xe (+ sai số nhích ±0,008): hai robot bám được theo thứ tự bất kỳ,
+ * không robot nào phải đứng chờ chắn lối dọc rào. Không thể đặt cả hai ở 0,2 (dưới 0,248 thân treo vươn ra ngoài rào).
+ * - water: ô 0 bám 0,565 rồi trượt tới 1,05; ô 1 bám 0,265, chờ ô 0 treo rồi trượt theo tới 0,70 (cả hai Nước, cách 0,35).
+ * - ground: ô 0 bám 0,565 rồi nhích tới 0,58 (vẫn Đất); ô 1 ở yên 0,265 (cách 0,315).
+ * - contact: đứng sàn, giơ móc chạm xà ở 1,00 / 0,62.
+ */
+const CLIMB_PLAN: Record<ClimbLevel, [{ s0: number; target: number }, { s0: number; target: number }]> = {
+  water: [{ s0: 0.565, target: 1.05 }, { s0: 0.265, target: 0.7 }],
+  ground: [{ s0: 0.565, target: 0.58 }, { s0: 0.265, target: 0.265 }],
+  contact: [{ s0: 1.0, target: 1.0 }, { s0: 0.62, target: 0.62 }],
+}
 
 /**
  * Lệnh một bánh sau khi trộn tiến + quay: không bao giờ rơi vào vùng chết của động cơ TT (bánh đứng, xe xoay quanh
@@ -159,6 +199,20 @@ const inRect = (r: Rect, p: Vec2, pad = 0) => p.x >= r.x0 - pad && p.x <= r.x1 +
 /** Hướng yaw để mũi xe chỉ từ `from` tới `to` (mũi f = (−sin yaw, −cos yaw)). */
 const yawTo = (from: Vec2, to: Vec2) => Math.atan2(-(to.x - from.x), -(to.z - from.z))
 
+/**
+ * Điểm p ở trong "túi" sau thanh xà liên minh `al`: phía góc sân của thanh (gồm Khu Chữa Cháy), cách trục ≥ 0,05. Với
+ * `band` > 0: thêm dải sát dưới thanh (cách trục < band, cả hai phía) từ chỗ `sFrom` trở đi — robot treo ở đó bịt cả lối
+ * chạy dọc ngay dưới thanh.
+ */
+function inPocket(al: 'red' | 'blue', p: Vec2, band = 0, sFrom = 0): boolean {
+  const pr = project(al, p.x, p.z)
+  if (pr.s < 0 || pr.s > ladderLen(al)) return false
+  if (band > 0 && pr.s >= sFrom && pr.d < band) return true
+  if (pr.d < 0.05) return false
+  const at = pointAt(al, pr.s)
+  return (p.x - at.x) * -at.x + (p.z - at.z) * -at.z < 0
+}
+
 /** Khoảng cách từ điểm tới chân núi gần nhất (hình chữ nhật xoay theo CAD), 0 khi nằm trong. */
 function mountainClearance(x: number, z: number): number {
   let d = Infinity
@@ -182,6 +236,10 @@ const SOFT = 0.3
 const ZONE_PAD = 0.22
 /** Quanh điểm xuất phát luôn đi được (thoát ra khi đang sát núi / đang trong vùng cấm). */
 const START_FREE = 0.25
+/** Bán kính chặn quanh tâm robot khác; robot đang treo trên thanh xà (thân lơ lửng ngang tầm nóc xe, không đẩy được,
+ *  quay chéo theo thanh) chặn rộng hơn để đường không lách sát nó. */
+const OTHER_R = 0.26
+const HANG_R = 0.3
 const cellX = (i: number) => -FIELD / 2 + (i + 0.5) * CELL
 const cellOf = (v: number) => Math.max(0, Math.min(N - 1, Math.floor((v + FIELD / 2) / CELL)))
 
@@ -252,12 +310,14 @@ class Heap {
 }
 
 interface PlanOpts {
-  /** Tâm các robot khác (tránh mềm, chặn sát thân). */
-  others: Vec2[]
+  /** Tâm các robot khác (tránh mềm, chặn sát thân); r = bán kính chặn (mặc định OTHER_R). */
+  others: (Vec2 & { r?: number })[]
   /** Vùng cấm đi vào (Khu Tiếp Tế khi đã hết giờ nhận bóng). */
   forbid: Rect[]
   /** Vùng đi qua bị phạt (Khu Tiếp Tế khi không đi nhận bóng). */
   avoid: Rect[]
+  /** Ô cấm thêm (vd. "túi" góc sân sau thanh xà khi đi leo). */
+  block?: (p: Vec2) => boolean
 }
 
 const DIRS: [number, number, number][] = [
@@ -277,11 +337,13 @@ function planPath(from: Vec2, to: Vec2, opts: PlanOpts): { path: Vec2[]; len: nu
       let e = 0
       for (const o of opts.others) {
         const d = dist(c, o)
-        if (d < 0.26) e = Infinity
-        else if (d < 0.45) e += 4
+        const r = o.r ?? OTHER_R
+        if (d < r) e = Infinity
+        else if (d < r + 0.19) e += 4
       }
       for (const r of opts.forbid) if (inRect(r, c, ZONE_PAD)) e = Infinity
       for (const r of opts.avoid) if (inRect(r, c, ZONE_PAD)) e += 6
+      if (opts.block?.(c)) e = Infinity
       extra[j * N + i] = e
     }
   }
@@ -354,15 +416,15 @@ function planPath(from: Vec2, to: Vec2, opts: PlanOpts): { path: Vec2[]; len: nu
 interface Board {
   /** Núi → agent đang đi cắm cờ ở đó. */
   flag: Map<number, Agent>
-  /** Agent theo thứ tự bắt đầu về đỗ, theo liên minh. */
-  park: { red: Agent[]; blue: Agent[] }
+  /** Robot → agent lái nó (đồng đội biết kế hoạch leo của nhau: robot treo gần rào trượt theo sau robot đi xa hơn). */
+  agents: Map<RobotBody, Agent>
   /** Bóng → agent đang ủi bóng đó về Khu Xuất Phát (hai robot không tranh một bóng). */
   herd: Map<number, Agent>
 }
 const boards = new WeakMap<Match, Board>()
 function board(m: Match): Board {
   let b = boards.get(m)
-  if (!b) boards.set(m, (b = { flag: new Map(), park: { red: [], blue: [] }, herd: new Map() }))
+  if (!b) boards.set(m, (b = { flag: new Map(), agents: new Map(), herd: new Map() }))
   return b
 }
 
@@ -374,18 +436,11 @@ type Task =
   | { kind: 'fire'; spot: Vec2; corner: Vec2; phase: 'go' | 'drop'; t: number; anyColor: boolean }
   | { kind: 'load'; spot: Vec2; phase: 'go' | 'wait'; t: number }
   | { kind: 'herd'; ball: number; goal: Rect; phase: 'go' | 'push'; t: number; tries: number }
-  | { kind: 'park'; spot: Vec2; dir: 1 | -1; phase: 'go' | 'dock' | 'done'; t: number }
+  | { kind: 'climb'; s0: number; target: number; phase: 'go' | 'align' | 'up' | 'slide' | 'done'; t: number }
   | { kind: 'idle'; t: number }
 
-type Cmd = { fwd: number; turn: number; intake: boolean; lift: -1 | 0 | 1; s1: boolean; chute: number; plant: boolean; release: boolean; sel: 'o' | 'g' }
-
-/** Ô đỗ trong Vùng Bảo Vệ: người tới trước lấy chỗ sâu (đỗ toàn phần), người sau đỗ một phần ngay phía trước. */
-const PARK_SPOTS = (a: 'red' | 'blue'): Vec2[] => {
-  const s = a === 'red' ? -1 : 1
-  const z = ZONES.ladder[a]
-  const cx = s * Math.abs((z.x0 + z.x1) / 2)
-  return [{ x: cx, z: z.z0 + 0.17 }, { x: cx, z: z.z1 + 0.12 }]
-}
+/** hook = góc servo móc leo xà (độ, 180 giơ / 0 hạ), ghi ra cổng `def.hook.port`. */
+type Cmd = { fwd: number; turn: number; intake: boolean; lift: -1 | 0 | 1; s1: boolean; chute: number; plant: boolean; release: boolean; sel: 'o' | 'g'; hook: number }
 
 export class Agent {
   readonly robot: RobotBody
@@ -394,7 +449,6 @@ export class Agent {
   private readonly S: SkillDef
   private readonly rnd: () => number
   private readonly ports: PortMap
-  private readonly forgetPark: boolean
   private task: Task | null = null
   private path: Vec2[] = []
   private pathGoal: Vec2 | null = null
@@ -418,9 +472,9 @@ export class Agent {
   private boardOf: Board | null = null
   /** Thời gian gom bóng kể từ lần giao gần nhất. */
   private collectT = 0
-  /** Thời gian về đỗ ước lượng (tính lại mỗi giây khi gần hết trận). */
-  private parkEta = Infinity
-  private parkEtaIn = 0
+  /** Thời gian leo xà ước lượng (đi tới chỗ bám + bám + trượt; tính lại mỗi giây khi gần hết trận). */
+  private climbEta = Infinity
+  private climbEtaIn = 0
   /** Số bóng còn chở ở bước trước (để biết một bóng đã ra và chuyển sang rãnh kế tiếp). */
   private dropCount = 0
 
@@ -431,11 +485,10 @@ export class Agent {
     this.S = SKILLS[skill]
     this.rnd = mulberry32(seed)
     this.ports = portMap(cfg)
-    this.forgetPark = this.rnd() < this.S.forgetPark
   }
 
   private static idleCmd(): Cmd {
-    return { fwd: 0, turn: 0, intake: false, lift: -1, s1: false, chute: 0, plant: false, release: false, sel: 'o' }
+    return { fwd: 0, turn: 0, intake: false, lift: -1, s1: false, chute: 0, plant: false, release: false, sel: 'o', hook: 0 }
   }
 
   /** Nhiệm vụ hiện tại (để hiển thị / gỡ lỗi). */
@@ -448,23 +501,29 @@ export class Agent {
     if (m.phase !== 'play') return { ...NEUTRAL }
     this.worldOf = view.world
     this.boardOf = board(m)
+    this.boardOf.agents.set(this.robot, this)
     this.dt = dt
     this.time += dt
     this.lastCmd = this.cmd
     this.cmd = Agent.idleCmd()
     const left = MATCH_S - m.t
     for (const [i, until] of this.avoid) if (until < this.time) this.avoid.delete(i)
-    if (this.task?.kind === 'park' && this.task.phase === 'done') return this.toPorts()
-    this.refreshParkEta(view, left)
+    this.refreshClimbEta(view, left)
+    // Đã tới chỗ bám (quay theo thanh / móc / treo / trượt): không gỡ kẹt, không đổi nhiệm vụ — lùi gỡ lúc đang treo là trượt ngược.
+    const t = this.task
+    if (t?.kind === 'climb' && t.phase !== 'go') {
+      this.run(view, dt, left)
+      return this.toPorts()
+    }
     this.watchStuck(dt)
     if (this.recover > 0) {
       this.recover -= dt
       this.cmd.fwd = -CMD_SLOW
       this.cmd.turn = 18 * this.recoverTurn
     } else {
-      if (this.task && this.task.kind !== 'park' && this.shouldPark(left)) this.setTask(this.parkTask(view))
+      if (this.task && this.task.kind !== 'climb' && this.shouldClimb(left)) this.setTask(this.climbTask())
       if (!this.task) this.setTask(this.decide(view, left))
-      if (this.task?.kind !== 'load' && !this.loadAllowed(left, this.robot.pose) && this.touchesLoad()) {
+      if (this.task?.kind !== 'load' && this.task?.kind !== 'climb' && !this.loadAllowed(left, this.robot.pose) && this.touchesLoad()) {
         // Hết giờ nhận bóng mà thân còn chạm Khu Tiếp Tế (đi lạc vào khi gom / né) ⇒ ra khỏi khu trước đã.
         this.goTo(view, this.loadExit(), 0.05, false)
       } else this.run(view, dt, left)
@@ -490,7 +549,7 @@ export class Agent {
   private decide(view: AgentView, left: number): Task | null {
     const r = this.robot
     const playT = MATCH_S - left
-    if (this.shouldPark(left)) return this.parkTask(view)
+    if (this.shouldClimb(left)) return this.climbTask()
     // 1. Cắm cờ trước.
     if (r.hasFlag && r.def.flag && playT >= this.S.flagAfter && (this.S.flagAfter === 0 || r.stored.length === 0)) {
       const t = this.flagTask(view)
@@ -547,35 +606,51 @@ export class Agent {
     return DEAD_ZONE + (CMD_CRUISE - DEAD_ZONE) * this.S.speed
   }
 
-  /** Về đỗ chưa: thời gian còn ≤ ETA về đỗ (tính ở refreshParkEta) + phần dư theo mức. */
-  private shouldPark(left: number): boolean {
-    return !this.forgetPark && left <= PARK_LOOK_S && left <= this.parkEta + this.S.parkMargin
+  /** Kế hoạch leo của robot này (theo mức và ô); null khi mức không leo. */
+  get climbPlan(): { level: ClimbLevel; s0: number; target: number } | null {
+    const level = this.S.climbTarget
+    if (level === 'none') return null
+    return { level, ...CLIMB_PLAN[level][this.robot.slot] }
   }
 
-  /** Tính lại ETA về đỗ mỗi giây khi trận còn ≤ PARK_LOOK_S; gọi đúng một lần mỗi update. */
-  private refreshParkEta(view: AgentView, left: number): void {
-    if (this.forgetPark || left > PARK_LOOK_S) return
-    this.parkEtaIn -= this.dt
-    if (this.parkEtaIn <= 0) {
-      // Thời gian về đỗ theo đường A* thật tới điểm vào xa hơn trong hai chỗ đỗ, cộng phần quay và vào chỗ.
-      this.parkEtaIn = 1
-      const r = this.robot
-      const others = view.robots.filter((o) => o !== r).map((o) => o.pose)
-      const v = V_MAX * ttFraction(this.cruise) * 0.75
-      this.parkEta = Math.max(...PARK_SPOTS(r.alliance).map((s, k) => {
-        const pre = { x: s.x, z: s.z + (k === 0 ? -1 : 1) * PARK_PRE }
-        const res = planPath(r.pose, pre, { others, forbid: [], avoid: [] })
-        return (res ? res.len : dist(r.pose, pre) * 2) / v + PARK_DOCK_S
-      }))
+  /** Đồng đội (agent) treo xa hơn mình trên cùng thanh: khi trượt phải đi sau họ. */
+  private leader(): Agent | null {
+    const mine = this.climbPlan
+    if (!mine || mine.level === 'contact' || !this.boardOf) return null
+    for (const [r, a] of this.boardOf.agents) {
+      if (a === this || r.alliance !== this.robot.alliance) continue
+      const p = a.climbPlan
+      if (p && p.level !== 'contact' && p.target > mine.target) return a
     }
+    return null
   }
 
-  private parkTask(view: AgentView): Task {
-    const b = board(view.match).park[this.robot.alliance]
-    if (!b.includes(this)) b.push(this)
-    const k = Math.min(1, b.indexOf(this))
-    // Chỗ sâu vào từ phía Khu Chữa Cháy (−z), chỗ ngoài vào từ phía người lái (+z): hai đường vào không cắt nhau.
-    return { kind: 'park', spot: PARK_SPOTS(this.robot.alliance)[k], dir: k === 0 ? -1 : 1, phase: 'go', t: 0 }
+  /** Đi leo chưa: thời gian còn ≤ ETA leo (tính ở refreshClimbEta) + phần dư theo mức. */
+  private shouldClimb(left: number): boolean {
+    return this.climbPlan !== null && left <= CLIMB_LOOK_S && left <= this.climbEta + this.S.climbMargin
+  }
+
+  /** Tính lại ETA leo mỗi giây khi trận còn ≤ CLIMB_LOOK_S; gọi đúng một lần mỗi update. */
+  private refreshClimbEta(view: AgentView, left: number): void {
+    const plan = this.climbPlan
+    if (!plan || left > CLIMB_LOOK_S) return
+    this.climbEtaIn -= this.dt
+    if (this.climbEtaIn > 0) return
+    // Đường A* thật tới chỗ bám, cộng phần quay theo thanh + móc và phần trượt dọc thanh (0,15 m/s).
+    this.climbEtaIn = 1
+    const r = this.robot
+    const at = pointAt(r.alliance, plan.s0)
+    const others = this.obstacles(view)
+    // Cuối trận đường hay vòng (robot treo trên thanh chặn lối dọc rào, hành lang giữa núi): tính chậm hơn đi thường.
+    const v = V_MAX * ttFraction(this.cruise) * CLIMB_V
+    const res = planPath(r.pose, at, { others, forbid: [], avoid: [] })
+    const slide = Math.abs(plan.target - plan.s0) / HOOK.slideV
+    this.climbEta = (res ? res.len : dist(r.pose, at) * 2) / v + CLIMB_GRAB_S + slide
+  }
+
+  private climbTask(): Task {
+    const p = this.climbPlan!
+    return { kind: 'climb', s0: p.s0, target: p.target, phase: 'go', t: 0 }
   }
 
   private flagTask(view: AgentView): Task | null {
@@ -847,8 +922,8 @@ export class Agent {
         if (full || noGreen || done || t.t > 15) this.setTask(null)
         return
       }
-      case 'park':
-        return this.runPark(view, t)
+      case 'climb':
+        return this.runClimb(view, t, left)
       case 'herd':
         return this.runHerd(view, t)
     }
@@ -985,7 +1060,7 @@ export class Agent {
     }
     // Tiến thẳng vào lỗ, vươn hết, nâng tay; mở kẹp đúng một bước khi điểm kẹp trên lỗ.
     this.cmd.lift = 1
-    this.cmd.s1 = true // robot nâng cửa lồng bằng S1: toPorts giữ cửa hạ (cmd.chute) — thanh răng + cửa lồng cùng vươn sẽ quá 500 mm
+    this.cmd.s1 = true // Xe Cắm Cờ vươn tay cờ (S1); luật V4: họ Maker không còn mang cờ
     const g = r.gripPoint()
     const d = Math.hypot(g.x - h.x, g.z - h.z)
     const ready = r.extend >= r.def.maxExtend - 1e-6 && (r.def.arm?.reach ? r.armFrac > 0.99 : true)
@@ -1091,39 +1166,148 @@ export class Agent {
     else this.setTask(null)
   }
 
-  private runPark(view: AgentView, t: Extract<Task, { kind: 'park' }>): void {
-    const r = this.robot
-    const pre = { x: t.spot.x, z: t.spot.z + t.dir * PARK_PRE }
-    if (t.phase === 'go') {
-      if (this.goTo(view, pre, 0.06, false)) {
-        t.phase = 'dock'
-        t.t = 0
-      }
-      // Kẹt đường quá lâu (đồng đội / robot khác chắn) ⇒ lập lại nhiệm vụ từ chỗ đang đứng.
-      if (t.t > PARK_GO_MAX_S) this.setTask(null)
-      return
+  /** Điểm chờ đồng đội: từ chỗ bám vào trong sân, xa nhất mà còn quay tại chỗ được. */
+  private climbWaitSpot(s0: number): Vec2 {
+    const al = this.robot.alliance
+    const at = pointAt(al, s0)
+    // Pháp tuyến của thanh hướng về giữa sân.
+    const yaw = barYaw(al)
+    let n = { x: Math.cos(yaw), z: -Math.sin(yaw) }
+    if (n.x * -at.x + n.z * -at.z < 0) n = { x: -n.x, z: -n.z }
+    for (const R of CLIMB_WAIT_R) {
+      const p = { x: at.x + n.x * R, z: at.z + n.z * R }
+      if (mountainClearance(p.x, p.z) >= TURN_CLEAR && wallClearance(p.x, p.z) >= TURN_CLEAR) return p
     }
-    if (t.phase === 'dock') {
-      // Bám đường thẳng x = spot.x, mũi hướng về chỗ đỗ; dừng khi tâm xe tới chỗ.
-      const along = (r.pose.z - t.spot.z) * t.dir
-      const look = { x: t.spot.x, z: r.pose.z - t.dir * 0.15 }
-      const e = wrap(yawTo(r.pose, look) - r.pose.yaw)
-      if (Math.abs(e) > 0.35) {
-        this.cmd.turn = Math.sign(e) * CMD_TURN
+    return { x: at.x + n.x * CLIMB_WAIT_R[CLIMB_WAIT_R.length - 1], z: at.z + n.z * CLIMB_WAIT_R[CLIMB_WAIT_R.length - 1] }
+  }
+
+  /**
+   * Leo Thang Cứu Hỏa (luật V4), chỉ ra lệnh qua cổng: tới chỗ bám dưới đoạn Đất (ô vàng), quay mũi theo thanh, giơ móc
+   * (180°) chạm xà; mức contact giữ nguyên đó. Còn lại hạ móc (0°) để treo, rồi lái bánh tiến để trượt tới chỗ dừng.
+   * Chỗ bám đang có robot khác đứng sàn thì chờ ở điểm chờ. Robot treo đi sau (chỗ dừng gần hơn) chỉ trượt khi robot
+   * đi trước đã treo, và luôn cách robot / thân xe phía trước trên thanh ≥ CLIMB_FOLLOW_GAP.
+   */
+  private runClimb(view: AgentView, t: Extract<Task, { kind: 'climb' }>, left: number): void {
+    const r = this.robot
+    const al = r.alliance
+    const at = pointAt(al, t.s0)
+    const yaw = barYaw(al)
+    const contact = this.S.climbTarget === 'contact'
+    if (t.phase === 'go') {
+      // Chỗ bám đang có robot khác đứng (chưa treo) thì chờ ở điểm chờ.
+      const busy = view.robots.some((o) => o !== r && o.climb.mode === 'floor' && dist(o.pose, at) < 0.25)
+      const block = this.climbBlock()
+      if (busy) {
+        this.goTo(view, this.climbWaitSpot(t.s0), 0.08, false, block)
         return
       }
-      if (along <= 0.004 || t.t > 8) {
+      if (this.goTo(view, at, 0.025, false, block)) {
+        t.phase = 'align'
+        t.t = 0
+      }
+      if (t.t > CLIMB_GO_MAX_S) this.setTask(null)
+      return
+    }
+    const p = project(al, r.pose.x, r.pose.z)
+    if (t.phase === 'align') {
+      // Quay tại chỗ (tâm xe đứng yên) cho mũi xe theo thanh; lệch khỏi chỗ bám thì đi lại.
+      if (p.d > CLIMB_TOL || Math.abs(p.s - t.s0) > CLIMB_ALONG) {
+        t.phase = 'go'
+        t.t = 0
+        return
+      }
+      const e = wrap(yaw - r.pose.yaw)
+      if (Math.abs(e) > 0.04) {
+        this.cmd.turn = Math.sign(e) * (Math.abs(e) > 0.3 ? CMD_TURN : CMD_MIN + 10)
+        return
+      }
+      // Mũi đã theo thanh (tiến = s tăng): nhích tới / lùi cho đúng chỗ bám (sát rào, lệch vài cm là thân treo vươn ra ngoài rào).
+      const along = t.s0 - p.s
+      if (Math.abs(along) > CLIMB_NUDGE) {
+        this.cmd.fwd = Math.sign(along) * (CMD_MIN + 12)
+        this.cmd.turn = Math.max(-10, Math.min(10, K_TURN * e))
+        return
+      }
+      t.phase = 'up'
+      t.t = 0
+      return
+    }
+    if (t.phase === 'up') {
+      this.cmd.hook = 180
+      if (contact || t.t < CLIMB_UP_S) return
+      this.cmd.hook = 0
+      t.phase = 'slide'
+      t.t = 0
+      return
+    }
+    if (contact) {
+      this.cmd.hook = 180
+      return
+    }
+    this.cmd.hook = 0
+    if (r.climb.mode !== 'hang') {
+      // Không bám được (lệch thanh / thanh đủ 2 robot): thử lại từ đầu.
+      if (t.t > 0.2) {
+        t.phase = 'go'
+        t.t = 0
+      }
+      return
+    }
+    if (t.phase === 'slide' || t.phase === 'done') {
+      // Lái bánh tiến / lùi đẩy chỗ bám trượt dọc thanh (mũi xe hướng a → b, tiến = s tăng); chậm lại khi gần chỗ dừng.
+      const err = this.slideGoal(view, t, left) - r.climb.s
+      if (Math.abs(err) <= 0.004) {
         t.phase = 'done'
         return
       }
-      const v = Math.max(CMD_MIN + 8, Math.min(CMD_SLOW, CMD_MIN + along * 200))
-      this.cmd.fwd = v
-      this.cmd.turn = Math.max(-15, Math.min(15, K_TURN * e))
+      t.phase = 'slide'
+      const v = Math.abs(err) > 0.05 ? CMD_CRUISE : CMD_MIN + 15
+      this.cmd.fwd = Math.sign(err) * v
     }
   }
 
+  /**
+   * Chỗ dừng lúc này khi đang treo: chỗ dừng của kế hoạch, nhưng không vượt lên sát robot phía trước trên thanh (treo:
+   * cách ≥ CLIMB_FOLLOW_GAP; đứng sàn dưới thanh: cũng vậy, thân treo không qua được nóc xe). Đồng đội đi xa hơn chưa treo
+   * thì giữ nguyên chỗ bám để họ còn vào chỗ bám của họ — trừ khi chỉ còn vừa đủ giờ trượt.
+   */
+  private slideGoal(view: AgentView, t: Extract<Task, { kind: 'climb' }>, left: number): number {
+    const r = this.robot
+    const al = r.alliance
+    const s = r.climb.s
+    let goal = t.target
+    const lead = this.leader()
+    const late = left <= Math.abs(t.target - s) / HOOK.slideV + 1.5
+    if (lead && lead.robot.climb.mode !== 'hang' && !late) goal = Math.min(goal, Math.max(s, t.s0))
+    for (const o of view.robots) {
+      if (o === r) continue
+      const os = o.climb.mode === 'hang' ? (o.climb.bar === al ? o.climb.s : null) : (() => {
+        const pr = project(al, o.pose.x, o.pose.z)
+        return pr.d < 0.25 ? pr.s : null
+      })()
+      if (os !== null && os > s) goal = Math.min(goal, os - CLIMB_FOLLOW_GAP)
+    }
+    return Math.max(goal, Math.min(s, t.target))
+  }
+
+  /**
+   * Ô cấm khi đi tới chỗ bám: "túi" góc sân sau thanh xà của liên minh kia và dải ngay dưới thanh đó (robot của họ treo
+   * trên thanh là bịt lối ra / lối dọc thanh).
+   */
+  private climbBlock(): ((p: Vec2) => boolean) | undefined {
+    const other: Alliance = this.robot.alliance === 'red' ? 'blue' : 'red'
+    // Đã ở hẳn phía góc của thanh kia (không còn đường khác) thì thôi; đứng trong dải dưới thanh vẫn cấm (ô xuất phát luôn đi được).
+    if (inPocket(other, this.robot.pose)) return undefined
+    return (p) => inPocket(other, p, CLIMB_BAND, 0.1)
+  }
+
+  /** Robot khác làm chướng ngại cho A* (robot đang treo chặn rộng hơn). */
+  private obstacles(view: AgentView): (Vec2 & { r?: number })[] {
+    return view.robots.filter((o) => o !== this.robot).map((o) => (o.climb.mode === 'hang' ? { ...o.pose, r: HANG_R } : o.pose))
+  }
+
   /** Lái về `goal` theo đường A*; true khi tới trong `tol`. */
-  private goTo(view: AgentView, goal: Vec2, tol: number, toLoad: boolean): boolean {
+  private goTo(view: AgentView, goal: Vec2, tol: number, toLoad: boolean, block?: (p: Vec2) => boolean): boolean {
     const r = this.robot
     const p = r.pose
     const d0 = dist(p, goal)
@@ -1149,8 +1333,10 @@ export class Agent {
       const load = ZONES.load[r.alliance]
       // Cấm sớm hơn giờ chót nhận bóng một quãng đi đường, để đường đã lập không cắt qua khu lúc hết giờ nhận.
       const late = !this.loadAllowed(left - LOAD_PLAN_S, p)
-      const others = view.robots.filter((o) => o !== r).map((o) => o.pose)
-      const res = planPath(p, goal, { others, forbid: !toLoad && late ? [load] : [], avoid: toLoad ? [] : [load] })
+      const others = this.obstacles(view)
+      const opts = { others, forbid: !toLoad && late ? [load] : [], avoid: toLoad ? [] : [load], block }
+      // Robot khác chặn kín mọi lối (vd. hành lang giữa núi) ⇒ lập đường bỏ qua robot (chúng còn di chuyển), vẫn giữ vùng cấm.
+      const res = planPath(p, goal, opts) ?? (block ? planPath(p, goal, { ...opts, others: [] }) : null)
       this.path = res ? res.path : [goal]
       this.pathGoal = goal
       this.replanIn = REPLAN_S
@@ -1186,6 +1372,14 @@ export class Agent {
   private aim(q: Vec2, speed: number): void {
     const r = this.robot
     const e = wrap(yawTo(r.pose, q) - r.pose.yaw + this.noise)
+    // Đích ở phía sau mà chỗ đứng chật (hành lang giữa hai núi / sát rào: quay tại chỗ là kẹt) ⇒ lùi thẳng về đích.
+    const back = wrap(e - Math.PI)
+    const tight = mountainClearance(r.pose.x, r.pose.z) < TURN_CLEAR || wallClearance(r.pose.x, r.pose.z) < TURN_CLEAR
+    if (tight && Math.abs(e) > TURN_IN_PLACE && Math.abs(back) <= TURN_IN_PLACE) {
+      this.cmd.fwd = -speed * Math.max(0.4, 1 - Math.abs(back) / 1.2)
+      this.cmd.turn = Math.max(-35, Math.min(35, K_TURN * back))
+      return
+    }
     if (Math.abs(e) > TURN_IN_PLACE) {
       this.cmd.fwd = 0
       this.cmd.turn = Math.sign(e) * CMD_TURN
@@ -1203,7 +1397,7 @@ export class Agent {
     this.stillT = still ? this.stillT + dt : 0
     const t = this.task
     const pushing = t && ((t.kind === 'flag' && t.phase === 'in') || (t.kind === 'mtn' && (t.phase === 'in' || t.phase === 'drop')) ||
-      (t.kind === 'fire' && t.phase === 'drop') || t.kind === 'load' || t.kind === 'idle' || (t.kind === 'park' && t.phase !== 'go'))
+      (t.kind === 'fire' && t.phase === 'drop') || t.kind === 'load' || t.kind === 'idle' || (t.kind === 'climb' && t.phase !== 'go'))
     const moving = Math.abs(this.lastCmd.fwd) + Math.abs(this.lastCmd.turn) >= CMD_MIN
     if (!pushing && still && moving && this.recover <= 0) this.stuckT += dt
     else this.stuckT = 0
@@ -1239,14 +1433,8 @@ export class Agent {
     const c = this.cmd
     const r = this.robot
     const out: PortValues = { ...NEUTRAL }
-    let fwd = c.fwd
-    let turn = c.turn
-    if (this.task?.kind === 'park' && this.task.phase === 'done') {
-      fwd = 0
-      turn = 0
-    }
-    const L = wheelCmd(fwd - turn)
-    const R = wheelCmd(fwd + turn)
+    const L = wheelCmd(c.fwd - c.turn)
+    const R = wheelCmd(c.fwd + c.turn)
     const w = this.ports.wheels
     if (this.cfg.drive === 'diff2') {
       out[w.L!] = L
@@ -1271,6 +1459,9 @@ export class Agent {
     if (r.def.flag) out.S2 = c.plant ? 30 : 150
     else if (r.compartments) out.S2 = c.sel === 'g' ? 150 : 30
     out.S3 = c.release ? 150 : 30
+    // Cổng móc leo xà chỉ do việc leo điều khiển: ghi sau cùng nên không lệnh servo nào khác (vd. S1 của Xe Phân Loại,
+    // S2 kẹp cờ) đè lên được.
+    out[r.def.hook.port] = c.hook
     return out
   }
 }

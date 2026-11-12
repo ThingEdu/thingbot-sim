@@ -7,13 +7,19 @@ import { Agent, wheelCmd, type Skill } from './agent.ts'
 import { playAgents, type Seat } from './quickmatch.ts'
 import { NEUTRAL, type PortValues } from './ports.ts'
 import type { RobotConfig } from './robots.ts'
+import type { Climb } from './ladder.ts'
+import { MATCH_S } from './layout.ts'
 
 /** Cổng bánh của Mẫu Maker diff2 (M1 trái, M2 phải). */
 const WHEELS = ['M1', 'M2'] as const
 const MAKER: RobotConfig = { type: 'maker', drive: 'diff2', actuator: 'tt' }
 const TEAMS = ['Đội 1', 'Đội 2', 'Đội 3', 'Đội 4']
 
-type Played = { score: number; flags: number; loads: { t: number; text: string }[]; deadZone: number }
+type Played = {
+  score: number; flags: number; loads: { t: number; text: string }[]; deadZone: number
+  /** Mức leo được tính lúc hết giờ [Đỏ 0, Đỏ 1, Xanh 0, Xanh 1], hệ số %, các lỗi bị bắt trong 40 s cuối (lúc leo). */
+  climbs: Climb[]; multPct: number; lateFouls: string[]
+}
 
 /**
  * Một trận headless: 4 Mẫu Maker diff2 cùng mức agent (dùng playAgents dùng chung với giải đấu).
@@ -32,8 +38,13 @@ async function play(skill: Skill, seed: number): Promise<Played> {
     flags: m.flags.filter(Boolean).length,
     loads: m.events.filter((e) => e.text.includes('nhận bóng')).map((e) => ({ t: e.t, text: e.text })),
     deadZone,
+    climbs: [...r.tally.climbs.red, ...r.tally.climbs.blue],
+    multPct: m.result().score.multPct,
+    lateFouls: m.events.filter((e) => e.t >= MATCH_S - 40 && FOUL.test(e.text)).map((e) => `${e.t.toFixed(1)} ${e.text}`),
   }
 }
+/** Dòng sự kiện của trọng tài (phạt / cảnh cáo). */
+const FOUL = /\((S02|G15|P12|P10)\)/
 
 const SEEDS = [1, 2, 3]
 const LEVELS: Skill[] = ['easy', 'medium', 'hard']
@@ -48,9 +59,9 @@ const level = (s: Skill) => {
 }
 const avg = (xs: Played[]) => xs.reduce((s, x) => s + x.score, 0) / xs.length
 
-// Luật V4 (Task 2): họ Maker bỏ cờ, sân thêm cột Thang Cứu Hỏa ⇒ thứ tự điểm ba mức đổi (Vừa < Dễ ở seed 1–3);
-// Task 5 (robot máy leo xà) làm lại agent và đo lại các mốc này.
-test('điểm trận trung bình (3 trận, 4 Mẫu Maker diff2): Khó > Vừa > Dễ', { skip: 'Task 5 đo lại sau khi agent leo xà (luật V4)' }, async () => {
+// Luật V4: điểm trận = điểm nhiệm vụ × hệ số leo xà (Dễ chạm 120 %, Vừa treo Đất 140 %, Khó treo Nước 180 % khi đủ
+// 4 robot). Số đo 12/11 (Task 5): Dễ 187 / 53 / 206, Vừa 72 / 229 / 213, Khó 283 / 168 / 281.
+test('điểm trận trung bình (3 trận, 4 Mẫu Maker diff2): Khó > Vừa > Dễ', async () => {
   const res: Partial<Record<Skill, Played[]>> = {}
   for (const s of LEVELS) res[s] = await level(s)
   const a = Object.fromEntries(LEVELS.map((s) => [s, avg(res[s]!)])) as Record<Skill, number>
@@ -58,6 +69,41 @@ test('điểm trận trung bình (3 trận, 4 Mẫu Maker diff2): Khó > Vừa >
   for (const s of LEVELS) for (const x of res[s]!) assert.equal(x.deadZone, 0, `${NAME[s]}: lệnh bánh trong vùng chết (0, 20)`)
   assert.ok(a.hard > a.medium, `Khó ${a.hard} ≤ Vừa ${a.medium}`)
   assert.ok(a.medium > a.easy, `Vừa ${a.medium} ≤ Dễ ${a.easy}`)
+})
+
+// Luật V4: robot máy leo Thang Cứu Hỏa cuối trận thay cho về đỗ. Khó: hai robot mỗi liên minh sang Nước (+20 % mỗi
+// robot ⇒ 180 %); Vừa: treo Đất (+10 % ⇒ 140 %); Dễ: chỉ chạm xà (+5 %).
+test('leo xà cuối trận (seed 1, 4 Mẫu Maker cùng mức): Khó 4 Nước 180 %, Vừa 4 Đất 140 %, Dễ ≥ 2 Chạm; không lỗi lúc leo', async () => {
+  const [hard] = await level('hard')
+  const [medium] = await level('medium')
+  const [easy] = await level('easy')
+  for (const [n, x] of [['Khó', hard], ['Vừa', medium], ['Dễ', easy]] as const) console.log(`${n}: ${x.climbs.join(', ')} — ${x.multPct} %`)
+  assert.deepEqual(hard.climbs, ['water', 'water', 'water', 'water'])
+  assert.equal(hard.multPct, 180)
+  assert.deepEqual(medium.climbs, ['ground', 'ground', 'ground', 'ground'])
+  assert.equal(medium.multPct, 140)
+  assert.ok(easy.climbs.filter((c) => c === 'contact').length >= 2, `Dễ: ${easy.climbs.join(', ')}`)
+  for (const [n, x] of [['Khó', hard], ['Vừa', medium], ['Dễ', easy]] as const) assert.deepEqual(x.lateFouls, [], `${n}: lỗi lúc leo`)
+})
+
+test('móc ở cổng khác S2 (Xe Phân Loại S1 — trùng servo cũ của toPorts; Xe Cắm Cờ S4): robot máy Vừa vẫn treo Đất được', async () => {
+  for (const type of ['sort', 'co'] as const) {
+    const w = await FanrocWorld.create(1)
+    const cfg: RobotConfig = { type, drive: 'diff2', actuator: 'tt' }
+    const robots = [cfg, MAKER, MAKER, MAKER].map((c, i) => new RobotBody(w, c, i < 2 ? 'red' : 'blue', (i % 2) as 0 | 1))
+    const m = new Match(w, robots, TEAMS, { seed: 1 })
+    m.t = 0
+    const idle: PortValues[] = robots.map(() => ({ ...NEUTRAL }))
+    m.step(PHYSICS_DT, idle) // sang pha thi đấu
+    m.t = MATCH_S - 30
+    const r = robots[0]
+    r.setPose({ x: -0.55, z: -0.25, yaw: 0 }) // ngoài sân trống, cách chỗ bám 0,565 chừng 0,4 m
+    const agent = new Agent(r, cfg, 'medium', 1)
+    const view = { world: w, robots, match: m, humans: [] }
+    while (m.phase === 'play') m.step(PHYSICS_DT, [agent.update(view, PHYSICS_DT), ...idle.slice(1)])
+    assert.equal(r.climbLevel.level, 'ground', `${r.def.name}: ${r.climbLevel.level} (${agent.doing})`)
+    assert.equal(r.climbLevel.bar, 'red')
+  }
 })
 
 test('wheelCmd: lệnh bánh không rơi vào vùng chết 20 % (|v| < 10 ⇒ 0, còn lại ≥ 25), kẹp ±100', () => {
