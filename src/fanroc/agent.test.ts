@@ -4,7 +4,7 @@ import { FanrocWorld, PHYSICS_DT } from './world.ts'
 import { RobotBody } from './robot.ts'
 import { Match } from './match.ts'
 import { Agent, wheelCmd, type Skill } from './agent.ts'
-import { playAgents, type Seat } from './quickmatch.ts'
+import { DEFAULT_LINEUP, lineupConfig, playAgents, SEATS, type Seat } from './quickmatch.ts'
 import { NEUTRAL, type PortValues } from './ports.ts'
 import type { RobotConfig } from './robots.ts'
 import type { Climb } from './ladder.ts'
@@ -267,4 +267,26 @@ test('mẫu cải tiến (R142, 1 trận Khó, 4 robot cùng mẫu): Maker Nâng
   const loaded = intake.matchObj.events.filter((e) => e.text.includes('nhận bóng')).length
   const onMtn = intake.tally.mtn.reduce((s, tiers) => s + tiers[0].g + tiers[1].g + tiers[2].g, 0)
   assert.ok(onMtn > loaded, `Maker Hút: ${onMtn} bóng trên núi, Human Player nạp ${loaded}`)
+})
+
+// R162: Trận lẻ / Đấu tập / nhiệm vụ 12 mặc định là đội hình đa dạng (Mẫu Maker, Maker Hút, Xe Cắm Cờ, Maker Nâng) theo
+// ghế SEATS của trang. Số đo 12/11 (seed 1–6): Dễ 252 / 276 / 135 / 156 / 167 / 178 (194,0), Vừa 206 / 318 / 242 / 176 /
+// 227 / 297 (244,3), Khó 503 / 393 / 317 / 575 / 544 / 341 (445,5).
+test('đội hình mặc định (R162, ghế SEATS, 6 seed mỗi mức): Khó > Vừa > Dễ; Khó cả 4 mẫu treo Nước; Xe Cắm Cờ cắm cờ ở Vừa / Khó; Dễ mẫu nào cũng chạm xà', async () => {
+  const cfgs = DEFAULT_LINEUP.map((_, i) => lineupConfig(i))
+  const res: Record<Skill, { score: number; climbs: Climb[]; flags: number }[]> = { easy: [], medium: [], hard: [] }
+  for (const s of LEVELS) for (const seed of SEEDS) {
+    const r = await playAgents({ cfgs, skills: cfgs.map(() => s), teams: TEAMS, seed })
+    res[s].push({ score: r.match, climbs: SEATS.map(([a, k]) => r.tally.climbs[a][k]), flags: r.matchObj.flags.filter(Boolean).length })
+  }
+  const a = Object.fromEntries(LEVELS.map((s) => [s, res[s].reduce((t, x) => t + x.score, 0) / SEEDS.length])) as Record<Skill, number>
+  for (const s of LEVELS) console.log(`đội hình mặc định ${NAME[s]}: ${res[s].map((x) => x.score).join(' / ')} — trung bình ${a[s].toFixed(1)}`)
+  assert.ok(a.hard > a.medium, `Khó ${a.hard} ≤ Vừa ${a.medium}`)
+  assert.ok(a.medium > a.easy, `Vừa ${a.medium} ≤ Dễ ${a.easy}`)
+  for (const x of res.hard) assert.deepEqual(x.climbs, ['water', 'water', 'water', 'water'])
+  for (const s of ['medium', 'hard'] as const) for (const x of res[s]) assert.ok(x.flags >= 1, `${NAME[s]}: Xe Cắm Cờ không cắm cờ nào`)
+  DEFAULT_LINEUP.forEach((type, i) => {
+    const touched = res.easy.filter((x) => x.climbs[i] !== 'none').length
+    assert.ok(touched >= 5, `Dễ: ${type} chỉ chạm xà ${touched}/6 trận`)
+  })
 })

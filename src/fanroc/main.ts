@@ -24,7 +24,7 @@ import { PadSeats, PS2_NEUTRAL, type SeatStatus } from './gamepad.ts'
 import { KeyPad, layoutFor, mergePad, typing } from './keys.ts'
 import { effectiveSpeed } from './pace.ts'
 import { configControls, createEditors, workerCount } from './editor.ts'
-import { defaultConfig, sample, TOOLBOX } from './programs.ts'
+import { sample, TOOLBOX } from './programs.ts'
 import { NEUTRAL } from './ports.ts'
 import { MISSION_SEED, MISSIONS } from './missions/data.ts'
 import { grade, loopEmpty, restWaits } from './missions/grade.ts'
@@ -47,7 +47,7 @@ import { assignSeat, createSettings, defaultSeats, playerSeat, seatOf, seatOptio
 import { createWorkshopBar, Drafts, resetVerified, saveVerified, sameProgram } from './ui/workshop.ts'
 import { createRobotCards, WarningHold, type CardInfo } from './ui/robotcard.ts'
 import { climbItem, createFeed, EventFeed, foulItem, scoreItem } from './ui/feed.ts'
-import { penaltyPoints, playAgents } from './quickmatch.ts'
+import { lineupConfig, penaltyPoints, playAgents } from './quickmatch.ts'
 import { isOldRules, nextMatch, record, type Played, type TournamentState } from './tournament.ts'
 import {
   createTournamentScreen, matchSeed, newTournament, pendingMachines, played, playersIn, progressText, SAVE_TOUR_FAILED,
@@ -210,7 +210,7 @@ async function start(): Promise<void> {
   const modeOwner = (m: SeatMode): Player | null => (m.startsWith('player-') || m.startsWith('copy-') ? (Number(m.slice(-1)) as Player) : null)
   const seatCfg = (i: number): RobotConfig => {
     const p = modeOwner(modes[i])
-    return p === null ? defaultConfig('maker') : cfgOf(p)
+    return p === null ? lineupConfig(i) : cfgOf(p)
   }
   const seatDriver = (i: number): Driver => {
     const m = modes[i]
@@ -263,11 +263,11 @@ async function start(): Promise<void> {
       list = [0, 1, 2, 3].map((i) =>
         i === mine
           ? { cfg: cfgOf(wsPlayer), team: names[wsPlayer], driver: { kind: 'program', link: editors.link(wsPlayer) } }
-          : { cfg: defaultConfig('maker'), team: TEAMS[i], driver: { kind: 'program', link: idle[i] } },
+          : { cfg: lineupConfig(i), team: TEAMS[i], driver: { kind: 'program', link: idle[i] } },
       )
     } else {
       // Màn chính / màn chờ: nền là 4 robot máy chơi luyện tập trên sân.
-      list = [0, 1, 2, 3].map((i) => ({ cfg: defaultConfig('maker'), team: TEAMS[i], driver: { kind: 'agent', skill: 'medium' } }))
+      list = [0, 1, 2, 3].map((i) => ({ cfg: lineupConfig(i), team: TEAMS[i], driver: { kind: 'agent', skill: 'medium' } }))
     }
     return named(GameSession.create({ mode, seed: s, seats: list, balls }), list.map((x) => x.team))
   }

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { playAgents, penaltyPoints, SEATS } from './quickmatch.ts'
+import { DEFAULT_LINEUP, lineupConfig, playAgents, penaltyPoints, SEATS } from './quickmatch.ts'
 import { teamScore } from './scoring.ts'
 import type { RobotConfig } from './robots.ts'
 import type { Skill } from './agent.ts'
@@ -49,4 +49,11 @@ test('penaltyPoints: 5·nhẹ + 10·vàng, thẻ đỏ = cả điểm trận, kh
 
 test('playAgents: số cấu hình/mức/tên đội lệch số ghế ⇒ lỗi rõ ràng', async () => {
   await assert.rejects(playAgents({ ...opts(1), teams: ['A', 'B'] }), /tên đội/)
+})
+
+test('đội hình mặc định (R162): 4 ghế, ≥ 3 mẫu khác nhau, ghế của em (Đỏ 1) là Mẫu Maker, Đỏ 2 Xe Cắm Cờ; cấu hình là đế đầu của mẫu', () => {
+  assert.equal(DEFAULT_LINEUP.length, SEATS.length)
+  assert.ok(new Set(DEFAULT_LINEUP).size >= 3, `chỉ ${new Set(DEFAULT_LINEUP).size} mẫu: ${DEFAULT_LINEUP.join(', ')}`)
+  assert.deepEqual([...DEFAULT_LINEUP], ['maker', 'makerIntake', 'co', 'makerLift'])
+  assert.deepEqual(DEFAULT_LINEUP.map((_, i) => lineupConfig(i)), DEFAULT_LINEUP.map((type) => ({ type, drive: 'diff2', actuator: 'tt' })))
 })

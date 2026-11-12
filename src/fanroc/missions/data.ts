@@ -386,11 +386,12 @@ export const MISSIONS: Mission[] = [
       'Cuối trận, giữ □ giơ móc dưới Thang Cứu Hỏa đỏ rồi nhả □ để treo lên thanh. Robot treo càng xa (Khu vực Nước), điểm trận được nhân càng nhiều.',
     ],
     goals: [{ type: 'matchEnd' }],
-    // Cách đo của R141: trận 4 robot máy Mẫu Maker mức Dễ, ghế như trang (SEATS), seed 1–12 (trang tăng seed mỗi trận
-    // mới). Đo lại 12/11 sau thanh xà theo CAD lắp sân (R157): 59 / 107 / 114 / 128 / 81 / 131 / 76 / 83 / 60 / 86 / 120 /
-    // 88, trung bình 94,4 (trước, theo Hình 1: 106,0) — lệch rất mạnh theo seed. ⭐⭐ ≈ 94 × 0,85 ⇒ 80, ⭐⭐⭐ ≈ 94 × 1,1 ⇒
-    // 105: em thay một robot máy, nên 80 / 105 điểm nghĩa là em góp được bằng / hơn một robot máy.
-    stars: { two: [{ type: 'score', min: 80 }], three: [{ type: 'score', min: 105 }] },
+    // Cách đo của R141: trận 4 robot máy mức Dễ, ghế như trang (SEATS), seed 1–12 (trang tăng seed mỗi trận mới). Đo lại
+    // 12/11 với đội hình mặc định đa dạng (R162: Mẫu Maker, Maker Hút, Xe Cắm Cờ, Maker Nâng — trận lẻ của nhiệm vụ này
+    // dùng đội hình đó): 252 / 276 / 135 / 156 / 167 / 178 / 161 / 137 / 267 / 183 / 56 / −37, trung bình 160,9 (4 Mẫu Maker:
+    // 94,4, R159) — lệch rất mạnh theo seed. ⭐⭐ ≈ 161 × 0,85 ⇒ 135, ⭐⭐⭐ ≈ 161 × 1,1 ⇒ 175: em thay một robot máy, nên
+    // 135 / 175 điểm nghĩa là em góp được bằng / hơn một robot máy.
+    stars: { two: [{ type: 'score', min: 135 }], three: [{ type: 'score', min: 175 }] },
     hints: [
       { when: 'matchEnd', text: 'Chơi tới hết giờ để được chấm nhé.' },
       { when: 'score', text: 'Trận được {d} điểm. Muốn nhiều sao hơn: chở bóng nhiều chuyến hơn và nhớ leo Thang Cứu Hỏa cuối trận.' },

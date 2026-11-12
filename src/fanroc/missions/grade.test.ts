@@ -406,12 +406,12 @@ test('dọn Khu Chữa Cháy (nhiệm vụ 9) và trận đầu (nhiệm vụ 12
   assert.equal(grade(m9, record(m9, { tally: { ...dirty, fire: { o: 3, g: 28 } }, trail: { distance: 3, turned: 0, time: 40 } })).stars, 3)
   const m12 = byN(12)
   const end = [{ t: 180, robot: null, text: 'Hết giờ — điểm trận 200' }]
-  const tally = { ...emptyTally(), fire: { o: 20, g: 0 } } // 100: giữa ⭐⭐ 80 và ⭐⭐⭐ 105 (đo lại 12/11, thanh CAD lắp sân)
-  assert.equal(scoreTally(tally).total, 100)
+  const tally = { ...emptyTally(), fire: { o: 31, g: 0 } } // 155: giữa ⭐⭐ 135 và ⭐⭐⭐ 175 (đo lại 12/11, đội hình đa dạng R162)
+  assert.equal(scoreTally(tally).total, 155)
   assert.equal(grade(m12, record(m12, { tally })).done, false, 'chưa hết giờ')
   const r = grade(m12, record(m12, { tally, events: end }))
   assert.deepEqual([r.done, r.stars], [true, 2])
-  assert.match(r.hint ?? '', /100 điểm/)
+  assert.match(r.hint ?? '', /155 điểm/)
 })
 
 // ---------- Giải được trên sân thật ----------

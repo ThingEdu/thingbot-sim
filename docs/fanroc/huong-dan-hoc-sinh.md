@@ -29,6 +29,8 @@ Chữa Cháy, bốn núi, cờ, Thang Cứu Hỏa) và cách ghi điểm. Mở *
 Rồi vào **Trận lẻ · Đấu tập**:
 
 - **Trận lẻ**: một trận 3 phút đúng luật, hai liên minh Đỏ và Xanh, mỗi bên 2 robot. Robot không do em lái thì máy lái.
+  Robot máy mỗi ghế một mẫu: Maker Hút (Chuồn Chuồn), Xe Cắm Cờ (Kiến Lửa), Maker Nâng (Ong Vàng); ghế của em là robot
+  em chọn (mặc định Mẫu Maker).
 - **Đấu tập**: sân tự do, không giới hạn giờ, robot chạy được ngay, lỗi chỉ nhắc chứ không bị phạt — để tập lái.
 
 Bàn phím là tay cầm PS2 ảo. Bảng đầy đủ nằm ở ⚙ › Phím điều khiển, chỉ rõ từng nút làm gì với robot đang chọn.

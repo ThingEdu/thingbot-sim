@@ -8,13 +8,24 @@ import { Agent, type Skill } from './agent.ts'
 import type { PortValues } from './ports.ts'
 import type { FieldTally } from './scoring.ts'
 import type { Penalty } from './match.ts'
-import type { RobotConfig } from './robots.ts'
+import type { RobotConfig, RobotType } from './robots.ts'
+import { defaultConfig } from './programs.ts'
 
 type Alliance = 'red' | 'blue'
 export type Seat = [Alliance, 0 | 1]
 
 /** Thứ tự ghế của trang (src/fanroc/main.ts): Đỏ 0, Xanh 0, Đỏ 1, Xanh 1. */
 export const SEATS: Seat[] = [['red', 0], ['blue', 0], ['red', 1], ['blue', 1]]
+
+/**
+ * Đội hình robot mặc định theo ghế SEATS (R162, anh Tuấn 12/11: "robot lúc xuất phát đa dạng"): Đỏ 1 Mẫu Maker (ghế của
+ * em — em chọn robot khác thì robot của em thay), Xanh 1 Chuồn Chuồn Maker Hút, Đỏ 2 Kiến Lửa Xe Cắm Cờ, Xanh 2 Ong Vàng
+ * Maker Nâng. Robot máy của cả bốn mẫu đều ghi điểm và leo xà ở mọi mức (agent.test.ts). Trận lẻ, Đấu tập, nhiệm vụ 12
+ * và sân nền màn chính dùng chung.
+ */
+export const DEFAULT_LINEUP: readonly RobotType[] = ['maker', 'makerIntake', 'co', 'makerLift']
+/** Cấu hình mặc định (đế đầu tiên của mẫu) của robot ở ghế `i` trong đội hình mặc định. */
+export const lineupConfig = (i: number): RobotConfig => defaultConfig(DEFAULT_LINEUP[i])
 
 export interface QuickOpts {
   cfgs: RobotConfig[]
