@@ -234,3 +234,37 @@ test('world.holeCentres() là holeCentres() của layout ở cao độ đỉnh n
     w.rapier.free()
   }
 })
+
+test('Thang Cứu Hỏa: tia dọc từ trên xuống dọc thanh Xanh trúng thanh ở y ≈ 0,65; lệch ngang 5 cm thì không trúng thanh', async () => {
+  const { pointAt, ladderLen } = await import('./ladder.ts')
+  const { LADDER } = await import('./layout.ts')
+  const w = await FanrocWorld.create(1, { balls: false })
+  const down = { x: 0, y: -1, z: 0 }
+  for (const s of [0.6, 0.1, ladderLen('blue') - 0.1]) {
+    const p = pointAt('blue', s)
+    const hit = w.rapier.castRay(new RAPIER.Ray({ x: p.x, y: 1, z: p.z }, down), 2, true)
+    assert.ok(hit, `s = ${s}: tia không trúng gì`)
+    const y = 1 - hit.timeOfImpact
+    assert.ok(Math.abs(y - (LADDER.y + LADDER.rodR)) < 0.003, `s = ${s}: trúng ở y = ${y.toFixed(4)}`)
+  }
+  // Lệch 5 cm vuông góc với thanh (nhìn từ trên): tia rơi xuống tận sàn.
+  const p = pointAt('blue', 0.6)
+  const q = pointAt('blue', 1.6)
+  const n = { x: -(q.z - p.z), z: q.x - p.x } // pháp tuyến ngang của thanh, dài 1 m
+  const hit = w.rapier.castRay(new RAPIER.Ray({ x: p.x + 0.05 * n.x, y: 1, z: p.z + 0.05 * n.z }, down), 2, true)
+  assert.ok(hit && 1 - hit.timeOfImpact < 0.01, `lệch 5 cm vẫn trúng ở y = ${hit ? 1 - hit.timeOfImpact : '—'}`)
+})
+
+test('Thang Cứu Hỏa: cột hai đầu thanh cao 0,65 m chắn tia ngang ở độ cao 0,3 m', async () => {
+  const { LADDERS } = await import('./layout.ts')
+  const w = await FanrocWorld.create(1, { balls: false })
+  for (const { b } of Object.values(LADDERS)) {
+    // Đầu b (gần Hộp Phân Phối, xa rào cạnh): tia từ tâm sân về phía cột.
+    // Tia lệch 1 cm vào trong sân so với tâm cột (tâm cột nằm sát mặt rào phía xa).
+    const o = { x: 0, y: 0.3, z: b.z + 0.01 }
+    const dir = { x: Math.sign(b.x), y: 0, z: 0 }
+    const hit = w.rapier.castRay(new RAPIER.Ray(o, dir), 2, true)
+    const want = Math.abs(b.x) - Math.sqrt(0.02 ** 2 - 0.01 ** 2)
+    assert.ok(hit && Math.abs(hit.timeOfImpact - want) < 0.003, `cột ở x = ${b.x}: toi ${hit?.timeOfImpact}, mong ${want}`)
+  }
+})

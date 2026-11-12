@@ -10,7 +10,8 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import type { FanrocWorld } from './world.ts'
 import { HOLE, PEAK_Y, START_POSES, type Alliance, type Pose } from './layout.ts'
 import { servo360, type PortValues } from './ports.ts'
-import { chuteExit, LIFT_AXIS, localGripPoint, rackExtent, rackOverhang, ROBOTS, portMap, type PortMap, type RobotConfig, type RobotDef } from './robots.ts'
+import { chuteExit, LIFT_AXIS, ROBOTS, portMap, type PortMap, type RobotConfig, type RobotDef } from './robots.ts'
+import { barYaw, climbOf, HOOK, pointAt, stepClimb, type Climb, type ClimbState } from './ladder.ts'
 
 export type Vec2 = { x: number; z: number }
 
@@ -79,12 +80,20 @@ export class RobotBody {
   /** Tay kẹp cờ (S1 / 180, 0…1); S1 null giữ giá trị lệnh gần nhất. */
   armFrac = 0
   onFlag?: (mountain: number) => void
+  /** Trạng thái leo Thang Cứu Hỏa (luật V4): đứng sàn hay đang treo trên thanh nào, ở chỗ bám `s`. */
+  climb: ClimbState = { mode: 'floor', bar: null, s: 0 }
+  /** Góc servo móc đang giữ (độ); cổng móc null (chưa ra lệnh) giữ góc lệnh gần nhất. */
+  hookDeg = 0
+  /** Robot cùng trận (Match đặt); robot khác đang treo chặn chỗ bám / số robot trên một thanh. */
+  peers: RobotBody[] = []
 
   private readonly world: FanrocWorld
   private readonly ports: PortMap
   /** Kẹp cờ đang đóng; S2 null (chưa ra lệnh) giữ nguyên trạng thái. */
   private gripClosed = true
   private releaseWait = 0
+  /** Góc móc ở bước trước (bám xà khi móc vừa từ giơ chuyển sang hạ). */
+  private lastHookDeg = 0
 
   constructor(world: FanrocWorld, cfg: RobotConfig, alliance: Alliance, slot: 0 | 1) {
     this.world = world
@@ -114,8 +123,12 @@ export class RobotBody {
     this.setPose(START_POSES[alliance][slot])
   }
 
-  /** Đặt xe tại tư thế, đứng yên. */
+  /** Đặt xe tại tư thế, đứng yên (luôn về sàn, thân dynamic, móc hạ). */
   setPose(p: Pose): void {
+    this.climb = { mode: 'floor', bar: null, s: 0 }
+    this.hookDeg = 0
+    this.lastHookDeg = 0
+    this.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true)
     this.body.setTranslation({ x: p.x, y: 0.002, z: p.z }, true)
     this.body.setRotation({ x: 0, y: Math.sin(p.yaw / 2), z: 0, w: Math.cos(p.yaw / 2) }, true)
     this.body.setLinvel({ x: 0, y: 0, z: 0 }, true)
@@ -140,41 +153,19 @@ export class RobotBody {
     return LIFT_AXIS[this.def.type] === 'forward' ? this.extend : 0
   }
 
-  /** Điểm kẹp cờ đi theo thanh răng (họ Maker): ra sau đuôi, hoặc ra trước mũi với Mẫu Maker (`flagFront`). */
-  private get rackFlag(): boolean {
-    return LIFT_AXIS[this.def.type] === 'back'
-  }
-
-  /** Cắm cờ bằng đuôi xe (Maker Nâng / Hút / Pro: thanh răng lùi ra sau mang giá cờ). */
-  get flagBehind(): boolean {
-    return this.rackFlag && !this.def.flagFront
-  }
-
-  /** Phần giá cờ trên thanh răng nhô khỏi mép khung (trước hoặc sau), m. */
-  private get rackOver(): number {
-    return rackOverhang(this.def, this.extend, this.armFrac)
-  }
-
-  /** Phần tay kẹp cờ đang vươn ra (tới trước; với robot cắm cờ bằng thanh răng đã tính trong điểm kẹp), m. */
+  /** Phần tay kẹp cờ đang vươn ra tới trước, m. */
   private get armReach(): number {
     return this.armFrac * (this.def.arm?.reach ?? 0)
   }
 
   /** Phần nhô ra trước mũi xe (vươn + tay kẹp, hoặc cửa lồng nâng bằng servo vượt mũi khung), m. */
   get forwardExtension(): number {
-    const rack = this.def.flagFront ? this.rackOver : 0
-    return this.forwardExtend + (this.rackFlag ? rack : this.armReach) + (this.def.chuteBehind ? 0 : Math.max(0, chuteExit(this.def, this.armFrac)?.reach ?? 0))
+    return this.forwardExtend + this.armReach + (this.def.chuteBehind ? 0 : Math.max(0, chuteExit(this.def, this.armFrac)?.reach ?? 0))
   }
 
-  /** Phần nhô ra sau đuôi xe (giá cờ trên thanh răng vượt mép sau), m. */
-  get backExtension(): number {
-    return this.flagBehind ? this.rackOver : 0
-  }
-
-  /** Tổng phần mở rộng ra khỏi kích thước xuất phát (trước + sau, trừ phần mũi thu vào), m — đưa vào ruleChecks. */
+  /** Tổng phần mở rộng ra khỏi kích thước xuất phát, m — đưa vào ruleChecks. */
   get extension(): number {
-    // Phần giá cờ nhô ra (đã tính ở trước hoặc sau) thay bằng mức mở rộng theo luật của thanh răng.
-    return this.forwardExtension + this.backExtension - this.rackOver + rackExtent(this.def, this.extend, this.armFrac)
+    return this.forwardExtension
   }
 
   /** Điểm cách mũi xe thêm `ahead` theo phương ngang và cao `y` so với sàn. */
@@ -201,11 +192,10 @@ export class RobotBody {
     return this.ahead(this.def.release.reach + this.forwardExtend, this.def.release.y + this.liftUp)
   }
 
-  /** Điểm kẹp cờ: như điểm xả, cộng phần tay kẹp S1 (R17); robot cắm cờ bằng thanh răng thì ở đầu thanh (trước mũi / sau đuôi). */
+  /** Điểm kẹp cờ: như điểm xả, cộng phần tay kẹp S1 (R17). */
   gripPoint(): { x: number; y: number; z: number } {
     const up = this.armFrac * (this.def.arm?.up ?? 0)
     const y = this.def.release.y + this.liftUp + up
-    if (this.rackFlag) return this.along(localGripPoint(this.def, this.extend, this.armFrac).z, y)
     return this.ahead(this.def.release.reach + this.forwardExtend + this.armReach, y)
   }
 
@@ -214,7 +204,7 @@ export class RobotBody {
     const t = this.body.translation()
     const { f, r } = this.axes()
     const front = this.def.size.l / 2 + this.forwardExtension
-    const back = -this.def.size.l / 2 - this.backExtension
+    const back = -this.def.size.l / 2
     const half = this.def.size.w / 2
     const at = (a: number, b: number): Vec2 => ({ x: t.x + f.x * a + r.x * b, z: t.z + f.z * a + r.z * b })
     return [at(front, -half), at(front, half), at(back, half), at(back, -half)]
@@ -235,14 +225,63 @@ export class RobotBody {
     return true
   }
 
+  /** Mức leo hiện tại (none / contact / ground / water) và thanh đang chạm / treo. */
+  get climbLevel(): { level: Climb; bar: Alliance | null } {
+    const p = this.pose
+    return climbOf(this.climb, this.hookDeg, p.x, p.z)
+  }
+
   /** Gọi mỗi bước vật lý, trước world.step(dt). */
   apply(ports: PortValues, dt: number): void {
-    this.drive(ports, dt)
+    this.hang(ports, dt)
+    if (this.climb.mode === 'floor') this.drive(ports, dt)
     this.lift(ports, dt)
     this.intake(ports)
     this.release(ports, dt)
     if (ports.S1 !== null) this.armFrac = Math.max(0, Math.min(1, ports.S1 / 180))
     this.flag(ports)
+  }
+
+  /**
+   * Móc leo xà: cập nhật góc móc rồi bước máy trạng thái leo (ladder.ts) với tâm xe làm điểm móc. Vào treo ⇒ thân
+   * thành kinematic, rủ ở HOOK.hangY, quay theo thanh; đang treo ⇒ trượt theo chỗ bám; rơi ⇒ trả về dynamic.
+   */
+  private hang(ports: PortValues, dt: number): void {
+    const cmd = ports[this.def.hook.port]
+    if (cmd !== null) this.hookDeg = cmd
+    const p = this.pose
+    const others = this.peers
+      .filter((o) => o !== this && o.climb.mode === 'hang' && o.climb.bar)
+      .map((o) => ({ bar: o.climb.bar!, s: o.climb.s }))
+    const was = this.climb.mode
+    this.climb = stepClimb(this.climb, { hookDeg: this.hookDeg, lastHookDeg: this.lastHookDeg, x: p.x, z: p.z, drive: this.driveFraction(ports), dt, others })
+    this.lastHookDeg = this.hookDeg
+    const { mode, bar, s } = this.climb
+    if (mode === 'hang' && bar) {
+      const at = pointAt(bar, s)
+      if (was !== 'hang') {
+        const yaw = barYaw(bar)
+        this.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true)
+        this.body.setTranslation({ x: at.x, y: HOOK.hangY, z: at.z }, true)
+        this.body.setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) }, true)
+        this.body.setLinvel({ x: 0, y: 0, z: 0 }, true)
+        this.body.setAngvel({ x: 0, y: 0, z: 0 }, true)
+      }
+      // Hướng giữ nguyên từ lúc bám (thanh thẳng); mỗi bước chỉ dời theo chỗ bám.
+      this.body.setNextKinematicTranslation({ x: at.x, y: HOOK.hangY, z: at.z })
+    } else if (was === 'hang') {
+      // Giơ móc khi đang treo: rơi xuống sàn, thành vật bình thường.
+      this.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true)
+      this.body.setLinvel({ x: 0, y: 0, z: 0 }, true)
+      this.body.setAngvel({ x: 0, y: 0, z: 0 }, true)
+    }
+  }
+
+  /** Lệnh tiến của đế (trung bình các bánh, −1…1, dương = tiến) — đang treo thì đẩy robot trượt dọc thanh. */
+  private driveFraction(ports: PortValues): number {
+    if (this.cfg.drive === 'diff2') return (this.wheel(ports, 'L') + this.wheel(ports, 'R')) / 2 / V_MAX
+    const w = WHEEL_SIGN
+    return (this.wheel(ports, 'FL') * w.FL + this.wheel(ports, 'FR') * w.FR + this.wheel(ports, 'RL') * w.RL + this.wheel(ports, 'RR') * w.RR) / 4 / V_MAX
   }
 
   private wheel(ports: PortValues, key: keyof PortMap['wheels']): number {

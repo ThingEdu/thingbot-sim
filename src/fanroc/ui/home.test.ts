@@ -46,9 +46,9 @@ test('robotStats: thanh lấy từ ROBOTS (storage/10 kẹp 1, cờ = có kẹp 
   assert.equal(sort.storage, 1)
   assert.equal(ui.flag, 0)
   assert.equal(sort.flag, 0)
-  assert.equal(maker.flag, 0.5) // kẹp cờ, không vươn
+  assert.equal(maker.flag, 0) // luật V4: họ Maker bỏ cờ (S2 làm móc leo xà)
   assert.equal(co.flag, 1) // tay vươn 14 cm
-  assert.ok(co.flag > maker.flag)
+  assert.equal(maker.flagText, 'Không cắm cờ')
   for (const s of [maker, ui, co, sort]) assert.ok(s.speed > 0 && s.speed <= 1)
   assert.match(maker.speedText, new RegExp(`^${String(V_MAX).replace('.', ',')} m/s$`))
   assert.match(robotStats({ type: 'maker', drive: 'omni', actuator: 's360' }).speedText, /đi ngang được/)

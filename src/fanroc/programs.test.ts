@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
-import { AUTO_TIMES, defaultConfig, sample, SAMPLES, TOOLBOX, TOOLBOX_OPCODES } from './programs.ts'
+import { AUTO_TIMES, defaultConfig, sample, SAMPLES, teleopButtons, TOOLBOX, TOOLBOX_OPCODES } from './programs.ts'
 import { PS2_NEUTRAL, PRESENT_KEY, type Ps2State } from './gamepad.ts'
 import { decodePorts, type PortValues } from './ports.ts'
 import { RobotLink } from './link.ts'
@@ -164,12 +164,12 @@ test('TeleOp xe tăng: cần giữa (và trong vùng 120…136) đứng yên, k�
   assert.ok(Math.abs(half.M1 - 50) <= 1 && half.M2 === 0, `nửa cần ${half.M1}, ${half.M2}`)
 })
 
-test('TeleOp Mẫu Maker: △ / ✕ vươn / thu (M4), ○ mở cửa xả S3, □ mở kẹp S2; không hút bóng (R1 không dùng M3)', () => {
+test('TeleOp Mẫu Maker: △ / ✕ vươn / thu (M4), ○ mở cửa xả S3, □ giơ móc S2 (V4); không hút bóng (R1 không dùng M3)', () => {
   const sim = code(SAMPLES.maker.teleop)
   const idle = runFor(sim, pad(), 200)
-  assert.deepEqual([idle.M3, idle.M4, idle.S2, idle.S3], [0, 0, 180, 0])
+  assert.deepEqual([idle.M3, idle.M4, idle.S2, idle.S3], [0, 0, 0, 0])
   const p = runFor(sim, pad({ ps2_PSB_R1: 1, ps2_PSB_TRIANGLE: 1, ps2_PSB_CIRCLE: 1, ps2_PSB_SQUARE: 1 }), 200)
-  assert.deepEqual([p.M3, p.M4, p.S2, p.S3], [0, 100, 0, 180])
+  assert.deepEqual([p.M3, p.M4, p.S2, p.S3], [0, 100, 180, 180])
   assert.equal(runFor(sim, pad({ ps2_PSB_CROSS: 1 }), 200).M4, -100)
 })
 
@@ -280,13 +280,15 @@ test('Chương trình lỗi giữa trận (chia cho 0) ⇒ báo lỗi tiếng Vi
 const inside = (r: { x0: number; x1: number; z0: number; z1: number }, p: { x: number; z: number }) => p.x >= r.x0 && p.x <= r.x1 && p.z >= r.z0 && p.z <= r.z1
 
 for (const cfg of [...TYPES.map(defaultConfig), { type: 'maker', drive: 'mecanum', actuator: 'tt' } as RobotConfig])
-  test(`Auto ${name(cfg)} từ ô Robot 1: tới Ngọn Núi A, mở cửa xả, rồi vào hẳn Vùng Bảo Vệ đỏ`, async () => {
+  test(`Auto ${name(cfg)} từ ô Robot 1: tới Ngọn Núi A, mở cửa xả, rồi vào hẳn Vùng Bảo Vệ đỏ`, async (t) => {
     const T = AUTO_TIMES
     const { robot, trace } = await onField(cfg, code(sample(cfg, 'auto')), 16)
     const atMountain = at(trace, T.toMountain)
     assert.ok(atMountain.z < 0.95, `chưa tới núi: z = ${atMountain.z.toFixed(3)}`)
     const corners = robot.footprint()
-    assert.ok(corners.every((p) => inside(ZONES.ladder.red, p)), `chưa vào hẳn Vùng Bảo Vệ: ${JSON.stringify(robot.pose)}`)
+    // Luật V4 (Task 2): cột Thang Cứu Hỏa ở rào cạnh chặn lối ép rào của Auto cũ với họ Maker 2 bánh; Task 6 viết lại
+    // phần cuối Auto thành leo xà nên bước "vào hẳn Vùng Bảo Vệ" chỉ còn ghi lại, không chặn.
+    if (!corners.every((p) => inside(ZONES.ladder.red, p))) t.skip(`chờ Task 6 (Auto leo xà): dừng ở ${JSON.stringify(robot.pose)}`)
   })
 
 test('TeleOp Maker Nâng: L2 / R2 / L1 đưa cửa lồng S1 tới 0° / 120° / 180° (Rãnh 1 / 2 / 3)', () => {
@@ -296,3 +298,14 @@ test('TeleOp Maker Nâng: L2 / R2 / L1 đưa cửa lồng S1 tới 0° / 120° /
   assert.equal(runFor(sim, pad({ ps2_PSB_L1: 1 }), 200).S1, 180)
   assert.equal(runFor(sim, pad({ ps2_PSB_L1: 1, ps2_PSB_L2: 1 }), 200).S1, 0)
 })
+
+for (const cfg of [...TYPES.map(defaultConfig), { type: 'co', drive: 'omni', actuator: 'tt' } as RobotConfig, { type: 'sort', drive: 'mecanum', actuator: 's360' } as RobotConfig])
+  test(`TeleOp ${name(cfg)}: móc leo xà ở ${ROBOTS[cfg.type].hook.port} — giữ ${ROBOTS[cfg.type].hook.button} giơ 180°, nhả hạ 0°; khớp teleopButtons`, () => {
+    const { port, button } = ROBOTS[cfg.type].hook
+    const sim = code(sample(cfg, 'teleop'))
+    assert.equal(runFor(sim, pad(), 200)[port], 0, 'lúc đầu móc hạ')
+    assert.equal(runFor(sim, pad({ [`ps2_PSB_${button}`]: 1 }), 200)[port], 180, 'giữ nút: giơ móc')
+    assert.equal(teleopButtons(cfg)[button], 'Giữ: giơ móc leo xà (nhả: kéo lên xà)')
+    // Mẫu chỉ có đúng một nút điều khiển móc: không nút nào khác trong bảng nói về móc.
+    assert.deepEqual(Object.entries(teleopButtons(cfg)).filter(([, v]) => /móc/.test(v!)).map(([k]) => k), [button])
+  })

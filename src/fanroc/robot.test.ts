@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import RAPIER from '@dimforge/rapier3d-compat'
 import { FanrocWorld, PHYSICS_DT } from './world.ts'
 import { RobotBody, V_MAX } from './robot.ts'
 import { NEUTRAL, type PortValues } from './ports.ts'
@@ -104,28 +105,27 @@ test('Xe Ủi không có cửa xả S3 (R33): lệnh S3 = 150 không xả bóng 
   assert.equal(w.balls[0].st, 'held')
 })
 
-test('Nâng/vươn M4 = 100: extend tăng 0.08 m/s, kẹp ở maxExtend, footprint dài thêm (Mẫu Maker: thêm về phía mũi)', async () => {
+test('Nâng/vươn M4 = 100: extend tăng 0.08 m/s, kẹp ở maxExtend; thanh răng họ Maker không mang cờ (V4) nên không tính mở rộng', async () => {
   const { w, r } = await corridor()
   drive(w, r, { M4: 100 }, 1)
   assert.ok(Math.abs(r.extend - 0.08) < 0.005, `extend ${r.extend}`)
   drive(w, r, { M4: 100 }, 2)
   assert.equal(r.extend, ROBOTS.maker.maxExtend)
-  const zs = r.footprint().map((c) => c.z)
-  const len = Math.max(...zs) - Math.min(...zs)
-  assert.ok(Math.abs(len - (ROBOTS.maker.size.l + ROBOTS.maker.maxExtend)) < 0.005, `dài ${len}`)
-  assert.ok(r.forwardExtension > 0.12 && r.backExtension === 0, `trước ${r.forwardExtension} / sau ${r.backExtension}`)
+  assert.equal(r.forwardExtension, 0)
   drive(w, r, { M4: -100 }, 3)
   assert.equal(r.extend, 0)
 })
 
-/** Đặt Maker sao cho điểm kẹp (giá cờ ở đầu thanh răng: Mẫu Maker cắm cờ bằng mũi) nằm ngay trên lỗ cờ Núi A. */
+const CO: RobotConfig = { type: 'co', drive: 'diff2', actuator: 'tt' }
+
+/** Đặt Xe Cắm Cờ sao cho điểm kẹp nằm ngay trên lỗ cờ Núi A (luật V4: họ Maker không còn cờ). */
 const overHoleA = async () => {
   const w = await FanrocWorld.create(1)
-  const r = new RobotBody(w, MAKER, 'red', 0)
+  const r = new RobotBody(w, CO, 'red', 0)
   const h = w.holeCentres()[0]
-  // yaw π: mũi hướng +z; thanh răng đẩy hết (giá cờ ra trước mũi) — z tâm xe = z lỗ − z điểm kẹp theo trục xe.
-  r.extend = ROBOTS.maker.maxExtend
-  r.setPose({ x: h.x, z: h.z - localGripPoint(ROBOTS.maker, r.extend, 0).z, yaw: Math.PI })
+  // yaw π: mũi hướng +z — z tâm xe = z lỗ − z điểm kẹp theo trục xe.
+  r.extend = ROBOTS.co.maxExtend
+  r.setPose({ x: h.x, z: h.z - localGripPoint(ROBOTS.co, r.extend, 0).z, yaw: Math.PI })
   return { w, r, h }
 }
 
@@ -159,9 +159,8 @@ test('R16: lỗ cờ đang có bóng ⇒ không cắm, lastMessage báo, robot v
 })
 
 test('Cờ mở chỗ khác ⇒ rơi xuống sàn thành vật dynamic; kẹp đóng lại gần cờ ⇒ nhặt lại', async () => {
-  const { w, r } = await corridor()
-  // Mẫu Maker giữ cờ trên nóc: lùi thanh răng ra sau đuôi trước, cờ mới rơi xuống sàn (không rơi lên nóc xe).
-  drive(w, r, { M4: 100, S2: 150 }, 3)
+  const { w, r } = await corridor(CO)
+  drive(w, r, { S2: 150 }, 0.1)
   drive(w, r, { S2: 30 }, 1)
   assert.equal(r.hasFlag, false)
   assert.ok(r.flagBody, 'cờ rơi phải có body')
@@ -208,9 +207,9 @@ test('Lao vào rào và vào núi: bị chặn, không leo lên (thân vẫn sá
   assert.ok(r.pose.z < 1.2 - ROBOTS.maker.size.l / 2 + 0.01, `xuyên rào tới z ${r.pose.z}`)
 })
 
-for (const type of ['maker', 'makerLift', 'co'] as const) {
-  // Maker Nâng cắm cờ bằng đuôi (thanh răng lùi ra sau): lùi đuôi vào núi; Mẫu Maker (thanh răng ra mũi) và Xe Cắm Cờ tiến mũi vào.
-  const back = type === 'makerLift'
+for (const type of ['co'] as const) {
+  // Luật V4: chỉ Xe Cắm Cờ còn cắm cờ, tiến mũi vào.
+  const back = false
   test(`Cờ (${ROBOTS[type].name}): ${back ? 'lùi đuôi' : 'lái thẳng'} vào Núi A theo trục lỗ, vươn + tay S1, mở kẹp ⇒ onFlag(0) (không dịch chuyển tức thời)`, async () => {
     const w = await FanrocWorld.create(1)
     const r = new RobotBody(w, { type, drive: 'diff2', actuator: 'tt' }, 'red', 0)
@@ -288,16 +287,114 @@ test('Mẫu Maker: cửa ra ở đuôi (anh Tuấn 10/11) — điểm xả 100 m
   assert.ok(lift.releasePoint().z < tl.z, 'Maker Nâng xả ở mũi (−z)')
 })
 
-test('Mẫu Maker cắm cờ ở mũi (anh Tuấn 10/11, khớp hình quay đầu): điểm kẹp trước mũi xe; Maker Nâng vẫn ở đuôi', async () => {
-  const { r } = await corridor()
-  r.extend = ROBOTS.maker.maxExtend
-  const t = r.body.translation()
-  // yaw 0: mũi hướng −z.
-  const g = r.gripPoint()
-  assert.ok(g.z < t.z - ROBOTS.maker.size.l / 2, `điểm kẹp ${g.z.toFixed(3)} phải trước mũi (tâm ${t.z.toFixed(3)})`)
-  assert.equal(r.flagBehind, false)
-  const lift = (await corridor({ type: 'makerLift', drive: 'diff2', actuator: 'tt' })).r
-  lift.extend = ROBOTS.makerLift.maxExtend
-  assert.ok(lift.gripPoint().z > lift.body.translation().z + ROBOTS.makerLift.size.l / 2, 'Maker Nâng cắm cờ bằng đuôi (+z)')
-  assert.equal(lift.flagBehind, true)
+test('Luật V4: họ Maker không có cờ — hasFlag false, S2 (móc) không làm rơi cờ nào', async () => {
+  for (const type of ['maker', 'makerLift', 'makerIntake', 'makerPro'] as const) {
+    const { w, r } = await corridor({ type, drive: ROBOTS[type].drives[0], actuator: 'tt' })
+    assert.equal(r.hasFlag, false, type)
+    drive(w, r, { S2: 180 }, 0.1)
+    drive(w, r, { S2: 0 }, 0.1)
+    assert.equal(r.flagBody, null, type)
+  }
+})
+
+// ---------- Leo Thang Cứu Hỏa (luật V4) ----------
+/** Mẫu Maker đứng dưới thanh Đỏ ở chỗ bám s, quay theo thanh (mũi từ đầu rào sang đầu Hộp Phân Phối). */
+const underBar = async (s = 0.2, cfg: RobotConfig = MAKER, dyaw = 0) => {
+  const { barYaw, pointAt } = await import('./ladder.ts')
+  const w = await FanrocWorld.create(1, { balls: false })
+  const r = new RobotBody(w, cfg, 'red', 0)
+  const p = pointAt('red', s)
+  r.setPose({ x: p.x, z: p.z, yaw: barYaw('red') + dyaw })
+  return { w, r }
+}
+
+test('Móc S2 của Mẫu Maker: giơ 180° rồi hạ 0° dưới đoạn Đất ⇒ treo Đất, thân rủ ở y = HOOK.hangY, kinematic, quay theo thanh', async () => {
+  const { HOOK, barYaw } = await import('./ladder.ts')
+  const { w, r } = await underBar(0.2, MAKER, 0.4) // đứng lệch hướng thanh 0,4 rad: bám vào thì quay theo thanh
+  drive(w, r, { S2: 180 }, PHYSICS_DT)
+  assert.deepEqual(r.climbLevel, { level: 'contact', bar: 'red' })
+  drive(w, r, { S2: 0 }, PHYSICS_DT)
+  assert.deepEqual(r.climbLevel, { level: 'ground', bar: 'red' })
+  assert.ok(Math.abs(r.body.translation().y - HOOK.hangY) < 1e-6, `y ${r.body.translation().y}`)
+  assert.equal(r.body.bodyType(), RAPIER.RigidBodyType.KinematicPositionBased)
+  assert.ok(Math.abs(r.pose.yaw - barYaw('red')) < 1e-6, `yaw ${r.pose.yaw}`)
+  // Không ra lệnh móc (null) vẫn treo; bánh đứng yên thì không trượt, không rơi.
+  const before = r.climb.s
+  drive(w, r, {}, 1)
+  assert.deepEqual(r.climbLevel, { level: 'ground', bar: 'red' })
+  assert.equal(r.climb.s, before)
+  assert.ok(Math.abs(r.body.translation().y - HOOK.hangY) < 1e-6)
+  assert.ok(Math.abs(r.pose.yaw - barYaw('red')) < 1e-6, `treo 1 s rồi yaw ${r.pose.yaw}`)
+})
+
+test('Đang treo: M1 = M2 = 255 trong 5 s trượt sang Nước (≈ 0,15 m/s, dừng ở đầu thanh); setPose(START) về sàn, thân dynamic', async () => {
+  const { HOOK, ladderLen, pointAt } = await import('./ladder.ts')
+  const { START_POSES } = await import('./layout.ts')
+  const { w, r } = await underBar()
+  drive(w, r, { S2: 180 }, PHYSICS_DT)
+  drive(w, r, { S2: 0 }, PHYSICS_DT)
+  drive(w, r, { M1: 255, M2: 255 }, 1)
+  assert.ok(Math.abs(r.climb.s - (0.2 + HOOK.slideV)) < 0.01, `1 s trượt tới s = ${r.climb.s}`)
+  const at = pointAt('red', r.climb.s)
+  assert.ok(Math.hypot(r.pose.x - at.x, r.pose.z - at.z) < 0.01, 'thân đi theo chỗ bám')
+  drive(w, r, { M1: 255, M2: 255 }, 4)
+  assert.deepEqual(r.climbLevel, { level: 'water', bar: 'red' })
+  assert.ok(Math.abs(r.climb.s - (ladderLen('red') - HOOK.end)) < 1e-6 || r.climb.s < ladderLen('red') - HOOK.end, `s ${r.climb.s}`)
+  assert.ok(Math.abs(r.body.translation().y - HOOK.hangY) < 1e-6)
+  r.setPose(START_POSES.red[0])
+  assert.equal(r.climb.mode, 'floor')
+  assert.equal(r.body.bodyType(), RAPIER.RigidBodyType.Dynamic)
+  assert.deepEqual(r.climbLevel, { level: 'none', bar: null })
+  drive(w, r, { M1: 60, M2: 60 }, 0.5)
+  assert.ok(Math.hypot(r.pose.x - START_POSES.red[0].x, r.pose.z - START_POSES.red[0].z) > 0.05, 'về sàn lái được như thường')
+  assert.ok(Math.abs(r.body.translation().y) < 0.01)
+})
+
+test('Đang treo mà giơ móc lại ⇒ rơi xuống sàn (dynamic), phải bám lại từ Đất', async () => {
+  const { w, r } = await underBar()
+  drive(w, r, { S2: 180 }, PHYSICS_DT)
+  drive(w, r, { S2: 0 }, PHYSICS_DT)
+  drive(w, r, { M1: 100, M2: 100 }, 3) // sang Nước
+  assert.equal(r.climbLevel.level, 'water')
+  drive(w, r, { S2: 180 }, 1)
+  assert.equal(r.climb.mode, 'floor')
+  assert.equal(r.body.bodyType(), RAPIER.RigidBodyType.Dynamic)
+  assert.ok(Math.abs(r.body.translation().y) < 0.01, `chưa rơi xuống sàn: y ${r.body.translation().y}`)
+  assert.equal(r.climbLevel.level, 'contact', 'móc vẫn giơ dưới thanh: chạm')
+  drive(w, r, { S2: 0 }, PHYSICS_DT)
+  assert.equal(r.climb.mode, 'floor', 'hạ móc dưới đoạn Nước không bám được')
+})
+
+test('Móc theo RobotDef.hook: Xe Cắm Cờ S4, Xe Phân Loại S1, Xe Ủi S2 — cổng khác không kéo robot lên', async () => {
+  for (const [type, port, wrong] of [['co', 'S4', 'S2'], ['sort', 'S1', 'S2'], ['ui', 'S2', 'S1']] as const) {
+    const { w, r } = await underBar(0.2, { type, drive: 'diff2', actuator: 'tt' })
+    drive(w, r, { [wrong]: 180 } as Partial<PortValues>, PHYSICS_DT)
+    drive(w, r, { [wrong]: 0 } as Partial<PortValues>, PHYSICS_DT)
+    assert.equal(r.climb.mode, 'floor', `${type}: ${wrong} không phải móc`)
+    drive(w, r, { [port]: 180 } as Partial<PortValues>, PHYSICS_DT)
+    drive(w, r, { [port]: 0 } as Partial<PortValues>, PHYSICS_DT)
+    assert.deepEqual(r.climbLevel, { level: 'ground', bar: 'red' }, `${type}: móc ${port}`)
+  }
+})
+
+test('peers: robot cùng trận đang treo chặn chỗ bám (khoảng cách HOOK.gap); robot thứ ba không bám được thanh đã có 2 robot', async () => {
+  const { HOOK, barYaw, pointAt } = await import('./ladder.ts')
+  const w = await FanrocWorld.create(1, { balls: false })
+  const bots = [0, 1, 2].map((k) => new RobotBody(w, MAKER, k ? 'blue' : 'red', (k % 2) as 0 | 1))
+  for (const b of bots) b.peers = bots
+  const hangAt = (r: RobotBody, s: number) => {
+    const p = pointAt('red', s)
+    r.setPose({ x: p.x, z: p.z, yaw: barYaw('red') })
+    r.apply({ ...NEUTRAL, S2: 180 }, PHYSICS_DT)
+    r.apply({ ...NEUTRAL, S2: 0 }, PHYSICS_DT)
+  }
+  hangAt(bots[0], 0.4)
+  hangAt(bots[1], 0.05)
+  assert.equal(bots[1].climb.mode, 'hang')
+  // Robot 1 tiến về phía robot 0: dừng cách HOOK.gap.
+  for (let k = 0; k < 120; k++) bots[1].apply({ ...NEUTRAL, M1: 100, M2: 100 }, PHYSICS_DT)
+  assert.ok(Math.abs(bots[0].climb.s - bots[1].climb.s - HOOK.gap) < 1e-6, `${bots[0].climb.s} − ${bots[1].climb.s}`)
+  hangAt(bots[2], 0.2)
+  assert.equal(bots[2].climb.mode, 'floor', 'thanh đã có 2 robot')
+  assert.equal(bots[2].climbLevel.level, 'none')
 })

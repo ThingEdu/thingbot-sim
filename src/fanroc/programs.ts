@@ -8,14 +8,16 @@
 //   Đế 4 bánh (omni / mecanum): cần trái LY tiến/lùi, LX sang ngang, cần phải RX xoay; M1–M4 = trước trái, trước phải,
 //   sau trái, sau phải, mỗi bánh = tiến ± ngang ± xoay (công thức ở `mix`).
 // - R1 giữ: cơ cấu hút (M3, hoặc servo 360 ở S4) — robot có hút (Mẫu Maker không hút: Human Player nạp bóng). △ / ✕ giữ: nâng / hạ (M4, hoặc S5); Xe Ủi: △ / ✕ nâng / hạ gàu S1.
-// - ○ giữ: mở cửa xả S3. □ giữ: mở kẹp cờ S2 (nhả ra là kẹp lại). L1 / L2: nâng / hạ tay S1 (Mẫu Maker, Xe Cắm Cờ); Maker Nâng / Pro: L2 / R2 / L1 đưa cửa lồng (S1) tới Rãnh 1 / 2 / 3.
+// - ○ giữ: mở cửa xả S3. □ giữ: mở kẹp cờ S2 (Xe Cắm Cờ, nhả ra là kẹp lại).
+// - Móc leo xà (RobotDef.hook): giữ nút là giơ móc 180°, nhả là hạ 0° — họ Maker / Xe Ủi □ ở S2, Xe Phân Loại □ ở S1,
+//   Xe Cắm Cờ R1 ở S4. L1 / L2: nâng / hạ tay S1 (Mẫu Maker, Xe Cắm Cờ); Maker Nâng / Pro: L2 / R2 / L1 đưa cửa lồng (S1) tới Rãnh 1 / 2 / 3.
 // - Xe Phân Loại (chưa có khối cảm biến màu, người lái tự phân loại): L1 = gạt S2 sang ngăn cam (0°), L2 = sang ngăn
 //   xanh (180°); servo giữ nguyên chỗ cho tới lần bấm sau. ○ mở cửa S3 của ngăn đang chọn.
 //
 // Mẫu Auto chạy một lần trong «khi Arduino khởi động» (FANROC không có giai đoạn tự động riêng, RE04): đi thẳng tới
 // Ngọn Núi A gần nhất, mở cửa xả 2 giây, lùi lại, sang rào trái, xuôi theo rào rồi vào Vùng Bảo Vệ đỏ.
 // Thời gian tính cho Robot 1 (đỏ, ô xuất phát trái); robot ở ô khác phải sửa số giây.
-import { LIFT_AXIS, portMap, ROBOTS, type RobotConfig, type RobotType } from './robots.ts'
+import { portMap, ROBOTS, type RobotConfig, type RobotType } from './robots.ts'
 import { MY_BLOCKS_CATEGORY } from './procedures.ts'
 
 type B = Record<string, unknown>
@@ -146,13 +148,18 @@ const mix = (fs: 1 | -1, ts: 1 | -1) => () => {
   return ts > 0 ? add(fsPart, t) : sub(fsPart, t)
 }
 
-/** Góc ban đầu của servo cố định: kẹp cờ đóng, cửa đóng, tay hạ, Xe Phân Loại chọn ngăn cam. */
+/** Số chân của khối servo cho cổng S1…S5 (SERVO_n của ThingBlock: S4 = chân 4, kênh PCA9685 9). */
+const servoPin = (port: string): number => Number(port.slice(1))
+
+/** Góc ban đầu của servo cố định: kẹp cờ đóng, cửa đóng, tay hạ, móc hạ, Xe Phân Loại chọn ngăn cam. */
 const servoSetup = (type: RobotType): B[] => {
   const def = ROBOTS[type]
   const out: B[] = []
-  if (def.servos.S1) out.push(servo(1, 0))
-  if (def.servos.S2) out.push(servo(2, def.flag ? 180 : 0))
+  const hook = def.hook.port
+  if (def.servos.S1 && hook !== 'S1') out.push(servo(1, 0))
+  if (def.servos.S2 && hook !== 'S2') out.push(servo(2, def.flag ? 180 : 0))
   if (def.servos.S3) out.push(servo(3, 0))
+  out.push(servo(servoPin(hook), 0))
   return out
 }
 
@@ -173,6 +180,8 @@ function teleop(cfg: RobotConfig): object {
   if (def.chuteLift)
     mech.push(ifThen(btn('PSB_L1'), servo(1, 180)), ifThen(btn('PSB_R2'), servo(1, CHUTE_MID)), ifThen(btn('PSB_L2'), servo(1, 0)))
   if (def.flag) mech.push(ifElse(btn('PSB_SQUARE'), servo(2, 0), servo(2, 180)))
+  // Móc leo xà: giữ nút là giơ móc (180°), nhả là hạ (0°) — kéo robot lên xà.
+  mech.push(ifElse(btn('PSB_' + def.hook.button), servo(servoPin(def.hook.port), 180), servo(servoPin(def.hook.port), 0)))
   if (cfg.type === 'sort') mech.push(ifThen(btn('PSB_L1'), servo(2, 0)), ifThen(btn('PSB_L2'), servo(2, 180)))
   if (def.servos.S3) mech.push(ifElse(btn('PSB_CIRCLE'), servo(3, 180), servo(3, 0)))
   const setup = [plain('thingBotC3_init'), plain('thingBotC3_initPS2'), ...servoSetup(cfg.type)]
@@ -196,9 +205,9 @@ export function teleopButtons(cfg: RobotConfig): Partial<Record<Ps2Button, strin
   if (ports.intake) out.R1 = `Giữ: ${def.mech.M3!.toLowerCase()}`
   if (ports.lift) {
     const what = def.mech.M4!.toLowerCase()
-    // Họ Maker: thanh răng mang giá cờ (LIFT_AXIS 'back'), không lên xuống — Mẫu Maker đẩy ra mũi, mẫu cải tiến lùi ra đuôi.
-    const back = LIFT_AXIS[cfg.type] === 'back'
-    const toward = ROBOTS[cfg.type].flagFront ? 'đẩy ra mũi' : 'lùi ra đuôi'
+    // Họ Maker: thanh răng trượt ngang trên nóc, không lên xuống — Mẫu Maker (vẽ quay đầu) đẩy ra mũi, mẫu cải tiến lùi ra đuôi.
+    const back = def.cad === 'maker'
+    const toward = cfg.type === 'maker' ? 'đẩy ra mũi' : 'lùi ra đuôi'
     out.TRIANGLE = back ? `Giữ: ${what} ${toward}` : `Giữ: ${what} lên`
     out.CROSS = back ? `Giữ: ${what} thu về` : `Giữ: ${what} xuống`
   }
@@ -216,6 +225,7 @@ export function teleopButtons(cfg: RobotConfig): Partial<Record<Ps2Button, strin
     out.L2 = 'Hạ cửa lồng: Rãnh 1'
   }
   if (def.flag) out.SQUARE = 'Giữ: mở kẹp cờ'
+  out[def.hook.button] = 'Giữ: giơ móc leo xà (nhả: kéo lên xà)'
   if (cfg.type === 'sort') {
     out.L1 = 'Chọn ngăn cam'
     out.L2 = 'Chọn ngăn xanh'

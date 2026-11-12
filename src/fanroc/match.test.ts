@@ -10,6 +10,8 @@ import type { RobotConfig } from './robots.ts'
 
 const MAKER: RobotConfig = { type: 'maker', drive: 'diff2', actuator: 'tt' }
 const UI: RobotConfig = { type: 'ui', drive: 'diff2', actuator: 'tt' }
+/** Luật V4: họ Maker không còn cờ — phép thử về cờ / tay vươn dùng Xe Cắm Cờ. */
+const CO: RobotConfig = { type: 'co', drive: 'diff2', actuator: 'tt' }
 const TEAMS = ['Đội 1', 'Đội 2', 'Đội 3', 'Đội 4']
 const ORANGE = 0
 const GREEN = 100
@@ -201,16 +203,16 @@ test('leo núi P12 hai lần ⇒ lần đầu cảnh cáo, lần sau 1 lỗi', a
 })
 
 test('vươn ra ngoài rào S02 ⇒ thẻ vàng một lần mỗi đợt', async () => {
-  const { w, robots, m } = await setup()
+  const { w, robots, m } = await setup([CO, MAKER, MAKER, MAKER])
   m.t = 0
-  // Maker sát rào phía xa, mũi hướng −z (yaw 0); M4 đẩy thanh răng ra mũi, ra ngoài rào.
+  // Xe Cắm Cờ sát rào phía xa, mũi hướng −z (yaw 0); S1 vươn tay cờ 140 mm ra mũi, ra ngoài rào.
   robots[0].setPose({ x: -0.6, z: -FIELD / 2 + 0.16, yaw: 0 })
-  run(m, only(0, { M4: 100 }), 2)
+  run(m, only(0, { S1: 180 }), 2)
   assert.equal(m.pens[0].yellow, 1)
-  run(m, only(0, { M4: 100 }), 2)
+  run(m, only(0, { S1: 180 }), 2)
   assert.equal(m.pens[0].yellow, 1, 'cùng một đợt chỉ một thẻ')
-  run(m, only(0, { M4: -100 }), 4) // thu hết (0,2 m ở 0,08 m/s = 2,5 s) rồi ở trong rào đủ lâu để sang đợt mới
-  run(m, only(0, { M4: 100 }), 2)
+  run(m, only(0, { S1: 0 }), 4) // thu tay rồi ở trong rào đủ lâu để sang đợt mới
+  run(m, only(0, { S1: 180 }), 2)
   assert.equal(m.pens[0].yellow, 2)
   assert.equal(m.events.filter((e) => e.text.includes('S02')).length, 2)
   // 5 bóng cam trong Chữa Cháy = 25: đội 1 bị 2 thẻ vàng còn 5, các đội khác giữ 25.
@@ -285,10 +287,10 @@ test('G15 không tính khi một robot có góc trong Vùng Bảo Vệ / Khu Ti�
 })
 
 test('luyện tập: không hết giờ, không phạt (sự kiện ghi "luyện tập")', async () => {
-  const { robots, m } = await setup(undefined, true)
+  const { robots, m } = await setup([CO, MAKER, MAKER, MAKER], true)
   m.t = 0
   robots[0].setPose({ x: -0.6, z: -FIELD / 2 + 0.16, yaw: 0 })
-  run(m, only(0, { M4: 100 }), 2)
+  run(m, only(0, { S1: 180 }), 2)
   assert.equal(m.pens[0].yellow, 0)
   assert.ok(m.events.some((e) => e.text.includes('S02') && e.text.includes('luyện tập')))
   m.t = 179.9
@@ -324,12 +326,11 @@ test('log(text, robot) ghi sự kiện kèm thời điểm (để nối HumanPla
 })
 
 test('cán cờ nằm trên sàn (P10) ⇒ cảnh cáo, không phạt điểm', async () => {
-  const { robots, m } = await setup()
+  const { robots, m } = await setup([CO, MAKER, MAKER, MAKER])
   m.t = 0
   robots[0].setPose({ x: 0, z: 0, yaw: 0 })
-  // Mẫu Maker giữ cờ trên nóc: đẩy thanh răng ra mũi rồi mở kẹp xa lỗ cờ ⇒ cờ rơi ra sàn trước mũi xe.
-  run(m, only(0, { M4: 100 }), 3)
-  run(m, only(0, { M4: 0, S2: 0 }), 1)
+  // Xe Cắm Cờ mở kẹp xa lỗ cờ ⇒ cờ rơi ra sàn trước mũi xe.
+  run(m, only(0, { S2: 0 }), 1)
   const f = robots[0].flagBody!.translation()
   assert.ok(f.y < 0.05, `cờ chưa nằm sàn: y = ${f.y}`)
   assert.equal(m.events.filter((e) => e.text.includes('P10')).length, 0)
@@ -343,7 +344,7 @@ test('cán cờ nằm trên sàn (P10) ⇒ cảnh cáo, không phạt điểm', 
 })
 
 test('P10 không tính robot tới chỗ cờ của chính mình', async () => {
-  const { robots, m } = await setup()
+  const { robots, m } = await setup([CO, MAKER, MAKER, MAKER])
   m.t = 0
   robots[0].setPose({ x: 0, z: 0, yaw: 0 })
   run(m, only(0, { S2: 0 }), 1)

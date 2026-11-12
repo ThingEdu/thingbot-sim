@@ -1,6 +1,7 @@
 // 4 robot mẫu FANROC, cách ghép cổng ThingBot theo đế bánh / cơ cấu và kiểm tra theo luật (spec 4.3).
 // Đơn vị: mét. Kích thước theo bản dựng thử 3D, sẽ thay khi có STEP.
 import type { PortValues } from './ports.ts'
+import type { Ps2Button } from './programs.ts'
 import { ZONES } from './layout.ts'
 
 export type RobotType = 'maker' | 'makerLift' | 'makerIntake' | 'makerPro' | 'ui' | 'co' | 'sort'
@@ -23,6 +24,11 @@ export interface RobotDef {
   hpLoad: boolean
   /** Có tay kẹp cờ không. */
   flag: boolean
+  /**
+   * Móc leo Thang Cứu Hỏa (luật V4): servo ở cổng `port`, giữ nút `button` của mẫu TeleOp là giơ móc (180°), nhả là hạ
+   * (0°, kéo robot lên xà). Móc đặt ở tâm thân xe, mọi mẫu như nhau.
+   */
+  hook: { port: 'S1' | 'S2' | 'S4'; button: Ps2Button }
   /** Điểm nhả bóng: độ cao y và tầm với reach phía trước. */
   release: { y: number; reach: number }
   /** Mức mở rộng tối đa ra khỏi kích thước xuất phát. */
@@ -32,17 +38,6 @@ export interface RobotDef {
    * (tuyến tính theo S1 / 180). Không có thì S1 không làm gì.
    */
   arm?: { reach: number; up: number }
-  /**
-   * Robot cắm cờ bằng đuôi (LIFT_AXIS 'back'): tâm giá giữ cờ lúc thanh răng thu hết cách tâm xe `rest` m về phía sau;
-   * `half` = nửa cỡ giá + đế cờ (phần nhô ra sau); `front` = phần thanh răng nhô trước mũi lúc thu (lùi thanh thì mũi
-   * ngắn lại tối đa chừng này). CAD Mẫu Maker: cả cụm dài 302 mm (đuôi khung −116 … mũi thanh răng +186 mm quanh tâm khung).
-   */
-  rearGrip?: { rest: number; half: number; front: number }
-  /**
-   * Thanh răng + giá cờ ở MŨI xe (Mẫu Maker vẽ quay đầu, anh Tuấn chốt 10/11): `rearGrip` lật ra trước tâm xe — giá cờ
-   * vươn ra trước mũi, `front` khi đó là phần thanh răng nhô sau đuôi (đẩy thanh thì đuôi ngắn lại).
-   */
-  flagFront?: boolean
   /**
    * Bóng ra ở cửa máng thay cho `release` (Mẫu Maker: lồng ống cong xuống vòng cửa ra trước thân, servo S3 chặn cửa; không
    * có cơ cấu nâng hạ nên chỉ tới Rãnh 1). `reach` tính từ mũi khung (âm = lùi vào trong thân), `y` là tâm bóng so với sàn.
@@ -68,17 +63,17 @@ const MAKER: RobotDef = {
   drives: ['diff2', 'omni', 'mecanum'],
   // Không xúc bóng trên sân (anh Tuấn chốt 06/11): về Khu Tiếp Tế để Human Player bỏ bóng vào lồng ống, 4 bóng là đầy;
   // servo S3 mở cửa ra cuối lồng; robot mẫu không có cơ cấu nâng hạ lồng nên chỉ tới Rãnh 1 (bậc thấp nhất).
+  // Luật V4 (anh Tuấn chốt 12/11): họ Maker bỏ cắm cờ, cổng S2 (trước là kẹp cờ) làm móc leo xà.
   mech: { M4: 'Thanh trượt răng' },
-  servos: { S1: 'Nâng tay', S2: 'Kẹp cờ', S3: 'Cửa xả' },
-  storage: 4, hpLoad: false, flag: true,
+  servos: { S1: 'Nâng tay', S2: 'Móc leo xà', S3: 'Cửa xả' },
+  storage: 4, hpLoad: false, flag: false,
+  hook: { port: 'S2', button: 'SQUARE' },
   // Thanh răng 300 mm, bánh răng giữa xe: lùi được ~200 mm (CAD) — đúng trần mở rộng 500 mm của luật.
   release: { y: 0.2, reach: 0.05 }, maxExtend: 0.2,
   arm: { reach: 0, up: 0.06 },
-  rearGrip: { rest: 0.1265, half: 0.0235, front: 0.039 },
   // Vòng cửa ra của lồng (CAD: tâm 68 mm trước tâm khung, cao 93 mm); bóng qua vòng rơi ra ở ~100 mm trước tâm.
   chute: { reach: -0.05, y: 0.093 },
   chuteBehind: true,
-  flagFront: true,
   cad: 'maker',
 }
 
@@ -91,23 +86,23 @@ export const ROBOTS: Record<RobotType, RobotDef> = {
   maker: MAKER,
   // Ba mẫu cải tiến chỉ dùng linh kiện có trong CAD "Bộ thingbot mới" (servo MG996R, động cơ TT, bánh D65, thanh răng).
   makerLift: {
-    ...MAKER, chuteBehind: false, flagFront: false, type: 'makerLift', name: 'Maker Nâng',
-    servos: { S1: 'Nâng cửa lồng (MG996R)', S2: 'Kẹp cờ', S3: 'Cửa xả' },
+    ...MAKER, chuteBehind: false, type: 'makerLift', name: 'Maker Nâng',
+    servos: { S1: 'Nâng cửa lồng (MG996R)', S2: 'Móc leo xà', S3: 'Cửa xả' },
     arm: undefined,
     chuteLift: CHUTE_LIFT,
   },
   makerIntake: {
-    ...MAKER, chuteBehind: false, flagFront: false, type: 'makerIntake', name: 'Maker Hút',
+    ...MAKER, chuteBehind: false, type: 'makerIntake', name: 'Maker Hút',
     size: { ...MAKER.size, h: TALL_H },
     mech: { M3: 'Con lăn hút', M4: 'Thanh trượt răng' },
     storage: 8,
   },
   makerPro: {
-    ...MAKER, chuteBehind: false, flagFront: false, type: 'makerPro', name: 'Maker Pro',
+    ...MAKER, chuteBehind: false, type: 'makerPro', name: 'Maker Pro',
     size: { ...MAKER.size, h: TALL_H },
     drives: ['omni', 'mecanum', 'diff2'],
     mech: { M3: 'Con lăn hút', M4: 'Thanh trượt răng' },
-    servos: { S1: 'Nâng cửa lồng (MG996R)', S2: 'Kẹp cờ', S3: 'Cửa xả' },
+    servos: { S1: 'Nâng cửa lồng (MG996R)', S2: 'Móc leo xà', S3: 'Cửa xả' },
     storage: 8,
     arm: undefined,
     chuteLift: CHUTE_LIFT,
@@ -117,8 +112,9 @@ export const ROBOTS: Record<RobotType, RobotDef> = {
     size: { w: 0.18, l: 0.24, h: 0.15 },
     drives: ['diff2'],
     mech: {},
-    servos: { S1: 'Gàu hớt' },
+    servos: { S1: 'Gàu hớt', S2: 'Móc leo xà' },
     storage: 15, hpLoad: false, flag: false,
+    hook: { port: 'S2', button: 'SQUARE' },
     release: { y: 0.1, reach: 0.05 }, maxExtend: 0,
   },
   co: {
@@ -128,6 +124,8 @@ export const ROBOTS: Record<RobotType, RobotDef> = {
     mech: { M4: 'Nâng thùng' },
     servos: { S1: 'Vươn tay cờ', S2: 'Kẹp cờ', S3: 'Cửa thùng' },
     storage: 12, hpLoad: true, flag: true,
+    // S1–S3 đã dùng cho cờ / thùng: móc ở S4 (bảng cổng ghi "S4: Móc leo xà"), nút R1 (□ vẫn là kẹp cờ).
+    hook: { port: 'S4', button: 'R1' },
     release: { y: 0.2, reach: 0.05 }, maxExtend: 0.08,
     arm: { reach: 0.14, up: 0 },
   },
@@ -137,8 +135,9 @@ export const ROBOTS: Record<RobotType, RobotDef> = {
     drives: ['diff2', 'mecanum', 'omni'],
     mech: { M3: 'Con lăn hút' },
     // S2 chọn ngăn (< 90° ngăn cam, ≥ 90° ngăn xanh), S3 là cửa xả của ngăn đang chọn.
-    servos: { S2: 'Chọn ngăn', S3: 'Cửa xả ngăn' },
+    servos: { S1: 'Móc leo xà', S2: 'Chọn ngăn', S3: 'Cửa xả ngăn' },
     storage: 10, hpLoad: false, flag: false,
+    hook: { port: 'S1', button: 'SQUARE' },
     release: { y: 0.1, reach: 0.05 }, maxExtend: 0,
   },
 }
@@ -183,7 +182,9 @@ export function ruleChecks(cfg: RobotConfig, extendNow: number, armFrac = 0): { 
   const s360 = effectiveActuator(cfg) === 's360'
   const mechCount = Object.keys(def.mech).length
   const motors = (cfg.drive === 'diff2' ? 2 : 4) + (s360 ? 0 : mechCount)
-  const servos = Object.keys(def.servos).length + (s360 ? mechCount : 0)
+  // Móc ở cổng ngoài `servos` (Xe Cắm Cờ: S4) vẫn là một servo.
+  const hookExtra = def.hook.port in def.servos ? 0 : 1
+  const servos = Object.keys(def.servos).length + (s360 ? mechCount : 0) + hookExtra
   const { w, l, h } = def.size
   const startOk = Math.max(w, l) <= 0.3 + 1e-9 && h <= 0.85 + 1e-9
   const extent = Math.max(w, l) + extendNow + armFrac * (def.arm?.reach ?? 0) + Math.max(0, chuteExit(def, armFrac)?.reach ?? 0)
@@ -195,18 +196,16 @@ export function ruleChecks(cfg: RobotConfig, extendNow: number, armFrac = 0): { 
   ]
   if (cfg.type === 'ui') {
     const safe = ZONES.ladder.red.x1 - ZONES.ladder.red.x0
-    out.push({ ok: 2 * w <= safe + 1e-9, text: `Hai Xe Ủi cạnh nhau: 2 × ${mm(w)} mm ≤ ${mm(safe)} mm (ô Vùng Bảo Vệ)` })
+    out.push({ ok: 2 * w <= safe + 1e-9, text: `Hai Xe Ủi cạnh nhau: 2 × ${mm(w)} mm ≤ ${mm(safe)} mm (ô Thang Cứu Hỏa)` })
   }
   return out
 }
 
 /**
- * Cơ cấu M4 đẩy điểm kẹp cờ theo hướng nào. Mẫu Maker (CAD Onshape "Bộ thingbot mới"): thanh răng trên nóc lùi ra
- * ĐUÔI xe, mang servo + giá giữ cờ ở đuôi thanh — cắm cờ bằng đuôi xe (anh Tuấn chốt 05/11). Xe Cắm Cờ: nâng thùng lên.
+ * Cơ cấu M4 đẩy điểm kẹp cờ theo hướng nào: Xe Cắm Cờ nâng thùng lên. Họ Maker (luật V4, chốt 12/11) không còn mang cờ:
+ * thanh răng M4 giữ nguyên hình CAD nhưng không đẩy điểm kẹp nào nên không có ở đây.
  */
-export const LIFT_AXIS: Partial<Record<RobotType, 'forward' | 'back' | 'up'>> = {
-  maker: 'back', makerLift: 'back', makerIntake: 'back', makerPro: 'back', co: 'up',
-}
+export const LIFT_AXIS: Partial<Record<RobotType, 'forward' | 'up'>> = { co: 'up' }
 
 /** Cửa ra của lồng ở S1 = `frac` × 180° (m, `reach` tính từ mũi khung), hoặc null nếu robot xả bóng theo `release`. */
 export function chuteExit(def: RobotDef, frac: number): { reach: number; y: number } | null {
@@ -224,24 +223,5 @@ export function localGripPoint(def: RobotDef, extend: number, armFrac: number): 
   const up = axis === 'up' ? extend : 0
   const arm = armFrac * (def.arm?.reach ?? 0)
   const y = def.release.y + up + armFrac * (def.arm?.up ?? 0)
-  const rack = (def.rearGrip?.rest ?? def.size.l / 2 + def.release.reach) + extend + arm
-  if (axis === 'back') return { x: 0, y, z: def.flagFront ? rack : -rack }
   return { x: 0, y, z: def.size.l / 2 + def.release.reach + (axis === 'forward' ? extend : 0) + arm }
-}
-
-/**
- * Mức mở rộng một chiều tính theo luật của robot cắm cờ bằng thanh răng: phần giá cờ nhô ra trừ phần đầu kia ngắn lại
- * (thanh răng trượt thì đầu bên kia của nó cũng thụt vào), m; robot khác 0.
- */
-export function rackExtent(def: RobotDef, extend: number, armFrac: number): number {
-  return Math.max(0, rackOverhang(def, extend, armFrac) - Math.min(extend, def.rearGrip?.front ?? 0))
-}
-
-/**
- * Phần giá cờ + đế cờ nhô khỏi mép khung của robot cắm cờ bằng thanh răng (ra sau đuôi, hoặc ra trước mũi với
- * `flagFront`), m; robot khác 0.
- */
-export function rackOverhang(def: RobotDef, extend: number, armFrac: number): number {
-  if (LIFT_AXIS[def.type] !== 'back') return 0
-  return Math.max(0, Math.abs(localGripPoint(def, extend, armFrac).z) + (def.rearGrip?.half ?? 0) - def.size.l / 2)
 }

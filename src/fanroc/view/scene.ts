@@ -3,7 +3,7 @@
 // Toạ độ cảnh = toạ độ sân (m): gốc tâm sân, +x sang phải nhìn từ Khu Điều Khiển, +z về Khu Điều Khiển, y lên.
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { BALL_R, FIELD, HOLE, MOUNTAINS, PEAK_Y, TIERS, WALL_H, WALL_T, ZONES, holeCentres, type Rect } from '../layout.ts'
+import { BALL_R, FIELD, HOLE, LADDER, LADDERS, MOUNTAINS, PEAK_Y, TIERS, WALL_H, WALL_T, ZONES, holeCentres, type Rect } from '../layout.ts'
 import type { FanrocWorld } from '../world.ts'
 import type { RobotBody } from '../robot.ts'
 import type { Match } from '../match.ts'
@@ -11,6 +11,7 @@ import { servo360, type PortValues } from '../ports.ts'
 import { FLAG_LEN, buildRobotModel, makeFlag, type RobotModel } from './robotModels.ts'
 import { cadToModel, chuteExitModel, chuteSlot } from './cadModel.ts'
 import { TRAIL_COLORS, type Trail } from '../trail.ts'
+import { HOOK, pointAt } from '../ladder.ts'
 import mesh from '../assets/mountain-mesh.json' with { type: 'json' }
 
 /** Ba góc chọn được ở ⚙ (`field | follow | driver`) và `orbit`: quay chậm quanh sân, nền của màn chính. */
@@ -251,6 +252,80 @@ interface RobotView {
   model: RobotModel
   last: { x: number; z: number; yaw: number } | null
   grip: boolean
+  hook: Hook
+}
+
+const Y_UP = new THREE.Vector3(0, 1, 0)
+
+/**
+ * Thang Cứu Hỏa (luật V4): mỗi liên minh một thanh xà Ø 25 mm cao LADDER.y trên hai cột tròn (đúng collider của
+ * world.ts), vạch Đất / Nước là khoanh băng keo màu liên minh ở `LADDER.divider` tính từ đầu rào.
+ */
+function buildLadders(): THREE.Group {
+  const g = new THREE.Group()
+  const metal = mat(0xb8bcc4, { metalness: 0.6, roughness: 0.35 })
+  for (const [al, { a, b }] of Object.entries(LADDERS) as [keyof typeof LADDERS, (typeof LADDERS)['red']][]) {
+    const dir = new THREE.Vector3(b.x - a.x, 0, b.z - a.z)
+    const len = dir.length()
+    dir.normalize()
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(LADDER.rodR, LADDER.rodR, len, 16), metal)
+    rod.position.set((a.x + b.x) / 2, LADDER.y, (a.z + b.z) / 2)
+    rod.quaternion.setFromUnitVectors(Y_UP, dir)
+    g.add(rod)
+    for (const p of [a, b]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(LADDER.postR, LADDER.postR, LADDER.y, 16), metal)
+      post.position.set(p.x, LADDER.y / 2, p.z)
+      g.add(post)
+    }
+    const d = pointAt(al, LADDER.divider)
+    const tape = new THREE.Mesh(new THREE.CylinderGeometry(LADDER.rodR + 0.002, LADDER.rodR + 0.002, 0.02, 16), mat(new THREE.Color(COLORS[al]).getHex()))
+    tape.position.set(d.x, LADDER.y, d.z)
+    tape.quaternion.copy(rod.quaternion)
+    g.add(tape)
+  }
+  g.traverse((o) => {
+    if (o instanceof THREE.Mesh) o.castShadow = o.receiveShadow = true
+  })
+  return g
+}
+
+/** Móc leo xà vẽ bằng khối đơn giản (chưa có CAD): cần đứng ở tâm nóc xe, đầu móc chữ J. */
+interface Hook {
+  group: THREE.Group
+  /** Góc servo móc (độ), robot đang treo, chiều cao thân xe (m). */
+  set(deg: number, hanging: boolean, h: number): void
+}
+
+function makeHook(): Hook {
+  const m = mat(0xf2c230, { roughness: 0.5 })
+  const group = new THREE.Group()
+  const pivot = new THREE.Group()
+  group.add(pivot)
+  const poleGeo = new THREE.CylinderGeometry(0.006, 0.006, 1, 8).translate(0, 0.5, 0)
+  const pole = new THREE.Mesh(poleGeo, m)
+  const tip = new THREE.Group()
+  // Chữ J: thanh ngang ngắn rồi thanh rủ xuống, ôm thanh xà từ trên.
+  tip.add(box3(0.04, 0.008, 0.012, m, 0.02, 0, 0), box3(0.008, 0.03, 0.012, m, 0.04, -0.015, 0))
+  pivot.add(pole, tip)
+  return {
+    group,
+    set(deg, hanging, h) {
+      const frac = Math.max(0, Math.min(1, deg / HOOK.upDeg))
+      // Đứng sàn: giơ hết thì đầu móc cao hơn thanh 3 cm; đang treo: cần vừa chạm thanh (robot rủ ở HOOK.hangY).
+      const len = hanging ? LADDER.y - HOOK.hangY - h : LADDER.y + 0.03 - h
+      pivot.position.y = h
+      pivot.rotation.x = hanging ? 0 : (1 - frac) * (Math.PI / 2)
+      pole.scale.y = Math.max(0.01, len)
+      tip.position.y = len
+    },
+  }
+}
+
+/** Hộp cạnh sx × sy × sz (m) tại (x, y, z). */
+function box3(sx: number, sy: number, sz: number, m: THREE.Material, x: number, y: number, z: number): THREE.Mesh {
+  const o = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), m)
+  o.position.set(x, y, z)
+  return o
 }
 
 export function createScene(el: HTMLElement): FanrocScene {
@@ -323,6 +398,7 @@ export function createScene(el: HTMLElement): FanrocScene {
 
   const dispenser = buildDispenser()
   scene.add(dispenser.group)
+  scene.add(buildLadders())
 
   // Bóng: 2 InstancedMesh (cam 100, xanh 200); ánh xạ chỉ số bóng → (lưới, ô).
   const sphere = new THREE.SphereGeometry(BALL_R, 16, 12)
@@ -551,8 +627,10 @@ export function createScene(el: HTMLElement): FanrocScene {
     dropped.length = 0
     for (const r of robots) {
       const model = buildRobotModel(r.cfg, r.alliance)
+      const hook = makeHook()
+      model.group.add(hook.group)
       scene.add(model.group)
-      robotViews.push({ model, last: null, grip: true })
+      robotViews.push({ model, last: null, grip: true, hook })
     }
     built = robots
   }
@@ -629,6 +707,7 @@ export function createScene(el: HTMLElement): FanrocScene {
       // Con lăn M3 (hoặc servo 360 ở S4 khi đế 4 bánh / chọn servo): chỉ để quay trên hình.
       const s360 = r.cfg.drive !== 'diff2' || r.cfg.actuator === 's360'
       const intake = !r.def.mech.M3 || !pv ? 0 : s360 ? servo360(pv.S4) : Math.max(-1, Math.min(1, pv.M3 / 100))
+      v.hook.set(r.hookDeg, r.climb.mode === 'hang', r.def.size.h)
       v.model.update({
         extend: r.extend,
         armFrac: r.armFrac,

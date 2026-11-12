@@ -10,9 +10,11 @@ test('portRows: cổng lấy từ portMap + servo của ROBOTS (đế 2 bánh, �
     { port: 'M2', use: 'Bánh phải' },
     { port: 'M4', use: 'Thanh trượt răng · động cơ TT' },
     { port: 'S1', use: 'Nâng tay' },
-    { port: 'S2', use: 'Kẹp cờ' },
+    { port: 'S2', use: 'Móc leo xà' },
     { port: 'S3', use: 'Cửa xả' },
   ])
+  // Xe Cắm Cờ: móc ở S4, ngoài các servo cố định.
+  assert.deepEqual(portRows({ type: 'co', drive: 'diff2', actuator: 'tt' }).find((r) => r.port === 'S4'), { port: 'S4', use: 'Móc leo xà' })
 })
 
 test('portRows: đế 4 bánh chiếm M1–M4, cơ cấu chuyển sang S4 / S5 servo 360', () => {
@@ -32,7 +34,7 @@ test('portRows: mọi robot × đế — mỗi cổng portMap dùng đều có d
         assert.equal(new Set(ports).size, ports.length, `${type}/${drive}/${actuator}`)
         const m = portMap(cfg)
         for (const p of [...Object.values(m.wheels), m.intake, m.lift]) if (p) assert.ok(ports.includes(p), `${type}/${drive}: thiếu ${p}`)
-        for (const s of Object.keys(ROBOTS[type].servos)) assert.ok(ports.includes(s), `${type}: thiếu ${s}`)
+        for (const s of [...Object.keys(ROBOTS[type].servos), ROBOTS[type].hook.port]) assert.ok(ports.includes(s), `${type}: thiếu ${s}`)
       }
     }
   }

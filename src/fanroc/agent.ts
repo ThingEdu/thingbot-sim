@@ -945,8 +945,8 @@ export class Agent {
   private runFlag(view: AgentView, t: Extract<Task, { kind: 'flag' }>): void {
     const r = this.robot
     const h = view.world.holeCentres()[t.m]
-    // Robot cắm cờ bằng đuôi (Maker Nâng / Hút / Pro): lùi đuôi vào lỗ, rời núi thì tiến ra; Mẫu Maker cắm bằng mũi.
-    const away = r.flagBehind ? CMD_SLOW : -CMD_SLOW
+    // Luật V4: chỉ Xe Cắm Cờ còn cắm cờ, bằng mũi — rời núi thì lùi ra.
+    const away = -CMD_SLOW
     if (!r.hasFlag) {
       // Đã cắm (hoặc làm rơi): rời núi rồi xong.
       this.cmd.fwd = away
@@ -989,7 +989,7 @@ export class Agent {
     const g = r.gripPoint()
     const d = Math.hypot(g.x - h.x, g.z - h.z)
     const ready = r.extend >= r.def.maxExtend - 1e-6 && (r.def.arm?.reach ? r.armFrac > 0.99 : true)
-    this.pushTo(h, CMD_SLOW, r.flagBehind)
+    this.pushTo(h, CMD_SLOW, false)
     if (r.lastMessage) {
       // R16: lỗ có bóng — bỏ núi này.
       this.giveUp.add(t.m)

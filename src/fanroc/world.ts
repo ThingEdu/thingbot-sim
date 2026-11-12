@@ -2,7 +2,7 @@
 // Tuỳ chọn `balls: false` (nhiệm vụ con rùa, spec §8.6): sân không có bóng, `release` không làm gì.
 // Chạy được cả trong Node (phép thử, không đồ hoạ) lẫn trình duyệt. Mọi nhiễu lấy từ PRNG theo `seed`.
 import RAPIER from '@dimforge/rapier3d-compat'
-import { BALL_R, DISPENSER, FIELD, MOUNTAINS, PEAK_Y, TIERS, TIER_GROOVE, WALL_H, WALL_T, ZONES, holeCentres, mountainAt, type Rect } from './layout.ts'
+import { BALL_R, DISPENSER, FIELD, LADDER, LADDERS, MOUNTAINS, PEAK_Y, TIERS, TIER_GROOVE, WALL_H, WALL_T, ZONES, holeCentres, mountainAt, type Rect } from './layout.ts'
 import type { FieldTally } from './scoring.ts'
 import mesh from './assets/mountain-mesh.json' with { type: 'json' }
 
@@ -85,6 +85,7 @@ export class FanrocWorld {
     for (let i = 0; i < Math.min(BALL_COUNT.o, this.balls.length); i++) this.releaseOrder.push(i)
     this.buildField()
     MOUNTAINS.forEach((m) => this.buildMountain(m))
+    this.buildLadders()
     this.rapier.updateSceneQueries() // tally dò tia được cả trước bước vật lý đầu tiên
   }
 
@@ -105,6 +106,23 @@ export class FanrocWorld {
     const len = FIELD / 2 + WALL_T
     for (const [x, z, hx, hz] of [[0, -h, len, WALL_T / 2], [0, h, len, WALL_T / 2], [-h, 0, WALL_T / 2, len], [h, 0, WALL_T / 2, len]]) {
       this.fixed(RAPIER.ColliderDesc.cuboid(hx, WALL_H / 2, hz).setTranslation(x, WALL_H / 2, z))
+    }
+  }
+
+  /** Thang Cứu Hỏa (luật V4): mỗi liên minh một thanh xà (trụ bo đầu, cao LADDER.y) trên hai cột tròn, va chạm tĩnh. */
+  private buildLadders(): void {
+    for (const { a, b } of Object.values(LADDERS)) {
+      const dx = b.x - a.x
+      const dz = b.z - a.z
+      const len = Math.hypot(dx, dz)
+      // Capsule của Rapier dọc trục y: xoay 90° quanh trục (uz, 0, −ux) để nằm theo hướng thanh.
+      const k = Math.SQRT1_2 / len
+      this.fixed(
+        RAPIER.ColliderDesc.capsule(len / 2, LADDER.rodR)
+          .setTranslation((a.x + b.x) / 2, LADDER.y, (a.z + b.z) / 2)
+          .setRotation({ x: dz * k, y: 0, z: -dx * k, w: Math.SQRT1_2 }),
+      )
+      for (const p of [a, b]) this.fixed(RAPIER.ColliderDesc.cylinder(LADDER.y / 2, LADDER.postR).setTranslation(p.x, LADDER.y / 2, p.z))
     }
   }
 

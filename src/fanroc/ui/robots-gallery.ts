@@ -14,7 +14,7 @@ const WHEEL_NAME = { L: 'Bánh trái', R: 'Bánh phải', FL: 'Bánh trước tr
 const PORT_ORDER = ['M1', 'M2', 'M3', 'M4', 'S1', 'S2', 'S3', 'S4', 'S5']
 const KIND = { motor: 'động cơ TT', s360: 'servo 360' } as const
 
-/** Cổng nào làm gì cho cấu hình `cfg`: bánh và cơ cấu theo `portMap`, servo cố định theo `ROBOTS[...].servos`. */
+/** Cổng nào làm gì cho cấu hình `cfg`: bánh và cơ cấu theo `portMap`, servo cố định theo `ROBOTS[...].servos` + móc leo xà. */
 export function portRows(cfg: RobotConfig): PortRow[] {
   const def = ROBOTS[cfg.type]
   const m = portMap(cfg)
@@ -23,6 +23,8 @@ export function portRows(cfg: RobotConfig): PortRow[] {
   if (m.intake && def.mech.M3) rows.push({ port: m.intake, use: `${def.mech.M3} · ${KIND[m.intakeKind ?? 'motor']}` })
   if (m.lift && def.mech.M4) rows.push({ port: m.lift, use: `${def.mech.M4} · ${KIND[m.liftKind ?? 'motor']}` })
   for (const [s, what] of Object.entries(def.servos)) if (what) rows.push({ port: s, use: what })
+  // Móc leo xà ở cổng ngoài `servos` (Xe Cắm Cờ: S4).
+  if (!(def.hook.port in def.servos)) rows.push({ port: def.hook.port, use: 'Móc leo xà' })
   return rows.sort((a, b) => PORT_ORDER.indexOf(a.port) - PORT_ORDER.indexOf(b.port))
 }
 

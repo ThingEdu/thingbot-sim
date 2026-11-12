@@ -66,7 +66,7 @@ test('ruleChecks Xe Ủi: hai chiếc cạnh nhau vừa ô 375', () => {
   const safeW = ZONES.ladder.red.x1 - ZONES.ladder.red.x0
   assert.ok(2 * ROBOTS.ui.size.w <= safeW)
   const r = ruleChecks({ type: 'ui', drive: 'diff2', actuator: 'tt' }, 0)
-  assert.ok(r.some((c) => /2 × 180 mm/.test(c.text) && c.ok === true), JSON.stringify(r))
+  assert.ok(r.some((c) => /2 × 180 mm/.test(c.text) && /ô Thang Cứu Hỏa/.test(c.text) && c.ok === true), JSON.stringify(r))
 })
 
 test('ROBOTS: kích thước và kho theo spec 4.3', () => {
@@ -86,14 +86,8 @@ test('ruleChecks Xe Cắm Cờ: tay S1 vươn hết (armFrac 1) tính vào mở 
   assert.equal(c?.ok, true)
 })
 
-test('localGripPoint: Mẫu Maker kẹp cờ ở mũi (thanh răng đẩy ra trước), Maker Nâng ở đuôi; Xe Cắm Cờ nâng lên theo thùng', async () => {
+test('localGripPoint: Xe Cắm Cờ nâng lên theo thùng (họ Maker không còn cờ — luật V4)', async () => {
   const { localGripPoint } = await import('./robots.ts')
-  const m0 = localGripPoint(ROBOTS.maker, 0, 0)
-  const m1 = localGripPoint(ROBOTS.maker, 0.1, 0)
-  assert.ok(m0.z > 0 && m0.z < ROBOTS.maker.size.l / 2, `lúc thu giá cờ trên nóc, nửa trước xe: z ${m0.z}`)
-  assert.ok(localGripPoint(ROBOTS.maker, ROBOTS.maker.maxExtend, 0).z > ROBOTS.maker.size.l / 2 + 0.15, 'đẩy hết: ra trước mũi > 15 cm')
-  assert.ok(Math.abs(m1.z - m0.z - 0.1) < 1e-9 && m1.y === m0.y)
-  assert.ok(localGripPoint(ROBOTS.makerLift, ROBOTS.makerLift.maxExtend, 0).z < -ROBOTS.makerLift.size.l / 2 - 0.15, 'Maker Nâng: ra sau đuôi')
   const c0 = localGripPoint(ROBOTS.co, 0, 0)
   const c1 = localGripPoint(ROBOTS.co, 0.05, 0)
   assert.ok(Math.abs(c1.y - c0.y - 0.05) < 1e-9 && c1.z === c0.z)
@@ -130,4 +124,37 @@ test('Maker Nâng: cửa lồng nâng hết vượt mũi 130 mm, tính vào mở
   assert.match(up.text, /430 mm/)
   const both = ruleChecks(cfg, 0.2, 1).find((c) => /Mở rộng/.test(c.text))!
   assert.equal(both.ok, false, both.text)
+})
+
+test('Luật V4: móc leo xà — họ Maker / Xe Ủi S2 □, Xe Cắm Cờ S4 R1, Xe Phân Loại S1 □; họ Maker bỏ cờ', () => {
+  for (const t of ['maker', 'makerLift', 'makerIntake', 'makerPro'] as const) {
+    assert.deepEqual(ROBOTS[t].hook, { port: 'S2', button: 'SQUARE' }, t)
+    assert.equal(ROBOTS[t].flag, false, t)
+    assert.equal(ROBOTS[t].servos.S2, 'Móc leo xà', t)
+    assert.equal('rearGrip' in ROBOTS[t] || 'flagFront' in ROBOTS[t], false, t)
+  }
+  assert.deepEqual(ROBOTS.ui.hook, { port: 'S2', button: 'SQUARE' })
+  assert.deepEqual(ROBOTS.co.hook, { port: 'S4', button: 'R1' })
+  assert.deepEqual(ROBOTS.sort.hook, { port: 'S1', button: 'SQUARE' })
+  assert.equal(ROBOTS.co.flag, true)
+  assert.equal(ROBOTS.ui.servos.S2, 'Móc leo xà')
+  assert.equal(ROBOTS.sort.servos.S1, 'Móc leo xà')
+})
+
+test('Luật V4: mọi mẫu × mọi đế × cơ cấu đều ≤ 5 servo kể cả móc; Maker Pro omni 5 / 5, Xe Cắm Cờ omni 5 / 5 (móc S4 đếm thêm)', () => {
+  const servoCount = (c: { text: string }[]) => Number(c.find((x) => x.text.startsWith('Servo:'))!.text.match(/Servo: (\d+)/)![1])
+  for (const type of Object.keys(ROBOTS) as (keyof typeof ROBOTS)[]) {
+    for (const drive of ROBOTS[type].drives) {
+      for (const actuator of ['tt', 's360'] as const) {
+        const r = ruleChecks({ type, drive, actuator }, 0)
+        const c = r.find((x) => x.text.startsWith('Servo:'))!
+        assert.equal(c.ok, true, `${type}/${drive}/${actuator}: ${c.text}`)
+        assert.ok(servoCount(r) <= 5)
+      }
+    }
+  }
+  assert.ok(ruleChecks({ type: 'makerPro', drive: 'omni', actuator: 'tt' }, 0).some((c) => c.text === 'Servo: 5 / 5'))
+  assert.ok(ruleChecks({ type: 'co', drive: 'diff2', actuator: 'tt' }, 0).some((c) => c.text === 'Servo: 4 / 5'))
+  assert.ok(ruleChecks({ type: 'co', drive: 'omni', actuator: 'tt' }, 0).some((c) => c.text === 'Servo: 5 / 5'))
+  assert.ok(ruleChecks({ type: 'ui', drive: 'diff2', actuator: 'tt' }, 0).some((c) => c.text === 'Servo: 2 / 5'))
 })
