@@ -1,7 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { CLIMB_PCT, HOOK, climbOf, ladderLen, pointAt, project, stepClimb, type ClimbState } from './ladder.ts'
-import { LADDER } from './layout.ts'
+import { CLIMB_PCT, HOOK, barYaw, climbOf, ladderLen, pointAt, project, slideRange, stepClimb, type ClimbState } from './ladder.ts'
+import { FIELD, LADDER } from './layout.ts'
+import { ROBOTS } from './robots.ts'
 
 const FLOOR: ClimbState = { mode: 'floor', bar: null, s: 0 }
 type Inp = Parameters<typeof stepClimb>[1]
@@ -105,4 +106,52 @@ test('lái tiến mãi thì dừng ở cách đầu b một đoạn end', () => 
   let st = grab(p.x, p.z)
   for (let i = 0; i < 60 * 20; i++) st = stepClimb(st, inp({ hookDeg: HOOK.downDeg, lastHookDeg: HOOK.downDeg, drive: 1 }))
   assert.ok(Math.abs(st.s - (ladderLen('red') - HOOK.end)) < 1e-9, `s = ${st.s}`)
+})
+
+// ---------- Đoạn trượt trong sân (thân treo không xuyên rào / Hộp Phân Phối) ----------
+/** 4 góc thân treo ở chỗ bám s (như RobotBody.footprint, yaw = barYaw). */
+const corners = (al: 'red' | 'blue', s: number, front: number, back: number, half: number) => {
+  const c = pointAt(al, s)
+  const y = barYaw(al)
+  const f = { x: -Math.sin(y), z: -Math.cos(y) }
+  const r = { x: Math.cos(y), z: -Math.sin(y) }
+  return [[front, -half], [front, half], [-back, half], [-back, -half]].map(([a, b]) => ({ x: c.x + f.x * a + r.x * b, z: c.z + f.z * a + r.z * b }))
+}
+const inField = (ps: { x: number; z: number }[], tol = 1e-9) => ps.every((p) => Math.abs(p.x) <= FIELD / 2 + tol && Math.abs(p.z) <= FIELD / 2 + tol)
+
+test('slideRange: mỗi mẫu robot, hai thanh — trong đoạn thì thân trong rào, ra ngoài 1 mm thì thò ra; bám được ở Đất và tới được Nước', () => {
+  for (const d of Object.values(ROBOTS)) {
+    for (const al of ['red', 'blue'] as const) {
+      const { w, l } = d.size
+      const rg = slideRange(al, l / 2, l / 2, w / 2)
+      assert.ok(rg.min < LADDER.divider && rg.max > LADDER.divider + 0.01, `${d.type} ${al}: ${rg.min}…${rg.max}`)
+      assert.ok(rg.min > HOOK.end && rg.max < ladderLen(al) - HOOK.end, `${d.type} ${al} chặt hơn hai đầu thanh`)
+      for (const s of [rg.min, (rg.min + rg.max) / 2, rg.max]) assert.ok(inField(corners(al, s, l / 2, l / 2, w / 2)), `${d.type} ${al} s ${s}`)
+      assert.ok(!inField(corners(al, rg.min - 0.001, l / 2, l / 2, w / 2)), `${d.type} ${al} dưới min`)
+      assert.ok(!inField(corners(al, rg.max + 0.001, l / 2, l / 2, w / 2)), `${d.type} ${al} trên max`)
+    }
+  }
+  // Mẫu Maker 240 × 300: ≈ 0,256…1,145 (rà soát cuối đo 0,25…1,15).
+  const mk = slideRange('red', 0.15, 0.15, 0.12)
+  assert.ok(Math.abs(mk.min - 0.256) < 0.002 && Math.abs(mk.max - 1.145) < 0.002, `${mk.min}…${mk.max}`)
+  // Phần vươn ra trước làm max nhỏ lại, ra sau làm min lớn lên.
+  assert.ok(slideRange('red', 0.35, 0.15, 0.12).max < mk.max - 0.1)
+  assert.ok(slideRange('red', 0.15, 0.35, 0.12).min > mk.min + 0.1)
+})
+
+test('stepClimb với range: treo không trượt ra khỏi đoạn; đang ở ngoài đoạn thì đứng yên, chỉ trượt vào; bám ngoài đoạn dời vào đầu đoạn', () => {
+  const range = () => ({ min: 0.3, max: 0.9 })
+  let st: ClimbState = { mode: 'hang', bar: 'red', s: 0.85 }
+  for (let k = 0; k < 120; k++) st = stepClimb(st, inp({ hookDeg: 0, drive: 1, range }))
+  assert.equal(st.s, 0.9)
+  for (let k = 0; k < 600; k++) st = stepClimb(st, inp({ hookDeg: 0, drive: -1, range }))
+  assert.equal(st.s, 0.3)
+  // Đang ở 0,95 (> max, vd. vừa vươn cơ cấu): tiến thì đứng yên, lùi thì vào trong.
+  st = stepClimb({ mode: 'hang', bar: 'red', s: 0.95 }, inp({ hookDeg: 0, drive: 1, range }))
+  assert.equal(st.s, 0.95)
+  st = stepClimb({ mode: 'hang', bar: 'red', s: 0.95 }, inp({ hookDeg: 0, drive: -1, range }))
+  assert.ok(st.s < 0.95)
+  const p = on(0.1)
+  const g = stepClimb(FLOOR, inp({ hookDeg: HOOK.downDeg, lastHookDeg: HOOK.upDeg + 5, x: p.x, z: p.z, range }))
+  assert.deepEqual(g, { mode: 'hang', bar: 'red', s: 0.3 })
 })

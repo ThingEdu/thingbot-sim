@@ -4,7 +4,7 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import { FanrocWorld, PHYSICS_DT } from './world.ts'
 import { RobotBody, V_MAX } from './robot.ts'
 import { NEUTRAL, type PortValues } from './ports.ts'
-import { BALL_R, HOLE, PEAK_Y } from './layout.ts'
+import { BALL_R, FIELD, HOLE, PEAK_Y } from './layout.ts'
 import { localGripPoint, portMap, ROBOTS, ruleChecks, type RobotConfig } from './robots.ts'
 
 const MAKER: RobotConfig = { type: 'maker', drive: 'diff2', actuator: 'tt' }
@@ -350,19 +350,19 @@ test('Móc S2 của Mẫu Maker: giơ 180° rồi hạ 0° dưới đoạn Đấ
   assert.ok(Math.abs(r.pose.yaw - barYaw('red')) < 1e-6, `treo 1 s rồi yaw ${r.pose.yaw}`)
 })
 
-test('Đang treo: M1 = M2 = 255 trong 5 s trượt sang Nước (≈ 0,15 m/s, dừng ở đầu thanh); setPose(START) về sàn, thân dynamic', async () => {
+test('Đang treo: M1 = M2 = 255 trong 7 s trượt sang Nước (≈ 0,15 m/s, dừng ở đầu đoạn trong sân); setPose(START) về sàn, thân dynamic', async () => {
   const { HOOK, ladderLen, pointAt } = await import('./ladder.ts')
   const { START_POSES } = await import('./layout.ts')
-  const { w, r } = await underBar()
+  const { w, r } = await underBar(0.3)
   drive(w, r, { S2: 180 }, PHYSICS_DT)
   drive(w, r, { S2: 0 }, PHYSICS_DT)
   drive(w, r, { M1: 255, M2: 255 }, 1)
-  assert.ok(Math.abs(r.climb.s - (0.2 + HOOK.slideV)) < 0.01, `1 s trượt tới s = ${r.climb.s}`)
+  assert.ok(Math.abs(r.climb.s - (0.3 + HOOK.slideV)) < 0.01, `1 s trượt tới s = ${r.climb.s}`)
   const at = pointAt('red', r.climb.s)
   assert.ok(Math.hypot(r.pose.x - at.x, r.pose.z - at.z) < 0.01, 'thân đi theo chỗ bám')
-  drive(w, r, { M1: 255, M2: 255 }, 4)
+  drive(w, r, { M1: 255, M2: 255 }, 6)
   assert.deepEqual(r.climbLevel, { level: 'water', bar: 'red' })
-  assert.ok(Math.abs(r.climb.s - (ladderLen('red') - HOOK.end)) < 1e-6 || r.climb.s < ladderLen('red') - HOOK.end, `s ${r.climb.s}`)
+  assert.ok(Math.abs(r.climb.s - r.slideRange('red').max) < 1e-6 && r.climb.s < ladderLen('red') - HOOK.end, `s ${r.climb.s}`)
   assert.ok(Math.abs(r.body.translation().y - HOOK.hangY) < 1e-6)
   r.setPose(START_POSES.red[0])
   assert.equal(r.climb.mode, 'floor')
@@ -411,13 +411,44 @@ test('peers: robot cùng trận đang treo chặn chỗ bám (khoảng cách HOO
     r.apply({ ...NEUTRAL, S2: 180 }, PHYSICS_DT)
     r.apply({ ...NEUTRAL, S2: 0 }, PHYSICS_DT)
   }
-  hangAt(bots[0], 0.4)
-  hangAt(bots[1], 0.05)
+  hangAt(bots[0], 0.55)
+  for (let k = 0; k < 60; k++) bots[0].apply({ ...NEUTRAL, M1: 100, M2: 100 }, PHYSICS_DT) // tới 0,70
+  hangAt(bots[1], 0.3)
   assert.equal(bots[1].climb.mode, 'hang')
   // Robot 1 tiến về phía robot 0: dừng cách HOOK.gap.
   for (let k = 0; k < 120; k++) bots[1].apply({ ...NEUTRAL, M1: 100, M2: 100 }, PHYSICS_DT)
   assert.ok(Math.abs(bots[0].climb.s - bots[1].climb.s - HOOK.gap) < 1e-6, `${bots[0].climb.s} − ${bots[1].climb.s}`)
-  hangAt(bots[2], 0.2)
+  hangAt(bots[2], 0.5)
   assert.equal(bots[2].climb.mode, 'floor', 'thanh đã có 2 robot')
   assert.equal(bots[2].climbLevel.level, 'none')
+})
+
+// ---------- Thân treo không trượt xuyên rào / Hộp Phân Phối (sửa sau rà soát cuối) ----------
+const outside = (r: RobotBody) => r.footprint().some((p) => Math.abs(p.x) > FIELD / 2 + 1e-6 || Math.abs(p.z) > FIELD / 2 + 1e-6)
+
+test('Treo: giữ tiến 10 s / lùi 10 s ⇒ dừng ở đầu đoạn trong sân, mọi góc footprint vẫn trong rào', async () => {
+  for (const cfg of [MAKER, { type: 'ui', drive: 'diff2', actuator: 'tt' }, { type: 'co', drive: 'diff2', actuator: 'tt' }, { type: 'sort', drive: 'diff2', actuator: 'tt' }] as RobotConfig[]) {
+    const { w, r } = await underBar(0.5, cfg)
+    const hook = { S1: null, S2: null, S4: null, [ROBOTS[cfg.type].hook.port]: 0 } as Partial<PortValues>
+    drive(w, r, { [ROBOTS[cfg.type].hook.port]: 180 } as Partial<PortValues>, PHYSICS_DT)
+    drive(w, r, hook, PHYSICS_DT)
+    assert.equal(r.climb.mode, 'hang', cfg.type)
+    const rg = r.slideRange('red')
+    drive(w, r, { ...hook, M1: 255, M2: 255 }, 10)
+    assert.ok(r.climb.s <= rg.max + 1e-9 && r.climb.s > rg.max - 1e-6, `${cfg.type} tiến: s ${r.climb.s}, max ${rg.max}`)
+    assert.equal(r.climbLevel.level, 'water', `${cfg.type} vẫn tới được Nước`)
+    assert.ok(!outside(r), `${cfg.type} tiến: thân thò ra ngoài ${JSON.stringify(r.footprint())}`)
+    drive(w, r, { ...hook, M1: -255, M2: -255 }, 10)
+    assert.ok(r.climb.s >= rg.min - 1e-9 && r.climb.s < rg.min + 1e-6, `${cfg.type} lùi: s ${r.climb.s}, min ${rg.min}`)
+    assert.ok(!outside(r), `${cfg.type} lùi: thân thò ra ngoài ${JSON.stringify(r.footprint())}`)
+  }
+})
+
+test('Bám từ sàn ở s = 0,2 (ngoài đoạn trong sân của Mẫu Maker): vẫn bám, chỗ bám dời vào đầu đoạn, thân trong rào', async () => {
+  const { w, r } = await underBar(0.2)
+  drive(w, r, { S2: 180 }, PHYSICS_DT)
+  drive(w, r, { S2: 0 }, PHYSICS_DT)
+  assert.equal(r.climb.mode, 'hang')
+  assert.ok(Math.abs(r.climb.s - r.slideRange('red').min) < 1e-9, `s ${r.climb.s}`)
+  assert.ok(!outside(r), JSON.stringify(r.footprint()))
 })

@@ -1,5 +1,5 @@
 // Thang Cứu Hỏa (luật V4): hình học thanh xà nhìn từ trên + máy trạng thái leo. Thuần số học, không đồ hoạ/vật lý.
-import { LADDER, LADDERS, type Alliance } from './layout.ts'
+import { FIELD, LADDER, LADDERS, type Alliance } from './layout.ts'
 
 /** none = chưa chạm; contact = móc giơ đang chạm thanh; ground/water = đang treo ở đoạn Mặt Đất/Nước. */
 export type Climb = 'none' | 'contact' | 'ground' | 'water'
@@ -41,18 +41,67 @@ export function barYaw(al: Alliance): number {
 
 export interface ClimbState { mode: 'floor' | 'hang'; bar: Alliance | null; s: number }
 
+/** Đoạn chỗ bám [min, max] mà thân treo nằm trọn trong sân; min > max khi không có chỗ nào. */
+export type SlideRange = { min: number; max: number }
+
+/**
+ * Đoạn chỗ bám s trên thanh `al` mà thân treo (quay theo thanh, mũi từ a sang b) nằm trọn trong mặt trong rào: hình chữ nhật
+ * dài `front` tới trước tâm, `back` ra sau tâm, rộng `half` mỗi bên (cùng cách tính như RobotBody.footprint). Hộp Phân Phối
+ * và hai cột đều ngoài sân / ở hai đầu thanh nên trong sân là đủ: cột, rào và hộp là vật rắn, thân treo không trượt xuyên qua.
+ */
+export function slideRange(al: Alliance, front: number, back: number, half: number): SlideRange {
+  const { a } = LADDERS[al]
+  const yaw = barYaw(al)
+  const f = { x: -Math.sin(yaw), z: -Math.cos(yaw) }
+  const r = { x: Math.cos(yaw), z: -Math.sin(yaw) }
+  const len = ladderLen(al)
+  const u = { x: (LADDERS[al].b.x - a.x) / len, z: (LADDERS[al].b.z - a.z) / len }
+  const H = FIELD / 2
+  let min = -Infinity
+  let max = Infinity
+  for (const da of [front, -back]) {
+    for (const db of [half, -half]) {
+      for (const k of ['x', 'z'] as const) {
+        // −H ≤ a + u s + f da + r db ≤ H theo trục k.
+        const c = a[k] + f[k] * da + r[k] * db
+        if (Math.abs(u[k]) < 1e-12) {
+          if (Math.abs(c) > H) return { min: 1, max: 0 }
+          continue
+        }
+        const s1 = (-H - c) / u[k]
+        const s2 = (H - c) / u[k]
+        min = Math.max(min, Math.min(s1, s2))
+        max = Math.min(max, Math.max(s1, s2))
+      }
+    }
+  }
+  return { min, max }
+}
+
 const BARS: Alliance[] = ['red', 'blue']
 
-/** Một bước leo. drive −1…1 (trung bình bánh, dương = tiến); others = robot khác đang treo. */
+/**
+ * Một bước leo. drive −1…1 (trung bình bánh, dương = tiến); others = robot khác đang treo; range(bar) = đoạn chỗ bám mà
+ * thân robot này treo trên thanh `bar` vẫn nằm trọn trong sân (slideRange; bỏ trống = cả thanh).
+ * - Đang treo: trượt không ra khỏi đoạn đó (rào / Hộp Phân Phối / cột chặn). Nếu đang ở ngoài đoạn (vừa vươn cơ cấu ra khi
+ *   treo sát đầu) thì đứng yên chỗ cũ, chỉ được trượt vào trong — không tự đẩy thân đi.
+ * - Bám từ sàn ngoài đoạn đó (vd. đứng chéo sát rào): vẫn bám, chỗ bám dời vào đầu gần nhất của đoạn.
+ */
 export function stepClimb(
   st: ClimbState,
-  inp: { hookDeg: number | null; lastHookDeg: number; x: number; z: number; drive: number; dt: number; others: { bar: Alliance; s: number }[] },
+  inp: {
+    hookDeg: number | null; lastHookDeg: number; x: number; z: number; drive: number; dt: number; others: { bar: Alliance; s: number }[]
+    range?: (bar: Alliance) => SlideRange
+  },
 ): ClimbState {
   const { hookDeg, lastHookDeg, others } = inp
   if (st.mode === 'hang' && st.bar) {
     if (hookDeg !== null && hookDeg >= HOOK.upDeg) return { mode: 'floor', bar: null, s: 0 }
     const len = ladderLen(st.bar)
-    let ns = Math.min(len - HOOK.end, Math.max(HOOK.end, st.s + inp.drive * HOOK.slideV * inp.dt))
+    const rg = inp.range?.(st.bar)
+    const lo = Math.max(HOOK.end, rg ? Math.min(rg.min, st.s) : -Infinity)
+    const hi = Math.min(len - HOOK.end, rg ? Math.max(rg.max, st.s) : Infinity)
+    let ns = Math.min(hi, Math.max(lo, st.s + inp.drive * HOOK.slideV * inp.dt))
     for (const o of others) {
       if (o.bar !== st.bar) continue
       // chỉ chặn khi đang tiến lại gần: đã sát nhau sẵn (lúc bám) thì vẫn được lùi ra xa
@@ -67,7 +116,9 @@ export function stepClimb(
     for (const bar of BARS) {
       const p = project(bar, inp.x, inp.z)
       if (p.d <= HOOK.tol && p.s >= 0 && p.s <= LADDER.divider && others.filter((o) => o.bar === bar).length < 2) {
-        return { mode: 'hang', bar, s: p.s }
+        const rg = inp.range?.(bar)
+        const s = rg && rg.min <= rg.max ? Math.min(rg.max, Math.max(rg.min, p.s)) : p.s
+        return { mode: 'hang', bar, s }
       }
     }
   }

@@ -450,3 +450,18 @@ test('S02 do thanh răng lùi ra đuôi (Maker Nâng sát rào phía xa, đuôi 
   assert.equal(m.pens[0].yellow, 1, 'thanh răng ra sau đuôi')
   assert.equal(m.pens[1].yellow, 1, 'tay cờ vươn ra mũi')
 })
+
+test('Mẫu Maker treo ở 0,5 giữ tiến 10 s rồi lùi 10 s (học sinh "giữ tiến để sang Nước"): không thẻ vàng S02, vẫn treo Nước rồi Đất', async () => {
+  const { robots, m } = await setup()
+  m.t = 0
+  grab(m, robots, 0, 'red', 0.5)
+  assert.equal(robots[0].climb.mode, 'hang')
+  run(m, only(0, { M1: 255, M2: 255 }), 10)
+  assert.equal(robots[0].climbLevel.level, 'water')
+  assert.ok(robots[0].climb.s <= robots[0].slideRange('red').max + 1e-9, `s ${robots[0].climb.s}`)
+  run(m, only(0, { M1: -255, M2: -255 }), 10)
+  assert.equal(robots[0].climbLevel.level, 'ground')
+  assert.ok(robots[0].climb.s >= robots[0].slideRange('red').min - 1e-9, `s ${robots[0].climb.s}`)
+  assert.equal(m.pens[0].yellow, 0, m.events.map((e) => e.text).join(' | '))
+  assert.equal(m.events.filter((e) => e.text.includes('S02')).length, 0)
+})

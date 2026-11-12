@@ -11,7 +11,7 @@ import type { FanrocWorld } from './world.ts'
 import { HOLE, PEAK_Y, START_POSES, type Alliance, type Pose } from './layout.ts'
 import { servo360, type PortValues } from './ports.ts'
 import { chuteExit, LIFT_AXIS, rackExtent, rackOverhang, ROBOTS, portMap, type PortMap, type RobotConfig, type RobotDef } from './robots.ts'
-import { barYaw, climbOf, HOOK, pointAt, stepClimb, type Climb, type ClimbState } from './ladder.ts'
+import { barYaw, climbOf, HOOK, pointAt, slideRange, stepClimb, type Climb, type ClimbState, type SlideRange } from './ladder.ts'
 
 export type Vec2 = { x: number; z: number }
 
@@ -264,7 +264,8 @@ export class RobotBody {
       .filter((o) => o !== this && o.climb.mode === 'hang' && o.climb.bar)
       .map((o) => ({ bar: o.climb.bar!, s: o.climb.s }))
     const was = this.climb.mode
-    this.climb = stepClimb(this.climb, { hookDeg: this.hookDeg, lastHookDeg: this.lastHookDeg, x: p.x, z: p.z, drive: this.driveFraction(ports), dt, others })
+    const range = (bar: Alliance) => this.slideRange(bar)
+    this.climb = stepClimb(this.climb, { hookDeg: this.hookDeg, lastHookDeg: this.lastHookDeg, x: p.x, z: p.z, drive: this.driveFraction(ports), dt, others, range })
     this.lastHookDeg = this.hookDeg
     const { mode, bar, s } = this.climb
     if (mode === 'hang' && bar) {
@@ -285,6 +286,15 @@ export class RobotBody {
       this.body.setLinvel({ x: 0, y: 0, z: 0 }, true)
       this.body.setAngvel({ x: 0, y: 0, z: 0 }, true)
     }
+  }
+
+  /**
+   * Đoạn chỗ bám trên thanh `bar` mà thân treo (cả phần đang vươn ra trước / sau, như footprint) nằm trọn trong sân: rào,
+   * cột và Hộp Phân Phối chặn, thân treo không trượt xuyên qua (S02 chỉ còn khi chính robot vươn cơ cấu ra ngoài).
+   */
+  slideRange(bar: Alliance): SlideRange {
+    const l = this.def.size.l / 2
+    return slideRange(bar, l + this.forwardExtension, l + this.backExtension, this.def.size.w / 2)
   }
 
   /** Lệnh tiến của đế (trung bình các bánh, −1…1, dương = tiến) — đang treo thì đẩy robot trượt dọc thanh. */
