@@ -12,7 +12,7 @@ import type { HumanPlayer } from './human.ts'
 import { FIELD, LADDER, MATCH_S, MOUNTAINS, MOUNTAIN_FOOT, ZONES, toMountain, type Rect } from './layout.ts'
 import { NEUTRAL, type PortValues } from './ports.ts'
 import { LIFT_AXIS, portMap, type PortMap, type RobotConfig } from './robots.ts'
-import { HOOK, barYaw, ladderLen, pointAt, project, type Climb } from './ladder.ts'
+import { HOOK, barYaw, ladderLen, pointAt, project, slideRange, type Climb } from './ladder.ts'
 
 export type Skill = 'easy' | 'medium' | 'hard'
 type Alliance = 'red' | 'blue'
@@ -190,8 +190,13 @@ type ClimbLevel = Exclude<Climb, 'none'>
  * chung chỗ này, lần lượt (robot sau chờ robot trước treo rồi trượt qua). Chừa 0,06 tới vạch cho sai số nhích (±0,008).
  */
 const CLIMB_GRAB = LADDER.divider - 0.06
-/** Chỗ dừng xa nhất của robot treo trước (Khó): còn cách max đoạn trượt của Mẫu Maker (1,017) một chút. */
+/**
+ * Chỗ dừng xa nhất của robot treo trước (Khó): còn cách max đoạn trượt của Mẫu Maker (1,017) một chút. Mẫu nào có đoạn
+ * trượt ngắn hơn thì kẹp theo hình học của mẫu đó (fitClimbPlan, R165).
+ */
 const CLIMB_FAR = 0.98
+/** Chỗ dừng / chỗ đứng chạm xà phía Nước cách đầu đoạn trượt trong sân của mẫu (slideRange.max) ít nhất chừng này. */
+const CLIMB_END_MARGIN = 0.03
 /**
  * Chỗ đứng sàn chạm xà phía Nước (cách robot treo ở CLIMB_GRAB ≥ một thân). Đo seed 1–6, 4 Mẫu Maker (12/11, thanh CAD
  * lắp sân): 0,72 / 0,80 / 1,00 ⇒ Vừa leo đúng 23 / 22 / 21 trên 24, Dễ 19 / 21 / 21; 0,72 trượt ở seed 1. Chọn 0,80.
@@ -213,11 +218,22 @@ const CLIMB_TOUCH = 0.8
  * Lối giữa góc Núi C / D và thanh chỉ còn ≈ 0,25 m (góc núi chiếu lên thanh ở s ≈ 0,68): robot treo / đứng ở 0,6…1,0 là
  * bịt lối đó, robot ở phía Hộp Phân Phối phải vòng qua giữa sân.
  */
-type ClimbPlan = { level: ClimbLevel; s0: number; target: number; wait?: boolean }
+export type ClimbPlan = { level: ClimbLevel; s0: number; target: number; wait?: boolean }
 const CLIMB_PLAN: Record<ClimbLevel, [ClimbPlan, ClimbPlan]> = {
   water: [{ level: 'water', s0: CLIMB_GRAB, target: CLIMB_FAR, wait: true }, { level: 'water', s0: CLIMB_GRAB, target: CLIMB_FAR, wait: true }],
   ground: [{ level: 'ground', s0: CLIMB_GRAB, target: CLIMB_GRAB }, { level: 'contact', s0: CLIMB_TOUCH, target: CLIMB_TOUCH }],
   contact: [{ level: 'contact', s0: CLIMB_TOUCH, target: CLIMB_TOUCH }, { level: 'contact', s0: CLIMB_GRAB, target: CLIMB_GRAB }],
+}
+
+/**
+ * Kẹp chỗ bám / chỗ dừng của kế hoạch vào đoạn trượt của mẫu robot (R165): CLIMB_FAR, CLIMB_TOUCH là số đo cho Mẫu Maker
+ * (đoạn trượt 0,320…1,017); mẫu dài / rộng hơn, hay thanh ngắn hơn, có `max` nhỏ hơn thì chỗ dừng lùi về `max −
+ * CLIMB_END_MARGIN` (thân treo / thân đứng dưới thanh vẫn trọn trong sân, agent tới được chỗ dừng). Các mẫu hiện có đều có
+ * max ≥ 1,017 nên không đổi gì.
+ */
+export function fitClimbPlan(p: ClimbPlan, max: number): ClimbPlan {
+  const cap = (s: number) => Math.min(s, Math.max(CLIMB_GRAB, max - CLIMB_END_MARGIN))
+  return { ...p, s0: cap(p.s0), target: cap(p.target) }
 }
 
 /**
@@ -666,7 +682,9 @@ export class Agent {
   get climbPlan(): ClimbPlan | null {
     const level = this.S.climbTarget
     if (level === 'none') return null
-    return CLIMB_PLAN[level][this.robot.slot]
+    const r = this.robot
+    const { l, w } = r.def.size
+    return fitClimbPlan(CLIMB_PLAN[level][r.slot], slideRange(r.alliance, l / 2, l / 2, w / 2).max)
   }
 
   /** Kế hoạch leo của robot này chỉ chạm xà (đứng sàn, không treo). */

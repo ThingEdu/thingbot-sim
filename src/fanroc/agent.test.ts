@@ -3,13 +3,14 @@ import assert from 'node:assert/strict'
 import { FanrocWorld, PHYSICS_DT } from './world.ts'
 import { RobotBody } from './robot.ts'
 import { Match } from './match.ts'
-import { Agent, wheelCmd, type Skill } from './agent.ts'
+import { Agent, fitClimbPlan, wheelCmd, type Skill } from './agent.ts'
 import { DEFAULT_LINEUP, lineupConfig, playAgents, SEATS, type Seat } from './quickmatch.ts'
 import { NEUTRAL, type PortValues } from './ports.ts'
 import type { RobotConfig } from './robots.ts'
 import type { Climb } from './ladder.ts'
 import { LADDER, MATCH_S } from './layout.ts'
-import { barYaw, pointAt } from './ladder.ts'
+import { barYaw, pointAt, slideRange } from './ladder.ts'
+import { ROBOTS } from './robots.ts'
 
 /** Cổng bánh của Mẫu Maker diff2 (M1 trái, M2 phải). */
 const WHEELS = ['M1', 'M2'] as const
@@ -185,6 +186,35 @@ test('pha quay theo thanh không tiến (bánh không ăn): quá CLIMB_ALIGN_MAX
   }
   assert.ok(gaveUp >= 1, 'không lần nào bỏ pha quay theo thanh')
   assert.ok(longest > 2 && longest < 3, `đứng ở pha quay theo thanh liền ${longest.toFixed(2)} s (giới hạn 2,5 s)`)
+})
+
+test('fitClimbPlan (R165): chỗ dừng / chỗ chạm phía Nước kẹp vào đoạn trượt của mẫu (max − 0,03); mẫu hiện có (max ≥ 1,017) không đổi', async () => {
+  const grab = LADDER.divider - 0.06
+  const far = { level: 'water' as const, s0: grab, target: 0.98 }
+  const touch = { level: 'contact' as const, s0: 0.8, target: 0.8 }
+  assert.deepEqual(fitClimbPlan(far, 1.017), far)
+  assert.deepEqual(fitClimbPlan(far, 0.9), { ...far, target: 0.87 })
+  const t = fitClimbPlan(touch, 0.82)
+  assert.ok(Math.abs(t.s0 - 0.79) < 1e-12 && Math.abs(t.target - 0.79) < 1e-12, JSON.stringify(t))
+  // Đoạn trượt ngắn quá: không kẹp lùi qua chỗ bám ở Đất.
+  assert.deepEqual(fitClimbPlan(far, grab), { ...far, target: grab })
+  for (const d of Object.values(ROBOTS)) for (const al of ['red', 'blue'] as const) {
+    const max = slideRange(al, d.size.l / 2, d.size.l / 2, d.size.w / 2).max
+    assert.deepEqual([fitClimbPlan(far, max), fitClimbPlan(touch, max)], [far, touch], `${d.type} ${al}: max ${max}`)
+  }
+  // Agent dùng đúng đoạn trượt của mẫu mình: Mẫu Maker Khó dừng ở 0,98; thân dài 0,6 m thì lùi về max − 0,03.
+  const w = await FanrocWorld.create(1)
+  try {
+    const r = new RobotBody(w, MAKER, 'red', 0)
+    assert.equal(new Agent(r, MAKER, 'hard', 1).climbPlan?.target, 0.98)
+    const long = { ...r.def, size: { ...r.def.size, l: 0.6 } }
+    ;(r as { def: typeof long }).def = long
+    const max = slideRange('red', 0.3, 0.3, long.size.w / 2).max
+    assert.ok(max - 0.03 < 0.98, `thân 0,6 m: max ${max}`)
+    assert.ok(Math.abs(new Agent(r, MAKER, 'hard', 1).climbPlan!.target - (max - 0.03)) < 1e-12)
+  } finally {
+    w.rapier.free()
+  }
 })
 
 // Chặn hồi quy: Dễ seed 1 trước vòng sửa omni (b1999f1) được 162 điểm nhiệm vụ, trước Task 5 (về đỗ, fd9da6c) 111; khi
