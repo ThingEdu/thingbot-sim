@@ -9,7 +9,7 @@ import type { RobotBody, Vec2 } from './robot.ts'
 import { DEAD_ZONE, V_MAX, ttFraction } from './robot.ts'
 import type { Match } from './match.ts'
 import type { HumanPlayer } from './human.ts'
-import { FIELD, MATCH_S, MOUNTAINS, MOUNTAIN_FOOT, ZONES, toMountain, type Rect } from './layout.ts'
+import { FIELD, LADDER, MATCH_S, MOUNTAINS, MOUNTAIN_FOOT, ZONES, toMountain, type Rect } from './layout.ts'
 import { NEUTRAL, type PortValues } from './ports.ts'
 import { LIFT_AXIS, portMap, type PortMap, type RobotConfig } from './robots.ts'
 import { HOOK, barYaw, ladderLen, pointAt, project, type Climb } from './ladder.ts'
@@ -26,7 +26,10 @@ interface SkillDef {
   noise: number
   /** Xác suất mỗi giây lỡ tay mở cửa xả khi đang chở bóng. */
   dropPerS: number
-  /** Mức leo Thang Cứu Hỏa cuối trận: contact = chỉ giơ móc chạm xà, ground = treo Đất, water = treo rồi trượt sang Nước. */
+  /**
+   * Mức leo Thang Cứu Hỏa cuối trận: contact = chỉ giơ móc chạm xà, ground = treo Đất (thanh theo CAD lắp sân chỉ vừa một
+   * robot treo ở Đất: ô 1 chạm xà), water = treo rồi trượt sang Nước. Mức của từng ô xem CLIMB_PLAN.
+   */
   climbTarget: Climb
   /** Đi leo khi thời gian còn ≤ thời gian ước tính (đi + bám + trượt) + chừng này giây. */
   climbMargin: number
@@ -164,8 +167,6 @@ const CLIMB_UP_S = 0.3
 /** Tốc độ ước tính khi đi tới chỗ bám, phần của tốc độ chạy đường dài. */
 const CLIMB_V = 0.6
 const CLIMB_V_4WD = 0.4
-/** Treo ở s nhỏ hơn chừng này thì thân vươn ra ngoài rào (S02 ở 0,248): không trượt lùi qua. */
-const CLIMB_S_MIN = 0.255
 /** Đế 4 bánh quay theo thanh chậm hơn (~0,5 rad/s): cộng thêm chừng này giây vào phần bám. */
 const CLIMB_GRAB_4WD_S = 3
 /** Phạt mỗi ô hành lang hẹp khi lập đường đi leo (giá ô thường 1…4). */
@@ -178,26 +179,45 @@ const CLIMB_BAND = 0.2
 const CLIMB_FOLLOW_GAP = HOOK.gap + 0.02
 /** Điểm chờ khi chỗ bám đang có robot đứng: cách chỗ bám vào trong sân chừng này (thử từ xa tới gần cho tới khi quay tại chỗ được). */
 const CLIMB_WAIT_R = [0.45, 0.4, 0.35, 0.3]
+/** Điểm chờ khi đang ở túi sau thanh: từ chỗ bám dời `along` về phía Nước, rồi `r` về phía góc sân (cách rào ≥ 0,2). */
+const CLIMB_WAIT_POCKET = { along: 0.25, r: 0.3 }
 
 type ClimbLevel = Exclude<Climb, 'none'>
 /**
- * Chỗ bám `s0` và chỗ dừng `target` (m dọc thanh tính từ cột phía rào, thanh CAD 1,400 m, vạch Đất/Nước ≈ 0,580) theo mức
- * và ô robot. Ràng buộc đo trên sân:
- * - thân xe đứng sàn dọc thanh không chạm rào khi s ≥ 0,256; treo dọc thanh không vươn ra ngoài rào (S02) khi
- *   0,248 ≤ s ≤ 1,15;
- * - chỉ bám được ở đoạn Đất (s ≤ vạch 0,5798); treo ở s > vạch + 0,01 là Nước;
+ * Chỗ bám ở đoạn Đất (m dọc thanh tính từ tâm cột phía rào), lấy từ vạch: thanh theo CAD lắp sân (12/11, R157) dài 1,338 m
+ * giữa hai tâm cột, vạch Đất / Nước ≈ 0,451. Thân Mẫu Maker treo / đứng dọc thanh trong rào khi 0,320 ≤ s ≤ 1,017
+ * (slideRange; mẫu khác rộng hơn) nên chỗ bám được ở Đất chỉ còn 0,320…0,451 — vừa MỘT thân: hai robot cùng liên minh bám
+ * chung chỗ này, lần lượt (robot sau chờ robot trước treo rồi trượt qua). Chừa 0,06 tới vạch cho sai số nhích (±0,008).
+ */
+const CLIMB_GRAB = LADDER.divider - 0.06
+/** Chỗ dừng xa nhất của robot treo trước (Khó): còn cách max đoạn trượt của Mẫu Maker (1,017) một chút. */
+const CLIMB_FAR = 0.98
+/**
+ * Chỗ đứng sàn chạm xà phía Nước (cách robot treo ở CLIMB_GRAB ≥ một thân). Đo seed 1–6, 4 Mẫu Maker (12/11, thanh CAD
+ * lắp sân): 0,72 / 0,80 / 1,00 ⇒ Vừa leo đúng 23 / 22 / 21 trên 24, Dễ 19 / 21 / 21; 0,72 trượt ở seed 1. Chọn 0,80.
+ */
+const CLIMB_TOUCH = 0.8
+/**
+ * Chỗ bám `s0`, chỗ dừng `target` và mức leo theo mức chơi và ô robot. Ràng buộc đo trên sân (thanh CAD lắp sân):
+ * - chỉ bám được ở đoạn Đất (s ≤ vạch ≈ 0,451); treo ở s > vạch + 0,01 là Nước;
  * - hai robot treo cách nhau ≥ HOOK.gap (0,3); thân treo (đáy y 0,12) thấp hơn nóc xe đứng sàn (0,216) nên robot treo
  *   và robot đứng dưới thanh phải cách nhau ≥ một thân xe (0,3) dọc thanh.
- * Hai chỗ bám 0,265 và 0,565 cách nhau đúng một thân xe (+ sai số nhích ±0,008): hai robot bám được theo thứ tự bất kỳ,
- * không robot nào phải đứng chờ chắn lối dọc rào. Không thể đặt cả hai ở 0,2 (dưới 0,248 thân treo vươn ra ngoài rào).
- * - water: ô 0 bám 0,565 rồi trượt tới 1,05; ô 1 bám 0,265, chờ ô 0 treo rồi trượt theo tới 0,70 (cả hai Nước, cách 0,35).
- * - ground: ô 0 bám 0,565 rồi nhích tới 0,58 (vẫn Đất); ô 1 ở yên 0,265 (cách 0,315).
- * - contact: đứng sàn, giơ móc chạm xà ở 1,00 / 0,62.
+ * Hai robot treo ở Đất là không thể (0,320 + 0,3 > vạch): mức Vừa chỉ ô 0 treo Đất, ô 1 đứng chạm xà ở đoạn Nước.
+ * - water: cả hai bám CLIMB_GRAB rồi trượt về CLIMB_FAR; ai bám trước đi trước tới CLIMB_FAR, robot bám sau dừng cách robot
+ *   trước CLIMB_FOLLOW_GAP (≈ 0,66 — slideGoal), cả hai ở Nước. Robot tới sau chờ ở điểm chờ tới khi chỗ bám trống (không
+ *   ai đứng, không thân treo nào phủ lên). Không ấn định ai trước: chờ một robot ở xa thì robot chờ đứng chắn lối đi của nó
+ *   ở hành lang dọc rào. `wait` = ước tính thêm thời gian chờ: ai cũng có thể tới sau, và đã có người treo thì lối hẹp
+ *   giữa Núi C / D và thanh (≈ 0,25 m) bị bịt, robot ở phía Hộp Phân Phối phải vòng qua giữa sân.
+ * - ground: ô 0 bám CLIMB_GRAB và ở yên đó (Đất, cách vạch 0,06); ô 1 đứng sàn chạm xà ở CLIMB_TOUCH (cách ô 0 ≥ một thân).
+ * - contact: đứng sàn, giơ móc chạm xà ở CLIMB_TOUCH / CLIMB_GRAB.
+ * Lối giữa góc Núi C / D và thanh chỉ còn ≈ 0,25 m (góc núi chiếu lên thanh ở s ≈ 0,68): robot treo / đứng ở 0,6…1,0 là
+ * bịt lối đó, robot ở phía Hộp Phân Phối phải vòng qua giữa sân.
  */
-const CLIMB_PLAN: Record<ClimbLevel, [{ s0: number; target: number }, { s0: number; target: number }]> = {
-  water: [{ s0: 0.565, target: 1.05 }, { s0: 0.265, target: 0.7 }],
-  ground: [{ s0: 0.565, target: 0.58 }, { s0: 0.265, target: 0.265 }],
-  contact: [{ s0: 1.0, target: 1.0 }, { s0: 0.62, target: 0.62 }],
+type ClimbPlan = { level: ClimbLevel; s0: number; target: number; wait?: boolean }
+const CLIMB_PLAN: Record<ClimbLevel, [ClimbPlan, ClimbPlan]> = {
+  water: [{ level: 'water', s0: CLIMB_GRAB, target: CLIMB_FAR, wait: true }, { level: 'water', s0: CLIMB_GRAB, target: CLIMB_FAR, wait: true }],
+  ground: [{ level: 'ground', s0: CLIMB_GRAB, target: CLIMB_GRAB }, { level: 'contact', s0: CLIMB_TOUCH, target: CLIMB_TOUCH }],
+  contact: [{ level: 'contact', s0: CLIMB_TOUCH, target: CLIMB_TOUCH }, { level: 'contact', s0: CLIMB_GRAB, target: CLIMB_GRAB }],
 }
 
 /**
@@ -643,10 +663,15 @@ export class Agent {
   }
 
   /** Kế hoạch leo của robot này (theo mức và ô); null khi mức không leo. */
-  get climbPlan(): { level: ClimbLevel; s0: number; target: number } | null {
+  get climbPlan(): ClimbPlan | null {
     const level = this.S.climbTarget
     if (level === 'none') return null
-    return { level, ...CLIMB_PLAN[level][this.robot.slot] }
+    return CLIMB_PLAN[level][this.robot.slot]
+  }
+
+  /** Kế hoạch leo của robot này chỉ chạm xà (đứng sàn, không treo). */
+  private get contactOnly(): boolean {
+    return this.climbPlan?.level === 'contact'
   }
 
   /** Đồng đội (agent) treo xa hơn mình trên cùng thanh: khi trượt phải đi sau họ. */
@@ -686,7 +711,9 @@ export class Agent {
     const res = planPath(r.pose, via, { others, forbid: [], avoid: [], narrow: CLIMB_NARROW })
     const slide = Math.abs(plan.target - plan.s0) / HOOK.slideV
     const grab = CLIMB_GRAB_S + (this.cfg.drive === 'diff2' ? 0 : CLIMB_GRAB_4WD_S)
-    this.climbEta = ((res ? res.len : dist(r.pose, via) * 2) + dist(via, at)) / v + grab + slide
+    // Robot tới sau phải chờ đồng đội bám xong rồi trượt qua chỗ bám chung.
+    const wait = plan.wait ? CLIMB_GRAB_S + CLIMB_FOLLOW_GAP / HOOK.slideV : 0
+    this.climbEta = ((res ? res.len : dist(r.pose, via) * 2) + dist(via, at)) / v + grab + slide + wait
   }
 
   private climbTask(): Task {
@@ -1209,6 +1236,15 @@ export class Agent {
 
   /** Điểm chờ đồng đội: từ chỗ bám vào trong sân, xa nhất mà còn quay tại chỗ được. */
   private climbWaitSpot(s0: number): Vec2 {
+    const al = this.robot.alliance
+    // Đang ở túi sau thanh của mình (gom bóng ở Khu Chữa Cháy): chờ ngay trong túi, phía góc sân, lệch về phía Nước một
+    // đoạn — vòng ra trong sân thì đồng đội treo trượt về chỗ dừng xa bịt hành lang giữa núi và thanh, không về kịp.
+    if (inPocket(al, this.robot.pose)) {
+      const at = pointAt(al, s0 + CLIMB_WAIT_POCKET.along)
+      let n = { x: Math.cos(barYaw(al)), z: -Math.sin(barYaw(al)) }
+      if (n.x * -at.x + n.z * -at.z > 0) n = { x: -n.x, z: -n.z }
+      return { x: at.x + n.x * CLIMB_WAIT_POCKET.r, z: at.z + n.z * CLIMB_WAIT_POCKET.r }
+    }
     return this.climbInward(s0, CLIMB_WAIT_R)
   }
 
@@ -1222,7 +1258,7 @@ export class Agent {
   /** Có vào chỗ bám qua điểm vào không (mức contact đứng sàn: không cần). */
   private needsVia(s0: number): boolean {
     const at = pointAt(this.robot.alliance, s0)
-    return this.S.climbTarget !== 'contact' && wallClearance(at.x, at.z) >= CLIMB_VIA_WALL
+    return !this.contactOnly && wallClearance(at.x, at.z) >= CLIMB_VIA_WALL
   }
 
   /**
@@ -1264,10 +1300,12 @@ export class Agent {
     const al = r.alliance
     const at = pointAt(al, t.s0)
     const yaw = barYaw(al)
-    const contact = this.S.climbTarget === 'contact'
+    const contact = this.contactOnly
     if (t.phase === 'go') {
-      // Chỗ bám đang có robot khác đứng (chưa treo) thì chờ ở điểm chờ.
-      const busy = view.robots.some((o) => o !== r && o.climb.mode === 'floor' && dist(o.pose, at) < 0.25)
+      // Chỗ bám đang có robot khác đứng (chưa treo), hay thân treo còn phủ lên chỗ bám (thanh CAD lắp sân: hai robot cùng
+      // liên minh bám chung một chỗ ở Đất), thì chờ ở điểm chờ.
+      const busy = view.robots.some((o) =>
+        o !== r && (o.climb.mode === 'floor' ? dist(o.pose, at) < 0.25 : o.climb.bar === al && Math.abs(o.climb.s - t.s0) < CLIMB_FOLLOW_GAP))
       const block = this.climbBlock()
       if (busy) {
         this.goTo(view, this.climbWaitSpot(t.s0), 0.08, false, block)
@@ -1381,19 +1419,23 @@ export class Agent {
       })()
       if (os !== null && os > s) goal = Math.min(goal, os - CLIMB_FOLLOW_GAP)
     }
-    // Không lùi quá chỗ thân treo vươn ra ngoài rào (S02).
-    return Math.max(goal, Math.min(CLIMB_S_MIN, s))
+    // Không lùi quá đầu đoạn trượt trong sân (thân treo không xuyên rào).
+    return Math.max(goal, Math.min(r.slideRange(al).min, s))
   }
 
   /**
    * Ô cấm khi đi tới chỗ bám: "túi" góc sân sau thanh xà của liên minh kia và dải ngay dưới thanh đó (robot của họ treo
-   * trên thanh là bịt lối ra / lối dọc thanh).
+   * trên thanh là bịt lối ra / lối dọc thanh), và túi sau thanh của mình khi đang ở ngoài.
    */
   private climbBlock(): ((p: Vec2) => boolean) | undefined {
-    const other: Alliance = this.robot.alliance === 'red' ? 'blue' : 'red'
+    const own = this.robot.alliance
+    const other: Alliance = own === 'red' ? 'blue' : 'red'
     // Đã ở hẳn phía góc của thanh kia (không còn đường khác) thì thôi; đứng trong dải dưới thanh vẫn cấm (ô xuất phát luôn đi được).
     if (inPocket(other, this.robot.pose)) return undefined
-    return (p) => inPocket(other, p)
+    // Túi sau thanh của chính mình cũng cấm khi đang ở ngoài: thanh theo CAD lắp sân sát rào, lối từ túi tới chỗ bám (Đất,
+    // sát rào bên) hẹp và đồng đội treo trước là bịt mất (đo: Maker Pro omni Khó seed 1 đi dọc rào xa vào túi rồi kẹt).
+    const ownToo = !inPocket(own, this.robot.pose)
+    return (p) => inPocket(other, p) || (ownToo && inPocket(own, p))
   }
 
   /** Robot khác làm chướng ngại cho A* (robot đang treo chặn rộng hơn). */

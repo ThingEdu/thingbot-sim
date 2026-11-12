@@ -120,43 +120,66 @@ test('holeCentres(): một lỗ cờ mỗi núi (A..D), lệch đúng HOLE (lx, 
   })
 })
 
-test('thanh xà Thang Cứu Hỏa (CAD sân mới): dài 1,400 m, vạch cách đầu rào 0,580 m ngay mép Khu Chữa Cháy', () => {
-  near(ladderLen('red'), 1.4, 0.002)
-  // điểm thanh cắt z = -0.6088 (mép Khu Chữa Cháy): cách a 0,580 m, nằm trong Khu Chữa Cháy
-  const a = LADDERS.red.a
-  const b = LADDERS.red.b
-  const t = (-0.6088 - a.z) / (b.z - a.z)
-  const x = a.x + t * (b.x - a.x)
-  near(Math.hypot(x - a.x, -0.6088 - a.z), 0.58, 0.005)
-  assert.ok(x >= ZONES.fire[0].x0 && x <= ZONES.fire[0].x1)
-  near(LADDER.divider, 0.58, 0.005)
-  // vạch tính từ hình học: nằm đúng mép Khu Chữa Cháy
-  near(pointAt('red', LADDER.divider).z, ZONES.fire[0].z1, 1e-9)
+test('thanh xà theo CAD lắp sân 12/11 (R157): tâm cột cách nhau 1,338 m, ống 1,400 m thò 0,018 / 0,044 (tổng 0,062); vạch ≈ 0,451 m từ tâm cột a, ngay mép Khu Chữa Cháy', () => {
+  near(ladderLen('red'), 1.338, 0.001); near(ladderLen('blue'), 1.338, 0.001)
+  near(LADDER.rodLen, 1.4, 1e-9)
+  near(LADDER.overhang.a + LADDER.overhang.b, 0.062, 0.001)
+  near(LADDER.overhang.a, 0.0177, 0.001); near(LADDER.overhang.b, 0.0443, 0.001)
+  // Đầu ống Đỏ theo CAD: (−1,2482; −0,2772) → (−0,2582; −1,2671).
+  const e0 = pointAt('red', -LADDER.overhang.a)
+  const e1 = pointAt('red', ladderLen('red') + LADDER.overhang.b)
+  near(e0.x, -1.2482, 0.001); near(e0.z, -0.2772, 0.001)
+  near(e1.x, -0.2582, 0.001); near(e1.z, -1.2671, 0.001)
+  // Đúng 45°.
+  const { a, b } = LADDERS.red
+  near(Math.abs(b.x - a.x), Math.abs(b.z - a.z), 0.001)
+  // Vạch Đất / Nước: chỗ thanh cắt z = −0,6088 (mép Khu Chữa Cháy), x ≈ −0,917, cách tâm cột a ≈ 0,451 m; băng keo CAD ở
+  // x ≈ −0,899 (cách chỗ đó < 0,03 m dọc thanh).
+  const d = pointAt('red', LADDER.divider)
+  near(d.z, ZONES.fire[0].z1, 1e-9)
+  near(d.x, -0.917, 0.002)
+  assert.ok(d.x >= ZONES.fire[0].x0 && d.x <= ZONES.fire[0].x1)
+  near(LADDER.divider, 0.451, 0.002)
+  assert.ok(Math.abs(project('red', -0.899, -0.6267).s - LADDER.divider) < 0.03, 'băng keo CAD gần vạch tính')
 })
 
-test('thanh xà CAD: ống Ø20 trục cao 0,6575, cột 20×20 cao 0,638, kẹp Ø35 cao 65 mm phủ y 0,608…0,673', () => {
-  near(LADDER.y, 0.6575, 1e-9); near(LADDER.rodR, 0.01, 1e-9)
+test('thanh xà CAD: ống Ø20 trục cao 0,6574, cột 20×20 cao 0,638, kẹp Ø35 cao 65 mm phủ y 0,608…0,673', () => {
+  near(LADDER.y, 0.6574, 1e-9); near(LADDER.rodR, 0.01, 1e-9)
   near(LADDER.post, 0.02, 1e-9); near(LADDER.postH, 0.638, 1e-9)
   near(LADDER.clampR, 0.0175, 1e-9); near(LADDER.clampH, 0.065, 1e-9)
   near(LADDER.clampY0, 0.608, 1e-9); near(LADDER.clampY0 + LADDER.clampH, 0.673, 1e-9)
+  // Kẹp tâm cao 0,6405 như CAD.
+  near(LADDER.clampY0 + LADDER.clampH / 2, 0.6405, 1e-9)
   assert.ok(LADDER.y - LADDER.rodR >= LADDER.clampY0 && LADDER.y + LADDER.rodR <= LADDER.clampY0 + LADDER.clampH, 'ống nằm trọn trong kẹp')
 })
 
-test('thanh xà theo Hình 1: đầu b sát mép Hộp Phân Phối (x = ±0,202), đầu a cạnh rào, thanh đi qua tâm ô vàng (< 0,02)', () => {
-  near(Math.abs(LADDERS.red.b.x), 0.202, 0.005); near(Math.abs(LADDERS.blue.b.x), 0.202, 0.005)
+test('cột theo CAD lắp sân: tâm Đỏ a (−1,2356; −0,2897), b (−0,2895; −1,2358), Xanh a (1,2355; −0,2898), b (0,2894; −1,2358); cả 4 cột ngoài mặt trong rào', () => {
+  const want = { red: [[-1.2356, -0.2897], [-0.2895, -1.2358]], blue: [[1.2355, -0.2898], [0.2894, -1.2358]] }
   for (const al of ['red', 'blue'] as const) {
-    const z = ZONES.ladder[al]
-    assert.ok(project(al, (z.x0 + z.x1) / 2, (z.z0 + z.z1) / 2).d < 0.02)
+    const [a, b] = want[al]
+    near(LADDERS[al].a.x, a[0]); near(LADDERS[al].a.z, a[1]); near(LADDERS[al].b.x, b[0]); near(LADDERS[al].b.z, b[1])
+    for (const p of [LADDERS[al].a, LADDERS[al].b]) {
+      // Mặt trong của cột (cạnh 20) vẫn ngoài mặt trong rào ±FIELD/2.
+      assert.ok(Math.max(Math.abs(p.x), Math.abs(p.z)) - LADDER.post / 2 >= FIELD / 2, `${al} cột (${p.x}, ${p.z}) lấn vào sân`)
+    }
   }
 })
 
-test('hai thanh xà đối xứng qua x = 0', () => {
-  near(LADDERS.blue.a.x, -LADDERS.red.a.x); near(LADDERS.blue.a.z, LADDERS.red.a.z)
-  near(LADDERS.blue.b.x, -LADDERS.red.b.x); near(LADDERS.blue.b.z, LADDERS.red.b.z)
-  near(ladderLen('blue'), ladderLen('red'), 1e-9)
+test('ô THANG lệch trục thanh ≈ 0,087 m (CAD lắp sân; trước tính tay 9 mm)', () => {
+  for (const al of ['red', 'blue'] as const) {
+    const z = ZONES.ladder[al]
+    near(project(al, (z.x0 + z.x1) / 2, (z.z0 + z.z1) / 2).d, 0.087, 0.005)
+  }
+})
+
+test('hai thanh xà đối xứng qua x = 0 (CAD lệch nhau ≤ 0,1 mm)', () => {
+  const t = 2e-4
+  near(LADDERS.blue.a.x, -LADDERS.red.a.x, t); near(LADDERS.blue.a.z, LADDERS.red.a.z, t)
+  near(LADDERS.blue.b.x, -LADDERS.red.b.x, t); near(LADDERS.blue.b.z, LADDERS.red.b.z, t)
+  near(ladderLen('blue'), ladderLen('red'), t)
   const p = pointAt('red', 0.5)
   const q = pointAt('blue', 0.5)
-  near(q.x, -p.x); near(q.z, p.z)
+  near(q.x, -p.x, t); near(q.z, p.z, t)
 })
 
 test('thanh xà đi phía trên ô Bảo Vệ (tâm ô cách thanh < 0,19 m)', () => {

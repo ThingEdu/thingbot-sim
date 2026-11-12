@@ -109,7 +109,7 @@ export class FanrocWorld {
     }
   }
 
-  /** Thang Cứu Hỏa (luật V4): mỗi liên minh một thanh xà (trụ bo đầu, cao LADDER.y) trên hai cột hộp 20×20 có kẹp Ø35, va chạm tĩnh. */
+  /** Thang Cứu Hỏa (luật V4): mỗi liên minh một thanh xà (trụ bo đầu, cao LADDER.y) trên hai cột hộp 20×20 có kẹp Ø35 (vị trí theo CAD lắp sân 12/11, cột ngoài rào), va chạm tĩnh. */
   private buildLadders(): void {
     for (const { a, b } of Object.values(LADDERS)) {
       const dx = b.x - a.x
@@ -117,9 +117,12 @@ export class FanrocWorld {
       const len = Math.hypot(dx, dz)
       // Capsule của Rapier dọc trục y: xoay 90° quanh trục (uz, 0, −ux) để nằm theo hướng thanh.
       const k = Math.SQRT1_2 / len
+      // Ống dài LADDER.rodLen, thò qua tâm cột a / b LADDER.overhang.a / .b (CAD lắp sân): tâm ống lệch khỏi giữa hai cột
+      // một đoạn (b − a) / 2 về phía b; capsule dài 2 × (nửa thân + bán kính).
+      const off = (LADDER.overhang.b - LADDER.overhang.a) / 2 / len
       this.fixed(
-        RAPIER.ColliderDesc.capsule(len / 2, LADDER.rodR)
-          .setTranslation((a.x + b.x) / 2, LADDER.y, (a.z + b.z) / 2)
+        RAPIER.ColliderDesc.capsule(LADDER.rodLen / 2 - LADDER.rodR, LADDER.rodR)
+          .setTranslation((a.x + b.x) / 2 + dx * off, LADDER.y, (a.z + b.z) / 2 + dz * off)
           .setRotation({ x: dz * k, y: 0, z: -dx * k, w: Math.SQRT1_2 }),
       )
       for (const p of [a, b]) {

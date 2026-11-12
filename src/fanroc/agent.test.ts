@@ -8,7 +8,7 @@ import { playAgents, type Seat } from './quickmatch.ts'
 import { NEUTRAL, type PortValues } from './ports.ts'
 import type { RobotConfig } from './robots.ts'
 import type { Climb } from './ladder.ts'
-import { MATCH_S } from './layout.ts'
+import { LADDER, MATCH_S } from './layout.ts'
 import { barYaw, pointAt } from './ladder.ts'
 
 /** Cổng bánh của Mẫu Maker diff2 (M1 trái, M2 phải). */
@@ -61,10 +61,10 @@ const level = (s: Skill) => {
 }
 const avg = (xs: Played[]) => xs.reduce((s, x) => s + x.score, 0) / xs.length
 
-// Luật V4: điểm trận = điểm nhiệm vụ × hệ số leo xà (Dễ chạm 120 %, Vừa treo Đất 140 %, Khó treo Nước 180 % khi đủ
-// 4 robot). Điểm nhiệm vụ của Mẫu Maker (chỉ ủi bóng + nhận bóng Human Player) lệch rất mạnh theo seed (Dễ 3…240), 3 trận
-// không đủ để so ba mức nên lấy 6 seed. Số đo 12/11 (Task 5, vòng sửa 2): Dễ 237 / 89 / 240 / 130 / 3 / 10 (118,2),
-// Vừa 89 / 189 / 261 / 154 / 127 / 87 (151,2), Khó 290 / 141 / 252 / 170 / 242 / 276 (228,5).
+// Luật V4: điểm trận = điểm nhiệm vụ × hệ số leo xà (Dễ chạm 120 %, Vừa 1 Đất + 1 Chạm mỗi liên minh 130 %, Khó treo Nước
+// 180 % khi đủ 4 robot). Điểm nhiệm vụ của Mẫu Maker (chỉ ủi bóng + nhận bóng Human Player) lệch rất mạnh theo seed, 3 trận
+// không đủ để so ba mức nên lấy 6 seed. Số đo 12/11 (thanh theo CAD lắp sân, R158): Dễ 128 / 165 / 22 / 76 / 172 / 56
+// (103,2), Vừa 229 / 179 / 94 / 155 / 172 / 210 (173,2), Khó 310 / 173 / 150 / 274 / 240 / 17 (194,0).
 test('điểm trận trung bình (6 trận, 4 Mẫu Maker diff2): Khó > Vừa > Dễ', async () => {
   const res: Partial<Record<Skill, Played[]>> = {}
   for (const s of LEVELS) res[s] = await level(s)
@@ -76,16 +76,17 @@ test('điểm trận trung bình (6 trận, 4 Mẫu Maker diff2): Khó > Vừa >
 })
 
 // Luật V4: robot máy leo Thang Cứu Hỏa cuối trận thay cho về đỗ. Khó: hai robot mỗi liên minh sang Nước (+20 % mỗi
-// robot ⇒ 180 %); Vừa: treo Đất (+10 % ⇒ 140 %); Dễ: chỉ chạm xà (+5 %).
-test('leo xà cuối trận (seed 1, 4 Mẫu Maker cùng mức): Khó 4 Nước 180 %, Vừa 4 Đất 140 %, Dễ ≥ 2 Chạm; không lỗi lúc leo', async () => {
+// robot ⇒ 180 %); Vừa: ô 0 treo Đất (+10 %), ô 1 chạm xà (+5 %) ⇒ 130 % — thanh theo CAD lắp sân (12/11, R157) chỉ vừa một
+// robot treo ở Đất (Mẫu Maker bám được 0,320…vạch 0,451; hai thân treo cách nhau ≥ 0,3); Dễ: chỉ chạm xà (+5 %).
+test('leo xà cuối trận (seed 1, 4 Mẫu Maker cùng mức): Khó 4 Nước 180 %, Vừa 2 Đất + 2 Chạm 130 %, Dễ ≥ 2 Chạm; không lỗi lúc leo', async () => {
   const [hard] = await level('hard')
   const [medium] = await level('medium')
   const [easy] = await level('easy')
   for (const [n, x] of [['Khó', hard], ['Vừa', medium], ['Dễ', easy]] as const) console.log(`${n}: ${x.climbs.join(', ')} — ${x.multPct} %`)
   assert.deepEqual(hard.climbs, ['water', 'water', 'water', 'water'])
   assert.equal(hard.multPct, 180)
-  assert.deepEqual(medium.climbs, ['ground', 'ground', 'ground', 'ground'])
-  assert.equal(medium.multPct, 140)
+  assert.deepEqual(medium.climbs, ['ground', 'contact', 'ground', 'contact'])
+  assert.equal(medium.multPct, 130)
   assert.ok(easy.climbs.filter((c) => c === 'contact').length >= 2, `Dễ: ${easy.climbs.join(', ')}`)
   for (const [n, x] of [['Khó', hard], ['Vừa', medium], ['Dễ', easy]] as const) assert.deepEqual(x.lateFouls, [], `${n}: lỗi lúc leo`)
 })
@@ -101,7 +102,7 @@ test('móc ở cổng khác S2 (Xe Phân Loại S1 — trùng servo cũ của to
     m.step(PHYSICS_DT, idle) // sang pha thi đấu
     m.t = MATCH_S - 30
     const r = robots[0]
-    r.setPose({ x: -0.55, z: -0.25, yaw: 0 }) // ngoài sân trống, cách chỗ bám 0,565 chừng 0,4 m
+    r.setPose({ x: -0.55, z: -0.25, yaw: 0 }) // ngoài sân trống, cách chỗ bám (≈ 0,391) chừng 0,5 m
     const agent = new Agent(r, cfg, 'medium', 1)
     const view = { world: w, robots, match: m, humans: [] }
     while (m.phase === 'play') m.step(PHYSICS_DT, [agent.update(view, PHYSICS_DT), ...idle.slice(1)])
@@ -110,23 +111,30 @@ test('móc ở cổng khác S2 (Xe Phân Loại S1 — trùng servo cũ của to
   }
 })
 
-test('pha quay theo thanh có giới hạn giờ: nhích vào thân robot đang treo (kẹt) thì quay lại đi tới chỗ bám, không đứng mãi', async () => {
+test('pha quay theo thanh: robot treo ngay sau chỗ bám (vừa ngoài 0,32) — Đỏ 1 đứng vuông góc ở chỗ bám vẫn quay theo thanh và bám được, không đứng ở pha quay quá 3,5 s', async () => {
   const w = await FanrocWorld.create(1)
   const robots = [MAKER, MAKER, MAKER, MAKER].map((c, i) => new RobotBody(w, c, i < 2 ? 'red' : 'blue', (i % 2) as 0 | 1))
   const m = new Match(w, robots, TEAMS, { seed: 1 })
   m.t = 0
   const idle: PortValues[] = robots.map(() => ({ ...NEUTRAL }))
   m.step(PHYSICS_DT, idle) // sang pha thi đấu
-  m.t = MATCH_S - 13 // vừa tới giờ đi leo (ETA ≈ 6 s bám + 8 s dư mức Vừa)
-  // Đỏ 0 (không agent) treo ở 0,55: thân treo từ 0,40 chắn đầu xe Đỏ 1 đứng ở 0,25 (chỗ bám của nó 0,265).
+  m.t = MATCH_S - 13 // vừa tới giờ đi leo (ETA ≈ 6 s bám + 8 s chờ đồng đội + 4 s trượt mức Khó)
+  // Thanh theo CAD lắp sân: chỗ bám (Khó) ở LADDER.divider − 0,06 ≈ 0,391. Đỏ 0 (không agent) bám ở Đất rồi trượt tới
+  // chỗ bám + 0,325 (vừa ngoài "thân treo phủ chỗ bám" 0,32): đuôi thân treo cách chỗ bám 0,175 < nửa đường chéo Đỏ 1
+  // (0,19). Đỏ 1 đứng ở chỗ bám, vuông góc với thanh: quay theo thanh góc xe sượt thân treo. (Thanh CAD lắp sân: thân treo
+  // trong 0,32 quanh chỗ bám thì agent chờ ở điểm chờ, nên cảnh "nhích vào thân treo rồi kẹt" của bản trước không còn dựng
+  // được; giới hạn giờ CLIMB_ALIGN_MAX_S vẫn giữ trong agent.ts cho cảnh kẹt khác.)
+  const s0 = LADDER.divider - 0.06
   const at = (s: number) => pointAt('red', s)
-  robots[0].setPose({ ...at(0.55), yaw: barYaw('red') })
+  robots[0].setPose({ ...at(0.43), yaw: barYaw('red') })
   m.step(PHYSICS_DT, [{ ...NEUTRAL, S2: 180 }, ...idle.slice(1)])
   m.step(PHYSICS_DT, [{ ...NEUTRAL, S2: 0 }, ...idle.slice(1)])
   assert.equal(robots[0].climb.mode, 'hang')
+  while (robots[0].climb.s < s0 + 0.325) m.step(PHYSICS_DT, [{ ...NEUTRAL, M1: 100, M2: 100 }, ...idle.slice(1)])
+  m.t = MATCH_S - 13
   const r = robots[1]
-  r.setPose({ ...at(0.25), yaw: barYaw('red') })
-  const agent = new Agent(r, MAKER, 'medium', 1)
+  r.setPose({ ...at(s0), yaw: barYaw('red') + Math.PI / 2 })
+  const agent = new Agent(r, MAKER, 'hard', 1)
   const view = { world: w, robots, match: m, humans: [] }
   let run = 0
   let longest = 0
@@ -141,6 +149,7 @@ test('pha quay theo thanh có giới hạn giờ: nhích vào thân robot đang 
     last = d
   }
   assert.ok(leftAlign > 0, 'không lần nào rời pha quay theo thanh')
+  assert.equal(r.climb.mode, 'hang', `Đỏ 1 không bám được: ${agent.doing}`)
   assert.ok(longest < 3.5, `đứng ở pha quay theo thanh liền ${longest.toFixed(1)} s`)
 })
 

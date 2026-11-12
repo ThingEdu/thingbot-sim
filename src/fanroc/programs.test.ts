@@ -15,6 +15,7 @@ import { RobotLink } from './link.ts'
 import { FanrocWorld, PHYSICS_DT } from './world.ts'
 import { RobotBody } from './robot.ts'
 import { ROBOTS, type RobotConfig, type RobotType } from './robots.ts'
+import { LADDER } from './layout.ts'
 import type { Command, Message } from '../sim-worker.ts'
 
 const ROOT = resolve(import.meta.dirname, '../..')
@@ -307,6 +308,8 @@ for (const cfg of [...TYPES.map(defaultConfig), { type: 'maker', drive: 'mecanum
     const { level, bar } = robot.climbLevel
     assert.equal(level, 'water', `chưa treo ở Nước: ${level}, s = ${robot.climb.s.toFixed(3)}, dừng ở ${JSON.stringify(robot.pose)}`)
     assert.equal(bar, 'red')
+    // Thanh theo CAD lắp sân 12/11: dừng quá vạch Đất / Nước ≥ 0,15 m (đo 0,349…0,391).
+    assert.ok(robot.climb.s - LADDER.divider >= 0.15, `chỉ quá vạch ${(robot.climb.s - LADDER.divider).toFixed(3)} m`)
   })
 
 test('TeleOp Maker Nâng: L2 / R2 / L1 đưa cửa lồng S1 tới 0° / 120° / 180° (Rãnh 1 / 2 / 3)', () => {

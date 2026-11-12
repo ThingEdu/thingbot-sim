@@ -50,12 +50,14 @@ Trong trận:
   các dòng trôi lần lượt để em kịp đọc.
 - Thẻ robot bên trái nhắc khi robot sắp phạm luật (vươn ra ngoài rào, leo núi…).
 
-**Leo Thang Cứu Hỏa.** Mỗi liên minh có một thanh xà trên ô vàng ở góc sân. Vạch màu chia thanh làm hai đoạn: **Khu vực
-Đất** (gần rào) và **Khu vực Nước** (gần Khu Chữa Cháy). Lái robot tới ô vàng, quay theo thanh, giữ nút móc cho móc
-chạm thanh rồi nhả ra: robot được kéo lên và treo. Đang treo thì đẩy cần tiến / lùi để trượt dọc thanh; tới gần rào hay
-Hộp Phân Phối thì robot dừng lại (thân treo không trượt ra ngoài sân). Phải bám ở đoạn
-Đất trước rồi mới trượt sang Nước; giơ móc lần nữa là robot rơi xuống. Mỗi thanh treo được 2 robot; leo thanh của liên
-minh kia không được tính.
+**Leo Thang Cứu Hỏa.** Mỗi liên minh có một thanh xà trên ô vàng ở góc sân, hai cột đứng ngoài rào. Vạch màu chia thanh
+làm hai đoạn: **Khu vực Đất** (gần rào, khoảng 45 cm tính từ cột) và **Khu vực Nước** (gần Khu Chữa Cháy). Thanh không
+đi qua giữa ô vàng mà lệch về phía rào chừng 9 cm: lái robot vào ô vàng, đứng ngay dưới thanh, quay theo thanh, giữ nút
+móc cho móc chạm thanh rồi nhả ra: robot được kéo lên và treo. Lúc xuất phát móc thu gọn trong thân (không thò ra ngoài
+khung); giữ nút thì cần móc duỗi thẳng lên cao hơn thanh. Đang treo thì đẩy cần tiến / lùi để trượt dọc thanh; tới gần
+rào hay Hộp Phân Phối thì robot dừng lại (thân treo không trượt ra ngoài sân). Phải bám ở đoạn Đất trước rồi mới trượt
+sang Nước; giơ móc lần nữa là robot rơi xuống. Đoạn Đất ngắn, chỉ vừa một robot treo: robot thứ hai chờ bạn kia trượt
+sang Nước rồi mới bám. Mỗi thanh treo được 2 robot; leo thanh của liên minh kia không được tính.
 
 Leo không cộng điểm thẳng mà tăng **Hệ số nhân** của cả trận (hai liên minh chung điểm). Hệ số bắt đầu từ 1, lúc
 hết giờ mỗi robot cộng thêm: chạm thanh +0,05, treo ở Đất +0,10, treo ở Nước +0,20 — cả 4 robot treo ở Nước là × 1,80.

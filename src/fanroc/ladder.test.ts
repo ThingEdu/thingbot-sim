@@ -131,9 +131,11 @@ test('slideRange: mỗi mẫu robot, hai thanh — trong đoạn thì thân tron
       assert.ok(!inField(corners(al, rg.max + 0.001, l / 2, l / 2, w / 2)), `${d.type} ${al} trên max`)
     }
   }
-  // Mẫu Maker 240 × 300: ≈ 0,256…1,145 (rà soát cuối đo 0,25…1,15).
+  // Mẫu Maker 240 × 300 trên thanh theo CAD lắp sân 12/11: ≈ 0,320…1,017 (trước, theo Hình 1: 0,256…1,145). Đoạn Đất bám
+  // được chỉ còn 0,320…vạch 0,451: vừa một thân treo (hai thân treo cách nhau ≥ HOOK.gap 0,3 thì thân thứ hai đã ở Nước).
   const mk = slideRange('red', 0.15, 0.15, 0.12)
-  assert.ok(Math.abs(mk.min - 0.256) < 0.002 && Math.abs(mk.max - 1.145) < 0.002, `${mk.min}…${mk.max}`)
+  assert.ok(Math.abs(mk.min - 0.320) < 0.002 && Math.abs(mk.max - 1.017) < 0.002, `${mk.min}…${mk.max}`)
+  assert.ok(mk.min + HOOK.gap > LADDER.divider + 0.01, 'hai Mẫu Maker treo cùng ở Đất phải là không thể')
   // Phần vươn ra trước làm max nhỏ lại, ra sau làm min lớn lên.
   assert.ok(slideRange('red', 0.35, 0.15, 0.12).max < mk.max - 0.1)
   assert.ok(slideRange('red', 0.15, 0.35, 0.12).min > mk.min + 0.1)

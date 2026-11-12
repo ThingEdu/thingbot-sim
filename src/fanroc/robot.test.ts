@@ -353,11 +353,12 @@ test('Móc S2 của Mẫu Maker: giơ 180° rồi hạ 0° dưới đoạn Đấ
 test('Đang treo: M1 = M2 = 255 trong 7 s trượt sang Nước (≈ 0,15 m/s, dừng ở đầu đoạn trong sân); setPose(START) về sàn, thân dynamic', async () => {
   const { HOOK, ladderLen, pointAt } = await import('./ladder.ts')
   const { START_POSES } = await import('./layout.ts')
-  const { w, r } = await underBar(0.3)
+  // Thanh theo CAD lắp sân: Mẫu Maker bám được ở 0,320…vạch 0,451.
+  const { w, r } = await underBar(0.4)
   drive(w, r, { S2: 180 }, PHYSICS_DT)
   drive(w, r, { S2: 0 }, PHYSICS_DT)
   drive(w, r, { M1: 255, M2: 255 }, 1)
-  assert.ok(Math.abs(r.climb.s - (0.3 + HOOK.slideV)) < 0.01, `1 s trượt tới s = ${r.climb.s}`)
+  assert.ok(Math.abs(r.climb.s - (0.4 + HOOK.slideV)) < 0.01, `1 s trượt tới s = ${r.climb.s}`)
   const at = pointAt('red', r.climb.s)
   assert.ok(Math.hypot(r.pose.x - at.x, r.pose.z - at.z) < 0.01, 'thân đi theo chỗ bám')
   drive(w, r, { M1: 255, M2: 255 }, 6)
@@ -411,14 +412,15 @@ test('peers: robot cùng trận đang treo chặn chỗ bám (khoảng cách HOO
     r.apply({ ...NEUTRAL, S2: 180 }, PHYSICS_DT)
     r.apply({ ...NEUTRAL, S2: 0 }, PHYSICS_DT)
   }
-  hangAt(bots[0], 0.55)
-  for (let k = 0; k < 60; k++) bots[0].apply({ ...NEUTRAL, M1: 100, M2: 100 }, PHYSICS_DT) // tới 0,70
-  hangAt(bots[1], 0.3)
+  // Thanh theo CAD lắp sân: đoạn Đất bám được của Mẫu Maker chỉ 0,320…0,451 — robot 0 bám 0,4 rồi trượt đi 2 s.
+  hangAt(bots[0], 0.4)
+  for (let k = 0; k < 120; k++) bots[0].apply({ ...NEUTRAL, M1: 100, M2: 100 }, PHYSICS_DT) // tới 0,70
+  hangAt(bots[1], 0.35)
   assert.equal(bots[1].climb.mode, 'hang')
   // Robot 1 tiến về phía robot 0: dừng cách HOOK.gap.
   for (let k = 0; k < 120; k++) bots[1].apply({ ...NEUTRAL, M1: 100, M2: 100 }, PHYSICS_DT)
   assert.ok(Math.abs(bots[0].climb.s - bots[1].climb.s - HOOK.gap) < 1e-6, `${bots[0].climb.s} − ${bots[1].climb.s}`)
-  hangAt(bots[2], 0.5)
+  hangAt(bots[2], 0.43)
   assert.equal(bots[2].climb.mode, 'floor', 'thanh đã có 2 robot')
   assert.equal(bots[2].climbLevel.level, 'none')
 })
@@ -428,7 +430,7 @@ const outside = (r: RobotBody) => r.footprint().some((p) => Math.abs(p.x) > FIEL
 
 test('Treo: giữ tiến 10 s / lùi 10 s ⇒ dừng ở đầu đoạn trong sân, mọi góc footprint vẫn trong rào', async () => {
   for (const cfg of [MAKER, { type: 'ui', drive: 'diff2', actuator: 'tt' }, { type: 'co', drive: 'diff2', actuator: 'tt' }, { type: 'sort', drive: 'diff2', actuator: 'tt' }] as RobotConfig[]) {
-    const { w, r } = await underBar(0.5, cfg)
+    const { w, r } = await underBar(0.42, cfg) // Đất (vạch ≈ 0,451)
     const hook = { S1: null, S2: null, S4: null, [ROBOTS[cfg.type].hook.port]: 0 } as Partial<PortValues>
     drive(w, r, { [ROBOTS[cfg.type].hook.port]: 180 } as Partial<PortValues>, PHYSICS_DT)
     drive(w, r, hook, PHYSICS_DT)

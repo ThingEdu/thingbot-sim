@@ -451,10 +451,10 @@ test('S02 do thanh răng lùi ra đuôi (Maker Nâng sát rào phía xa, đuôi 
   assert.equal(m.pens[1].yellow, 1, 'tay cờ vươn ra mũi')
 })
 
-test('Mẫu Maker treo ở 0,5 giữ tiến 10 s rồi lùi 10 s (học sinh "giữ tiến để sang Nước"): không thẻ vàng S02, vẫn treo Nước rồi Đất', async () => {
+test('Mẫu Maker treo ở 0,4 (Đất, thanh theo CAD lắp sân) giữ tiến 10 s rồi lùi 10 s (học sinh "giữ tiến để sang Nước"): không thẻ vàng S02, vẫn treo Nước rồi Đất', async () => {
   const { robots, m } = await setup()
   m.t = 0
-  grab(m, robots, 0, 'red', 0.5)
+  grab(m, robots, 0, 'red', 0.4)
   assert.equal(robots[0].climb.mode, 'hang')
   run(m, only(0, { M1: 255, M2: 255 }), 10)
   assert.equal(robots[0].climbLevel.level, 'water')

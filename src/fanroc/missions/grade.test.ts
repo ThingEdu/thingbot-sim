@@ -401,12 +401,12 @@ test('shouldGrade (luật V4): nhiệm vụ lập trình đang treo ở Nước 
 
 test('dọn Khu Chữa Cháy (nhiệm vụ 9) và trận đầu (nhiệm vụ 12) đọc tally', () => {
   const m9 = byN(9)
-  const dirty = { ...emptyTally(), fire: { o: 3, g: 34 } }
+  const dirty = { ...emptyTally(), fire: { o: 3, g: 29 } }
   assert.equal(grade(m9, record(m9, { tally: dirty })).done, false)
-  assert.equal(grade(m9, record(m9, { tally: { ...dirty, fire: { o: 3, g: 33 } }, trail: { distance: 3, turned: 0, time: 40 } })).stars, 3)
+  assert.equal(grade(m9, record(m9, { tally: { ...dirty, fire: { o: 3, g: 28 } }, trail: { distance: 3, turned: 0, time: 40 } })).stars, 3)
   const m12 = byN(12)
   const end = [{ t: 180, robot: null, text: 'Hết giờ — điểm trận 200' }]
-  const tally = { ...emptyTally(), fire: { o: 20, g: 0 } } // 100: giữa ⭐⭐ 90 và ⭐⭐⭐ 120 (đo lại 12/11, luật V4)
+  const tally = { ...emptyTally(), fire: { o: 20, g: 0 } } // 100: giữa ⭐⭐ 80 và ⭐⭐⭐ 105 (đo lại 12/11, thanh CAD lắp sân)
   assert.equal(scoreTally(tally).total, 100)
   assert.equal(grade(m12, record(m12, { tally })).done, false, 'chưa hết giờ')
   const r = grade(m12, record(m12, { tally, events: end }))
@@ -658,7 +658,7 @@ test('nhiệm vụ 2 có lời giải: M1 = M2 = 60, đợi 0,9 s, dừng ⇒ �
   assert.ok(g.stars >= 2, `${g.stars} sao: ${JSON.stringify(g.goals)}`)
 })
 
-test('nhiệm vụ 9 (R96): sân MISSION_SEED có 47 bóng xanh trong Khu Chữa Cháy; một lượt quét dọc rào đạt ⭐ (≤ 33)', async (t) => {
+test('nhiệm vụ 9 (R96, R157): sân MISSION_SEED có 40 bóng xanh trong Khu Chữa Cháy; một lượt quét dọc rào đạt ⭐ (≤ 28, đo 24)', async (t) => {
   const m = byN(9)
   const g = await GameSession.create({ mode: 'mission', seed: MISSION_SEED, seats: [{ cfg: m.robot, team: 'Em', driver: { kind: 'program', link: new RobotLink(() => {}) } }], balls: true, start: m.start })
   try {

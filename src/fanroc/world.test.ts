@@ -262,13 +262,42 @@ test('Thang Cứu Hỏa: tia dọc từ trên xuống dọc thanh Xanh trúng th
   assert.ok(hit && 1 - hit.timeOfImpact < 0.01, `lệch 5 cm vẫn trúng ở y = ${hit ? 1 - hit.timeOfImpact : '—'}`)
 })
 
+test('Thang Cứu Hỏa: ống dài LADDER.rodLen thò qua tâm cột a / b LADDER.overhang.a / .b (CAD lắp sân) — tia dọc trúng ống ngay ngoài cột, quá đầu ống thì không', async () => {
+  const { pointAt, ladderLen } = await import('./ladder.ts')
+  const { LADDER } = await import('./layout.ts')
+  const w = await FanrocWorld.create(1, { balls: false })
+  try {
+    const down = { x: 0, y: -1, z: 0 }
+    const y = (s: number) => {
+      const p = pointAt('red', s)
+      const hit = w.rapier.castRay(new RAPIER.Ray({ x: p.x, y: 1, z: p.z }, down), 2, true)
+      return hit ? 1 - hit.timeOfImpact : null
+    }
+    const L = ladderLen('red')
+    // Phía cột b ống thò 0,044, quá kẹp (bán kính 0,0175): trúng mặt trên ống. (Phía a ống chỉ thò 0,018, gần như ngang mép kẹp.)
+    for (const s of [L + LADDER.overhang.b - 0.004, L + 0.025]) {
+      const h = y(s)
+      assert.ok(h !== null && Math.abs(h - (LADDER.y + LADDER.rodR)) < 0.003, `s = ${s.toFixed(3)}: trúng ở ${h}`)
+    }
+    // Quá đầu ống 5 mm: không trúng ống (rơi xuống rào / sàn ngoài, dưới 0,3).
+    for (const s of [-LADDER.overhang.a - 0.005, L + LADDER.overhang.b + 0.005]) {
+      const h = y(s)
+      assert.ok(h === null || h < 0.31, `s = ${s.toFixed(3)}: quá đầu ống vẫn trúng ở ${h}`)
+    }
+  } finally {
+    w.rapier.free()
+  }
+})
+
 test('Thang Cứu Hỏa: cột hộp 20×20 cao 0,638 chắn tia ngang ở y = 0,3; kẹp Ø35 chắn tia ở y = 0,64', async () => {
   const { LADDERS, LADDER } = await import('./layout.ts')
   const w = await FanrocWorld.create(1, { balls: false })
   try {
     for (const { b } of Object.values(LADDERS)) {
-      // Đầu b (gần Hộp Phân Phối): tia từ tâm sân về phía cột, lệch 5 mm vào trong sân so với tâm cột.
-      const dz = 0.005
+      // Đầu b (gần Hộp Phân Phối, cột ngoài rào theo CAD lắp sân 12/11): tia từ tâm sân về phía cột, qua đúng tâm cột.
+      // (Tia lệch 5 mm qua mặt trụ kẹp ở chỗ mới bị Rapier báo trúng sớm ~4 mm — sai số của phép chiếu tia lên trụ, không
+      // phải vị trí kẹp; qua tâm thì chính xác.)
+      const dz = 0
       const dir = { x: Math.sign(b.x), y: 0, z: 0 }
       const hitBox = w.rapier.castRay(new RAPIER.Ray({ x: 0, y: 0.3, z: b.z + dz }, dir), 2, true)
       const wantBox = Math.abs(b.x) - LADDER.post / 2

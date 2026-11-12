@@ -17,7 +17,7 @@ import type { Goal, Mission } from './types.ts'
 
 /**
  * Hạt giống sân của mọi nhiệm vụ (R96): cố định để mỗi lần làm lại, bóng xả xuống đúng như lần trước (nhiệm vụ 9–11
- * có bóng) — ngưỡng ⭐ của nhiệm vụ 9 đo trên chính sân này: 47 bóng xanh trong Khu Chữa Cháy khi chạy trong Node (thanh xà/cột CAD mới 12/11 làm bóng xả lệch: trước đó 38), 40–41
+ * có bóng) — ngưỡng ⭐ của nhiệm vụ 9 đo trên chính sân này: 40 bóng xanh trong Khu Chữa Cháy khi chạy trong Node (cột thanh xà theo CAD lắp sân 12/11, ngoài rào; lúc cột còn trong sân: 47, trước nữa 38), 40–41
  * trên trình duyệt (bóng còn lăn vài khung trước khi em bấm ▶).
  */
 export const MISSION_SEED = 2
@@ -313,9 +313,10 @@ export const MISSIONS: Mission[] = [
       'Em dừng lại suy nghĩ bao lâu cũng được. Làm xong việc thì robot đứng yên 1 giây là được chấm, hoặc em bấm Chấm.',
     ],
     // R96: sân đầy 300 bóng, quét dọc rào hai khu (đặt robot thẳng vào từng làn, không tính lúc quay xe) mất 21 s lái
-    // mà mới bớt từ 47 còn 29 quả (trước CAD sân mới 12/11: 38 còn 24) (trình duyệt: 40 → 17…27); ba lượt (64 s) còn 13 — "không còn quả nào" trong 90 s là
-    // không làm được. ⭐ = còn ≤ 33: khoảng một lượt quét dọc rào.
-    goals: [{ type: 'fireClear', max: 33 }, { type: 'measure', what: 'distance', min: 1 }],
+    // mà mới bớt từ 40 còn 24 quả (cột thanh xà theo CAD lắp sân 12/11 ra ngoài rào, R157; lúc cột còn trong sân theo
+    // Hình 1: 47 còn 29, ngưỡng 33 — R146; trước nữa 38 còn 24) (trình duyệt: 40 → 17…27); ba lượt (64 s) còn 13 —
+    // "không còn quả nào" trong 90 s là không làm được. ⭐ = còn ≤ 28: khoảng một lượt quét dọc rào (biên +4).
+    goals: [{ type: 'fireClear', max: 28 }, { type: 'measure', what: 'distance', min: 1 }],
     stars: { two: [{ type: 'time', max: 60 }], three: [{ type: 'time', max: 40 }, { type: 'noMountain' }] },
     hints: [
       { when: 'fireClear', text: 'Khu Chữa Cháy còn nhiều bóng xanh quá — đi sát rào, đẩy cả hàng ra ngoài vạch nhé.' },
@@ -350,7 +351,8 @@ export const MISSIONS: Mission[] = [
     goal: 'Viết chương trình đưa robot từ ô xuất phát tới Thang Cứu Hỏa đỏ, móc lên thanh xà rồi trượt sang Khu vực Nước.',
     robot: MAKER, start: ROBOT1, balls: false, toolbox: TOOLBOX_CLIMB, starter: EMPTY, kind: 'program', maxTime: 60,
     path: [
-      { x: ROBOT1.x, z: ROBOT1.z }, { x: ROBOT1.x, z: 0.85 }, { x: LADDER_MID.x, z: 0.85 }, LADDER_MID,
+      // Thanh theo CAD lắp sân (12/11) lệch giữa ô vàng ~0,087 m về phía rào: đường gợi ý tới chỗ bám ngay dưới thanh.
+      { x: ROBOT1.x, z: ROBOT1.z }, { x: ROBOT1.x, z: 0.85 }, { x: LADDER_MID.x, z: 0.85 }, pointAt('red', LADDER.divider - 0.06),
       pointAt('red', LADDER.divider + 0.2),
     ],
     guide: [
@@ -363,7 +365,7 @@ export const MISSIONS: Mission[] = [
     goals: [{ type: 'climb', min: 'contact' }],
     stars: { two: [{ type: 'climb', min: 'ground' }], three: [{ type: 'climb', min: 'water' }] },
     hints: [
-      { when: 'climbContact', text: `Móc chưa chạm thanh xà — vào giữa ô vàng, quay mũi xe xuôi theo thanh, đặt ${HOOK} = 180° rồi tiến chậm.` },
+      { when: 'climbContact', text: `Móc chưa chạm thanh xà — vào ô vàng, đứng ngay dưới thanh xà (lệch về phía rào trái so với giữa ô), quay mũi xe xuôi theo thanh, đặt ${HOOK} = 180° rồi tiến chậm.` },
       { when: 'climbGround', text: `Móc đã chạm thanh! Giờ đặt ${HOOK} = 0° để hạ móc, robot sẽ treo lên thanh.` },
       { when: 'climbWater', text: 'Robot đã treo ở Khu vực Đất! Sau khi hạ móc, cho hai bánh chạy tiến lâu hơn để trượt sang Khu vực Nước.' },
     ],
@@ -382,10 +384,10 @@ export const MISSIONS: Mission[] = [
     ],
     goals: [{ type: 'matchEnd' }],
     // Cách đo của R141: trận 4 robot máy Mẫu Maker mức Dễ, ghế như trang (SEATS), seed 1–12 (trang tăng seed mỗi trận
-    // mới). Đo 12/11 (luật V4, agent leo xà của Task 5): 150 / 28 / 40 / 178 / 238 / 52 / 4 / 131 / 122 / 56 / 180 / 93,
-    // trung bình 106,0 (seed 1–6: 114,3) — lệch rất mạnh theo seed. ⭐⭐ ≈ 106 × 0,85 ⇒ 90, ⭐⭐⭐ ≈ 106 × 1,1 ⇒ 120: em
-    // thay một robot máy, nên 90 / 120 điểm nghĩa là em góp được bằng / hơn một robot máy.
-    stars: { two: [{ type: 'score', min: 90 }], three: [{ type: 'score', min: 120 }] },
+    // mới). Đo lại 12/11 sau thanh xà theo CAD lắp sân (R157): 59 / 107 / 114 / 128 / 81 / 131 / 76 / 83 / 60 / 86 / 120 /
+    // 88, trung bình 94,4 (trước, theo Hình 1: 106,0) — lệch rất mạnh theo seed. ⭐⭐ ≈ 94 × 0,85 ⇒ 80, ⭐⭐⭐ ≈ 94 × 1,1 ⇒
+    // 105: em thay một robot máy, nên 80 / 105 điểm nghĩa là em góp được bằng / hơn một robot máy.
+    stars: { two: [{ type: 'score', min: 80 }], three: [{ type: 'score', min: 105 }] },
     hints: [
       { when: 'matchEnd', text: 'Chơi tới hết giờ để được chấm nhé.' },
       { when: 'score', text: 'Trận được {d} điểm. Muốn nhiều sao hơn: chở bóng nhiều chuyến hơn và nhớ leo Thang Cứu Hỏa cuối trận.' },

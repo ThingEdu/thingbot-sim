@@ -251,18 +251,26 @@ export const AUTO_TIMES = {
   toMountain: 1.3, dump: 2, back: 0.6,
   /** Quay 90° tại chỗ (đế 2 bánh): tỉ lệ với bề ngang xe, giây cho mỗi mét bề ngang. */
   turnPerWidth: 2.75,
-  toWall: 2.4, offWall: 0.3, toLadder: 4.4, press: 1, settle: 0.25,
+  /**
+   * toLadder: xuôi rào tới hàng ô Thang. Thanh theo CAD lắp sân (12/11) sát rào hơn ~0,1 m so với Hình 1 nên đi sâu thêm
+   * (4,4 → 4,85 s) tới chỗ trục thanh cách rào trái đúng bằng chỗ xe lùi ra sau lần ép (z ≈ −0,55): tâm xe cách trục
+   * ≤ 0,03 m lúc hạ móc.
+   */
+  toWall: 2.4, offWall: 0.3, toLadder: 4.85, press: 1, settle: 0.25,
   /**
    * Quay phải 45° cho mũi xe xuôi theo thanh (từ đầu rào sang đầu Hộp Phân Phối), giây cho mỗi mét nhịp quay: bề
    * ngang với đế 2 bánh, bề ngang + bề dài với đế 4 bánh (cùng tốc độ bánh thì quay chậm hơn theo tỉ lệ đó). Lý thuyết
    * là nửa turnPerWidth; đo trên sân cần thêm chút vì xe tăng / giảm tốc quay (mọi mẫu lệch thanh trong ±3°).
    */
   align: 1.6,
-  /** Giơ móc rồi tiến chạm thanh (vẫn trong đoạn Mặt Đất); hạ móc là bám. */
-  hookUp: 0.5,
   /**
-   * Đang treo: tiến cho móc trượt dọc thanh qua vạch Đất / Nước (0,15 m/s × phần tốc độ bánh). Đo trên sân: mọi mẫu dừng
-   * quá vạch ≥ 0,2 m và còn cách kẹp đầu thanh phía Hộp Phân Phối ≥ 0,45 m.
+   * Giơ móc rồi tiến chạm thanh (vẫn trong đoạn Mặt Đất); hạ móc là bám. Đoạn Đất theo CAD lắp sân chỉ còn tới s ≈ 0,451
+   * nên chỉ nhích 0,2 s (trước 0,5): đo trên sân, 8 cấu hình hạ móc ở s 0,352…0,393 (cách vạch ≥ 0,058 m).
+   */
+  hookUp: 0.2,
+  /**
+   * Đang treo: tiến cho móc trượt dọc thanh qua vạch Đất / Nước (0,15 m/s × phần tốc độ bánh). Đo trên sân (thanh CAD lắp
+   * sân 12/11): 8 cấu hình dừng ở s 0,800…0,842, quá vạch 0,349…0,391 m, còn trong đoạn trượt trong sân (max ≥ 1,017).
    */
   slide: 6,
 }

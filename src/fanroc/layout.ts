@@ -35,18 +35,21 @@ export const ZONES: {
 }
 
 /**
- * Thang Cứu Hỏa: thanh xà tròn của mỗi liên minh, nằm trên rào, chạy từ `a` (đầu rào bên cạnh ô Bảo Vệ) tới `b` (đầu
- * Hộp Phân Phối). Đoạn từ `a` tới `divider` là Mặt Đất, phần còn lại là Nước.
- * Kích thước lấy từ CAD "Full sân Fanroc" (12/11/2026): thanh = Part 38 (ống Ø20 dày 2 mm, dài 1,400 m giữa tâm hai cột,
- * trục cao 0,6575 m), cột = Part 34 (nhôm hộp 20×20, cao 0,638 m), kẹp đầu cột = Part 37 (trụ Ø35 cao 65 mm, y 0,608…0,673).
- * CAD là các chi tiết rời nên vị trí đặt theo Hình 1 của luật: cột phía Hộp Phân Phối (∓0,202; −1,19) sát mép hộp, cột phía rào
- * (∓1,19; −0,198). Vạch Đất/Nước = chỗ thanh cắt mép Khu Chữa Cháy (z = −0,6088), tính từ hình học, không gõ tay
- * (số "khoảng 430 / 870 mm" trong luật chỉ để tham khảo).
- * y = trục thanh, rodR = bán kính ống, post = cạnh cột vuông, postH = cao cột, clampR/clampH/clampY0 = kẹp đầu cột.
+ * Thang Cứu Hỏa: thanh xà tròn của mỗi liên minh trên hai cột, `a` = tâm cột phía rào cạnh, `b` = tâm cột phía Hộp Phân
+ * Phối. Đoạn từ `a` tới `divider` là Mặt Đất, phần còn lại là Nước; s (chỗ bám) đo dọc thanh từ tâm cột `a`.
+ * Vị trí lắp lấy từ CAD một tệp "Lắp sân (1).step" (Onshape, 12/11/2026; ruling R157 thay R143 / Hình 1 của luật): toạ độ game
+ * x = x CAD, z = −y CAD, mặt sàn CAD z = 0,0082. Cột = Part 34 (nhôm hộp 20×20, sàn → 0,638) nằm NGOÀI mặt trong rào; kẹp đầu
+ * cột = Part 37 (trụ Ø35 cao 65 mm, y 0,608…0,673); thanh = Part 38 (ống Ø20, dài 1,400 m, đúng 45°, trục cao 0,6574) — tâm
+ * hai cột cách nhau 1,338 m nên ống thò qua kẹp tổng 0,062 — theo hai đầu ống CAD là 0,018 phía cột a, 0,044 phía cột b
+ * (`LADDER.overhang`; tóm tắt "≈ 0,031 mỗi đầu" là trung bình). Vạch Đất / Nước (băng keo Part 39/40 trên
+ * ống, x ≈ −0,899) = chỗ thanh cắt mép Khu Chữa Cháy (z = −0,6088, x ≈ −0,917), tính từ hình học, không gõ tay (≈ 0,451 từ
+ * tâm cột a; số "khoảng 430 / 870 mm" trong luật chỉ để tham khảo).
+ * y = trục thanh, rodLen = dài ống, rodR = bán kính ống, post = cạnh cột vuông, postH = cao cột, clampR/clampH/clampY0 = kẹp.
+ * Hai bên lệch nhau 0,1 mm đúng như CAD (không ép đối xứng).
  */
 export const LADDERS: Record<Alliance, { a: { x: number; z: number }; b: { x: number; z: number } }> = {
-  red: { a: { x: -1.19, z: -0.198 }, b: { x: -0.202, z: -1.19 } },
-  blue: { a: { x: 1.19, z: -0.198 }, b: { x: 0.202, z: -1.19 } },
+  red: { a: { x: -1.2356, z: -0.2897 }, b: { x: -0.2895, z: -1.2358 } },
+  blue: { a: { x: 1.2355, z: -0.2898 }, b: { x: 0.2894, z: -1.2358 } },
 }
 
 /** Khoảng cách dọc thanh (từ `a`) tới chỗ thanh cắt đường z = zEdge. */
@@ -55,9 +58,17 @@ export function barCrossing(l: { a: { x: number; z: number }; b: { x: number; z:
   return t * Math.hypot(l.b.x - l.a.x, l.b.z - l.a.z)
 }
 
+const ROD_LEN = 1.4
+const POSTS = Math.hypot(LADDERS.red.b.x - LADDERS.red.a.x, LADDERS.red.b.z - LADDERS.red.a.z)
+/** Đầu ống Đỏ phía cột a theo CAD (−1,2482; −0,2772): ống không nằm giữa hai cột (thò 0,018 ở a, 0,044 ở b). */
+const ROD_END_A = Math.hypot(-1.2482 - LADDERS.red.a.x, -0.2772 - LADDERS.red.a.z)
+
 export const LADDER = {
-  y: 0.6575,
+  y: 0.6574,
   divider: barCrossing(LADDERS.red, ZONES.fire[0].z1),
+  rodLen: ROD_LEN,
+  /** Phần ống thò qua tâm cột a / cột b (m, dọc thanh); cộng lại = dài ống − khoảng hai tâm cột. */
+  overhang: { a: ROD_END_A, b: ROD_LEN - POSTS - ROD_END_A },
   rodR: 0.01,
   post: 0.02,
   postH: 0.638,

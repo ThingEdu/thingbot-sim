@@ -26,6 +26,12 @@ Không ảnh hưởng game: Human Player, kiểm tra robot 2 đợt, mạch Chun
 
 ## Sân: thanh xà (kích thước theo CAD sân mới 12/11, vị trí theo Hình 1)
 
+> **Thay bởi CAD lắp sân 12/11 (R157, docs/fanroc/quyet-dinh.md):** tệp một khối "Lắp sân (1).step" có vị trí lắp thật.
+> Tâm cột Đỏ a (−1,2356; −0,2897), b (−0,2895; −1,2358); Xanh a (1,2355; −0,2898), b (0,2894; −1,2358) — cả bốn cột ngoài
+> mặt trong rào. Tâm hai cột cách nhau 1,338 m; ống 1,400 m thò 0,018 phía cột a, 0,044 phía cột b; trục cao 0,6574.
+> Vạch Đất / Nước vẫn là chỗ thanh cắt mép Khu Chữa Cháy, nay ≈ 0,451 m từ tâm cột a (x ≈ ∓0,917). Ô vàng lệch trục thanh
+> ≈ 0,087 m. Các số trong mục này bên dưới (đầu rào ∓1,19, vạch 0,580, lệch 9 mm) là bản theo Hình 1, không còn dùng.
+
 Hình 1 của luật: mỗi thanh nối từ cột ở đầu Hộp Phân Phối, chạy chéo qua Khu Chữa Cháy và ô vàng, tới cột trên rào cạnh
 của phía liên minh đó (thanh Đỏ bên x < 0, thanh Xanh bên x > 0, đối xứng).
 

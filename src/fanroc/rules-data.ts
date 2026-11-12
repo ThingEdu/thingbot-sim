@@ -128,7 +128,7 @@ const COLOR = {
 
 /**
  * Một thanh xà nhìn từ trên (theo LADDERS): hai cột tròn ở hai đầu, thanh xám, vạch Đất / Nước là khoanh màu liên minh
- * ở LADDER.divider tính từ đầu rào. `X`, `Y` đổi mét ra px của hình.
+ * ở LADDER.divider tính từ tâm cột phía rào. `X`, `Y` đổi mét ra px của hình.
  */
 function barTop(a: 'red' | 'blue', X: (x: number) => number, Y: (z: number) => number): string {
   const { a: p, b: q } = LADDERS[a]
@@ -259,7 +259,8 @@ function ladderArt(): string {
   b += `<rect x="${f1(xd + 6)}" y="${ground}" width="${f1(X(len) - xd - 40)}" height="8" fill="${COLOR.fire}" fill-opacity="0.7"/>`
   b += text((xd + X(len)) / 2, ground + 18, 'Khu Chữa Cháy', { size: 8.5 })
   for (const s of [0, len]) b += `<rect x="${f1(X(s) - 3)}" y="${f1(yBar)}" width="6" height="${f1(ground - yBar)}" fill="${COLOR.ink}"/>`
-  b += `<line x1="${f1(X(0))}" y1="${f1(yBar)}" x2="${f1(X(len))}" y2="${f1(yBar)}" stroke="${COLOR.metal}" stroke-width="5" stroke-linecap="round"/>`
+  // Ống thò qua tâm hai cột (CAD lắp sân 12/11): dài LADDER.rodLen.
+  b += `<line x1="${f1(X(-LADDER.overhang.a))}" y1="${f1(yBar)}" x2="${f1(X(len + LADDER.overhang.b))}" y2="${f1(yBar)}" stroke="${COLOR.metal}" stroke-width="5" stroke-linecap="round"/>`
   b += `<rect x="${f1(xd - 3)}" y="${f1(yBar - 5)}" width="6" height="10" fill="${COLOR.red}"/>`
   b += text((X(0) + xd) / 2, yBar - 16, `Đất ${pctText(POINTS.climb.ground, true)}`, { size: 9, weight: 800 })
   b += text((xd + X(len)) / 2, yBar - 16, `Nước ${pctText(POINTS.climb.water, true)}`, { size: 9, weight: 800 })
@@ -277,7 +278,7 @@ function ladderArt(): string {
   }
   b += robot(X(0.1), false, 'Chạm') + robot(X(0.34), true, 'Đất') + robot(X(0.85), true, 'Nước')
   const w = X(len) + 22
-  return svg(w, ground + 26, b, `Thang Cứu Hỏa nhìn ngang: thanh dài ${pctText(Math.round(len * 100))} m cao ${pctText(Math.round(LADDER.y * 100))} m; đoạn Đất trên ô vàng THANG, qua vạch là đoạn Nước`)
+  return svg(w, ground + 26, b, `Thang Cứu Hỏa nhìn ngang: thanh dài ${pctText(Math.round(LADDER.rodLen * 100))} m cao ${pctText(Math.round(LADDER.y * 100))} m; đoạn Đất trên ô vàng THANG, qua vạch là đoạn Nước`)
 }
 
 /** Ba mức phạt của trọng tài tự động. */

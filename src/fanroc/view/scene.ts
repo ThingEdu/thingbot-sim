@@ -262,7 +262,7 @@ const Y_UP = new THREE.Vector3(0, 1, 0)
 
 /**
  * Thang Cứu Hỏa (luật V4): mỗi liên minh một thanh xà Ø 20 mm cao LADDER.y trên hai cột hộp 20×20 có kẹp Ø35 (đúng collider của
- * world.ts), vạch Đất / Nước là khoanh băng keo màu liên minh ở `LADDER.divider` tính từ đầu rào.
+ * world.ts), vạch Đất / Nước là khoanh băng keo màu liên minh ở `LADDER.divider` tính từ tâm cột phía rào.
  */
 function buildLadders(): THREE.Group {
   const g = new THREE.Group()
@@ -271,8 +271,10 @@ function buildLadders(): THREE.Group {
     const dir = new THREE.Vector3(b.x - a.x, 0, b.z - a.z)
     const len = dir.length()
     dir.normalize()
-    const rod = new THREE.Mesh(new THREE.CylinderGeometry(LADDER.rodR, LADDER.rodR, len, 16), metal)
-    rod.position.set((a.x + b.x) / 2, LADDER.y, (a.z + b.z) / 2)
+    // Ống dài LADDER.rodLen, thò qua tâm cột a / b LADDER.overhang.a / .b (CAD lắp sân 12/11) — như collider của world.ts.
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(LADDER.rodR, LADDER.rodR, LADDER.rodLen, 16), metal)
+    const off = (LADDER.overhang.b - LADDER.overhang.a) / 2
+    rod.position.set((a.x + b.x) / 2 + dir.x * off, LADDER.y, (a.z + b.z) / 2 + dir.z * off)
     rod.quaternion.setFromUnitVectors(Y_UP, dir)
     g.add(rod)
     for (const p of [a, b]) {
