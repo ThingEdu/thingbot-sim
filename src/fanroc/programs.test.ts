@@ -286,7 +286,7 @@ for (const cfg of [...TYPES.map(defaultConfig), { type: 'maker', drive: 'mecanum
     const atMountain = at(trace, T.toMountain)
     assert.ok(atMountain.z < 0.95, `chưa tới núi: z = ${atMountain.z.toFixed(3)}`)
     const corners = robot.footprint()
-    assert.ok(corners.every((p) => inside(ZONES.safe.red, p)), `chưa vào hẳn Vùng Bảo Vệ: ${JSON.stringify(robot.pose)}`)
+    assert.ok(corners.every((p) => inside(ZONES.ladder.red, p)), `chưa vào hẳn Vùng Bảo Vệ: ${JSON.stringify(robot.pose)}`)
   })
 
 test('TeleOp Maker Nâng: L2 / R2 / L1 đưa cửa lồng S1 tới 0° / 120° / 180° (Rãnh 1 / 2 / 3)', () => {

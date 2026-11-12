@@ -80,7 +80,7 @@ test('ví dụ 2 của luật dựng trên sân thật = 299', async () => {
   m.setFlag(0)
   m.setFlag(1)
   // Hai Xe Ủi đỏ đỗ toàn phần cạnh nhau trong Vùng Bảo Vệ đỏ; robot xanh ở Khu Xuất Phát.
-  const s = ZONES.safe.red
+  const s = ZONES.ladder.red
   const c = mid(s)
   robots[0].setPose({ x: s.x0 + 0.095, z: c.z, yaw: 0 })
   robots[1].setPose({ x: s.x1 - 0.095, z: c.z, yaw: 0 })
@@ -106,7 +106,7 @@ test('bóng đè vạch Chữa Cháy (tâm cách mép 0.015 ngoài vùng) đư�
 
 test('đỗ một phần (≥ 1 góc trong) / toàn phần; robot.parked chỉ bật trong End Game', async () => {
   const { robots, m } = await setup()
-  const s = ZONES.safe.red
+  const s = ZONES.ladder.red
   const c = mid(s)
   robots[0].setPose({ x: s.x0 + 0.125, z: c.z, yaw: 0 }) // toàn phần
   robots[1].setPose({ x: s.x1 + 0.05, z: c.z, yaw: 0 }) // nửa thân trong ô
@@ -260,7 +260,7 @@ test('G15 không áp cho đồng đội cùng liên minh, kể cả hai robot đ
   run(m, all({}), 6)
   assert.equal(g15(m).length, 0)
   // Hai Xe Ủi đỏ đỗ toàn phần cạnh nhau (khe 0.005) trong End Game > 5 s.
-  const s = ZONES.safe.red
+  const s = ZONES.ladder.red
   const c = mid(s)
   robots[0].setPose({ x: s.x0 + 0.095, z: c.z, yaw: 0 })
   robots[1].setPose({ x: s.x1 - 0.095, z: c.z, yaw: 0 })
@@ -272,7 +272,7 @@ test('G15 không áp cho đồng đội cùng liên minh, kể cả hai robot đ
 })
 
 test('G15 không tính khi một robot có góc trong Vùng Bảo Vệ / Khu Tiếp Tế của mình', async () => {
-  for (const zone of [ZONES.safe.red, ZONES.load.red]) {
+  for (const zone of [ZONES.ladder.red, ZONES.load.red]) {
     const { robots, m } = await setup()
     m.t = 0
     // Robot đỏ chìa nửa thân ra khỏi mép phải ô của mình, robot xanh đứng sát bên phải nó (ngoài mọi ô xanh).

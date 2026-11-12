@@ -107,7 +107,7 @@ const BEFORE_A: Pose = { x: MOUNTAINS[0].x, z: 1.04, yaw: 0 }
 const ALONG: Pose = { x: -0.9, z: 0.95, yaw: deg(-90) }
 const ROBOT1 = START_POSES.red[0]
 const HOLE_A = holeCentres()[0]
-const SAFE = ZONES.safe.red
+const SAFE = ZONES.ladder.red
 
 // ---------- Điều kiện ⭐ hay dùng ----------
 const closedLoop = (stepsMin: number): { goals: Goal[]; stars: Mission['stars'] } => ({

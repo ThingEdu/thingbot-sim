@@ -27,12 +27,22 @@ export const ZONES: {
   fire: [Rect, Rect]
   start: Record<Alliance, Rect>
   load: Record<Alliance, Rect>
-  safe: Record<Alliance, Rect>
+  ladder: Record<Alliance, Rect>
 } = {
   fire: [rect(-1.1969, -0.6088, -1.1969, -0.6088), rect(0.6088, 1.1969, -1.1969, -0.6088)],
   start: { red: rect(-0.6993, 0.0007, 0.8969, 1.1969), blue: rect(0.0007, 0.7007, 0.8969, 1.1969) },
   load: { red: rect(-1.197, -0.822, 0.8218, 1.1969), blue: rect(0.822, 1.197, 0.8218, 1.1969) },
-  safe: { red: rect(-1.1877, -0.8127, -0.5888, -0.2138), blue: rect(0.8127, 1.1877, -0.5888, -0.2138) },
+  ladder: { red: rect(-1.1877, -0.8127, -0.5888, -0.2138), blue: rect(0.8127, 1.1877, -0.5888, -0.2138) },
+}
+
+/**
+ * Thang Cứu Hỏa: thanh xà tròn của mỗi liên minh, nằm trên rào, chạy từ `a` (đầu rào bên cạnh ô Bảo Vệ) tới `b` (đầu
+ * Hộp Phân Phối). Đoạn từ `a` tới `divider` là Mặt Đất, phần còn lại là Nước. y = tâm thanh, rodR/postR = bán kính thanh/trụ.
+ */
+export const LADDER = { y: 0.65, divider: 0.43, rodR: 0.0125, postR: 0.02 }
+export const LADDERS: Record<Alliance, { a: { x: number; z: number }; b: { x: number; z: number } }> = {
+  red: { a: { x: -1.2, z: -0.317 }, b: { x: -0.246, z: -1.2 } },
+  blue: { a: { x: 1.2, z: -0.317 }, b: { x: 0.246, z: -1.2 } },
 }
 
 /**

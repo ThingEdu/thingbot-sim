@@ -194,7 +194,7 @@ export function ruleChecks(cfg: RobotConfig, extendNow: number, armFrac = 0): { 
     { ok: servos <= 5, text: `Servo: ${servos} / 5` },
   ]
   if (cfg.type === 'ui') {
-    const safe = ZONES.safe.red.x1 - ZONES.safe.red.x0
+    const safe = ZONES.ladder.red.x1 - ZONES.ladder.red.x0
     out.push({ ok: 2 * w <= safe + 1e-9, text: `Hai Xe Ủi cạnh nhau: 2 × ${mm(w)} mm ≤ ${mm(safe)} mm (ô Vùng Bảo Vệ)` })
   }
   return out

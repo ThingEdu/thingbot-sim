@@ -63,7 +63,7 @@ test('ruleChecks Maker mecanum: 4 động cơ + 4 servo vẫn đạt', () => {
 })
 
 test('ruleChecks Xe Ủi: hai chiếc cạnh nhau vừa ô 375', () => {
-  const safeW = ZONES.safe.red.x1 - ZONES.safe.red.x0
+  const safeW = ZONES.ladder.red.x1 - ZONES.ladder.red.x0
   assert.ok(2 * ROBOTS.ui.size.w <= safeW)
   const r = ruleChecks({ type: 'ui', drive: 'diff2', actuator: 'tt' }, 0)
   assert.ok(r.some((c) => /2 × 180 mm/.test(c.text) && c.ok === true), JSON.stringify(r))

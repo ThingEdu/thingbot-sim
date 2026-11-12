@@ -43,11 +43,11 @@ test('scoreLine: phần đỗ hai liên minh cộng lại = result().score.park;
   const { w, robots, m } = await setup(4, false, [UI, MAKER, UI, MAKER])
   try {
     // Hai robot đỏ đỗ toàn phần cạnh nhau (thưởng liên minh), Robot 2 (xanh ô 0) nửa thân trong Vùng Bảo Vệ xanh.
-    const s = ZONES.safe.red
+    const s = ZONES.ladder.red
     const cz = (s.z0 + s.z1) / 2
     robots[0].setPose({ x: s.x0 + 0.095, z: cz, yaw: 0 })
     robots[2].setPose({ x: s.x1 - 0.095, z: cz, yaw: 0 })
-    const b = ZONES.safe.blue
+    const b = ZONES.ladder.blue
     robots[1].setPose({ x: b.x0 - 0.05, z: (b.z0 + b.z1) / 2, yaw: 0 })
     m.pens[3].minor = 2 // Ong Vàng: 2 lỗi nhẹ
     m.t = 1
@@ -132,14 +132,14 @@ test('ScoreTicker: tối đa SCORE_HZ lần/giây; báo nổi chỉ khi đang th
     assert.ok(first && first.pops.length === 0, 'lần đầu: có dòng, không báo nổi')
     assert.equal(tk.tick(1000 / SCORE_HZ - 1, m, robots), null, 'chưa tới hạn ⇒ null')
     // Đang xả bóng: điểm đổi (Robot 2 vào Vùng Bảo Vệ xanh) nhưng không báo nổi.
-    const b0 = ZONES.safe.blue
+    const b0 = ZONES.ladder.blue
     robots[1].setPose({ x: (b0.x0 + b0.x1) / 2, z: (b0.z0 + b0.z1) / 2, yaw: 0 })
     const rel = tk.tick(1000 / SCORE_HZ, m, robots)
     assert.ok(rel && rel.line.phase === 'XẢ BÓNG' && rel.line.blue.park === 10 && rel.pops.length === 0, 'xả bóng không báo nổi')
     m.t = 0
     run(m, 4, 0.1)
     // Lần đầu sau xả bóng chỉ đặt mốc, dù điểm đã đổi (Robot 1 vào Vùng Bảo Vệ đỏ ngay lúc sang thi đấu).
-    const s = ZONES.safe.red
+    const s = ZONES.ladder.red
     robots[0].setPose({ x: s.x0 + 0.125, z: (s.z0 + s.z1) / 2, yaw: 0 })
     const base = tk.tick(2000, m, robots)
     assert.ok(base && base.line.phase === 'ĐIỀU KHIỂN' && base.line.red.park === 10 && base.pops.length === 0, 'sang thi đấu: chỉ đặt mốc')

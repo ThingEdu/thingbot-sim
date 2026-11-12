@@ -3,8 +3,9 @@ import assert from 'node:assert/strict'
 import mesh from './assets/mountain-mesh.json' with { type: 'json' }
 import {
   BALL_R, DISPENSER, FIELD, HOLE, MOUNTAIN_FOOT, MOUNTAINS, PEAK_Y, START_POSES, TIERS, TIER_GROOVE, WALL_H, ZONES,
-  fromMountain, holeCentres, mountainAt, toMountain, type Rect,
+  LADDER, LADDERS, fromMountain, holeCentres, mountainAt, toMountain, type Rect,
 } from './layout.ts'
+import { ladderLen, pointAt, project } from './ladder.ts'
 
 const w = (r: Rect) => r.x1 - r.x0
 const d = (r: Rect) => r.z1 - r.z0
@@ -29,16 +30,16 @@ test('Khu Chữa Cháy vuông 0.588 (CAD), hai khu ở hai góc phía Hộp Phâ
 
 test('Bảo Vệ và Tiếp Tế 0.375 x 0.375, Xuất Phát 0.7 x 0.3; đỏ bên x < 0', () => {
   for (const a of ['red', 'blue'] as const) {
-    near(w(ZONES.safe[a]), 0.375, 1e-3); near(d(ZONES.safe[a]), 0.375, 1e-3)
+    near(w(ZONES.ladder[a]), 0.375, 1e-3); near(d(ZONES.ladder[a]), 0.375, 1e-3)
     near(w(ZONES.load[a]), 0.375, 1e-3); near(d(ZONES.load[a]), 0.375, 1e-3)
     near(w(ZONES.start[a]), 0.7, 1e-3); near(d(ZONES.start[a]), 0.3, 1e-3)
   }
-  for (const z of [ZONES.safe, ZONES.load]) assert.ok(z.red.x1 < 0 && z.blue.x0 > 0)
+  for (const z of [ZONES.ladder, ZONES.load]) assert.ok(z.red.x1 < 0 && z.blue.x0 > 0)
   assert.ok(ZONES.start.red.x0 < 0 && ZONES.start.blue.x1 > 0)
 })
 
 test('mọi Rect có x0<x1 và z0<z1, nằm trong sân', () => {
-  const all = [...ZONES.fire, ...Object.values(ZONES.start), ...Object.values(ZONES.load), ...Object.values(ZONES.safe)]
+  const all = [...ZONES.fire, ...Object.values(ZONES.start), ...Object.values(ZONES.load), ...Object.values(ZONES.ladder)]
   for (const r of all) {
     assert.ok(r.x0 < r.x1 && r.z0 < r.z1)
     assert.ok(r.x0 >= -FIELD / 2 - 1e-9 && r.x1 <= FIELD / 2 + 1e-9 && r.z0 >= -FIELD / 2 - 1e-9 && r.z1 <= FIELD / 2 + 1e-9)
@@ -117,4 +118,34 @@ test('holeCentres(): một lỗ cờ mỗi núi (A..D), lệch đúng HOLE (lx, 
     near(p.lx, HOLE.lx, 1e-12)
     near(p.lz, HOLE.lz, 1e-12)
   })
+})
+
+test('thanh xà Thang Cứu Hỏa: dài 1,300 m, vạch chia cách đầu rào 0,43 m ngay mép Khu Chữa Cháy', () => {
+  near(ladderLen('red'), 1.3, 0.002)
+  // điểm thanh cắt z = -0.6088 (mép Khu Chữa Cháy): cách a 0,43 m, nằm trong Khu Chữa Cháy
+  const a = LADDERS.red.a
+  const b = LADDERS.red.b
+  const t = (-0.6088 - a.z) / (b.z - a.z)
+  const x = a.x + t * (b.x - a.x)
+  near(Math.hypot(x - a.x, -0.6088 - a.z), 0.43, 0.005)
+  assert.ok(x >= ZONES.fire[0].x0 && x <= ZONES.fire[0].x1)
+  near(LADDER.divider, 0.43, 0.005)
+})
+
+test('hai thanh xà đối xứng qua x = 0', () => {
+  near(LADDERS.blue.a.x, -LADDERS.red.a.x); near(LADDERS.blue.a.z, LADDERS.red.a.z)
+  near(LADDERS.blue.b.x, -LADDERS.red.b.x); near(LADDERS.blue.b.z, LADDERS.red.b.z)
+  near(ladderLen('blue'), ladderLen('red'), 1e-9)
+  const p = pointAt('red', 0.5)
+  const q = pointAt('blue', 0.5)
+  near(q.x, -p.x); near(q.z, p.z)
+})
+
+test('thanh xà đi phía trên ô Bảo Vệ (tâm ô cách thanh < 0,19 m)', () => {
+  for (const a of ['red', 'blue'] as const) {
+    const z = ZONES.ladder[a]
+    near(w(z), 0.375, 1e-3)
+    const pr = project(a, (z.x0 + z.x1) / 2, (z.z0 + z.z1) / 2)
+    assert.ok(pr.d < 0.19, `d = ${pr.d}`)
+  }
 })

@@ -127,7 +127,7 @@ function fieldArt(): string {
   let b = `<rect x="${OX}" y="${OY}" width="${W}" height="${W}" fill="${COLOR.floor}" stroke="${COLOR.wall}" stroke-width="3"/>`
   for (const z of ZONES.fire) b += rect(z, COLOR.fire, 0.45)
   for (const a of ['red', 'blue'] as const) {
-    b += rect(ZONES.start[a], COLOR[a], 0.18) + rect(ZONES.load[a], COLOR[a], 0.35) + rect(ZONES.safe[a], COLOR[a], 0.6)
+    b += rect(ZONES.start[a], COLOR[a], 0.18) + rect(ZONES.load[a], COLOR[a], 0.35) + rect(ZONES.ladder[a], COLOR[a], 0.6)
   }
   MOUNTAINS.forEach((m, i) => {
     const hx = MOUNTAIN_FOOT.hx * S
@@ -145,7 +145,7 @@ function fieldArt(): string {
     b += text(c.x, c.y - 1, 'Khu', { size: 7.5 }) + text(c.x, c.y + 8, 'Chữa Cháy', { size: 7.5 })
   }
   for (const a of ['red', 'blue'] as const) {
-    const s = mid(ZONES.safe[a])
+    const s = mid(ZONES.ladder[a])
     b += text(s.x, s.y - 1, 'Vùng', { size: 7, fill: '#fff' }) + text(s.x, s.y + 7, 'Bảo Vệ', { size: 7, fill: '#fff' })
     const l = mid(ZONES.load[a])
     b += text(l.x, l.y - 1, 'Khu', { size: 7 }) + text(l.x, l.y + 7, 'Tiếp Tế', { size: 7 })

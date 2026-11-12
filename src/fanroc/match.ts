@@ -58,11 +58,11 @@ const inRect = (r: Rect, p: Vec2) => p.x >= r.x0 && p.x <= r.x1 && p.z >= r.z0 &
 
 /** Đang đỗ hoặc đang được nạp bóng: có góc footprint trong Vùng Bảo Vệ / Khu Tiếp Tế của liên minh mình. */
 const inOwnZone = (r: RobotBody, fp: Vec2[]) =>
-  fp.some((p) => inRect(ZONES.safe[r.alliance], p) || inRect(ZONES.load[r.alliance], p))
+  fp.some((p) => inRect(ZONES.ladder[r.alliance], p) || inRect(ZONES.load[r.alliance], p))
 
 /** Đỗ theo footprint ∩ Vùng Bảo Vệ của liên minh mình: mọi góc trong = full, ≥ 1 góc = partial. */
 function parkState(r: RobotBody): Park {
-  const zone = ZONES.safe[r.alliance]
+  const zone = ZONES.ladder[r.alliance]
   const n = r.footprint().filter((p) => inRect(zone, p)).length
   return n === 4 ? 'full' : n > 0 ? 'partial' : null
 }

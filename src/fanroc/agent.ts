@@ -382,7 +382,7 @@ type Cmd = { fwd: number; turn: number; intake: boolean; lift: -1 | 0 | 1; s1: b
 /** Ô đỗ trong Vùng Bảo Vệ: người tới trước lấy chỗ sâu (đỗ toàn phần), người sau đỗ một phần ngay phía trước. */
 const PARK_SPOTS = (a: 'red' | 'blue'): Vec2[] => {
   const s = a === 'red' ? -1 : 1
-  const z = ZONES.safe[a]
+  const z = ZONES.ladder[a]
   const cx = s * Math.abs((z.x0 + z.x1) / 2)
   return [{ x: cx, z: z.z0 + 0.17 }, { x: cx, z: z.z1 + 0.12 }]
 }
@@ -765,7 +765,7 @@ export class Agent {
       const goal = b.color === 'g' ? start : ZONES.fire[q.x < 0 ? 0 : 1]
       const g = rectCentre(goal)
       if (b.color === 'o' && greens.some((p) => segDist(p, q, g) < r.def.size.w / 2 + 0.05)) return
-      if (inRect(ZONES.safe.red, q) || inRect(ZONES.safe.blue, q)) return
+      if (inRect(ZONES.ladder.red, q) || inRect(ZONES.ladder.blue, q)) return
       if (inRect(ZONES.load.red, q, 0.1) || inRect(ZONES.load.blue, q, 0.1)) return
       const behind = this.herdBehind(q, g)
       if (mountainClearance(q.x, q.z) < 0.15 || wallClearance(q.x, q.z) < 0.15) return
@@ -796,7 +796,7 @@ export class Agent {
       const inFire = ZONES.fire.some((z) => inRect(z, q))
       if (b.color === 'o' && inFire) return
       if (mountainClearance(q.x, q.z) < BALL_CLEAR_MTN || wallClearance(q.x, q.z) < BALL_CLEAR_WALL) return
-      if (inRect(ZONES.safe.red, q) || inRect(ZONES.safe.blue, q)) return
+      if (inRect(ZONES.ladder.red, q) || inRect(ZONES.ladder.blue, q)) return
       if (late && inRect(ZONES.load[r.alliance], q, ZONE_PAD + 0.1)) return
       // Bóng phía sau robot khác (≤ 0.3 m) thì bỏ.
       if (view.robots.some((o) => o !== r && dist(o.pose, q) < 0.3)) return

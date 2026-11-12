@@ -136,8 +136,8 @@ function fieldTexture(): THREE.CanvasTexture {
   }
   for (const a of ['red', 'blue'] as const) {
     const color = COLORS[a]
-    tape(ZONES.safe[a], color, 0.03)
-    label('BẢO VỆ', mid(ZONES.safe[a]).x, mid(ZONES.safe[a]).z, color, 36)
+    tape(ZONES.ladder[a], color, 0.03)
+    label('BẢO VỆ', mid(ZONES.ladder[a]).x, mid(ZONES.ladder[a]).z, color, 36)
     tape(ZONES.load[a], COLORS.tape, 0.04)
     label('TIẾP TẾ', mid(ZONES.load[a]).x, ZONES.load[a].z0 + 0.06, COLORS.tape, 34)
     tape(ZONES.start[a], color, 0.03)
