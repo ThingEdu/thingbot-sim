@@ -203,16 +203,16 @@ test('leo núi P12 hai lần ⇒ lần đầu cảnh cáo, lần sau 1 lỗi', a
 })
 
 test('vươn ra ngoài rào S02 ⇒ thẻ vàng một lần mỗi đợt', async () => {
-  const { w, robots, m } = await setup([CO, MAKER, MAKER, MAKER])
+  const { w, robots, m } = await setup()
   m.t = 0
-  // Xe Cắm Cờ sát rào phía xa, mũi hướng −z (yaw 0); S1 vươn tay cờ 140 mm ra mũi, ra ngoài rào.
+  // Maker sát rào phía xa, mũi hướng −z (yaw 0); M4 đẩy thanh răng ra mũi, ra ngoài rào.
   robots[0].setPose({ x: -0.6, z: -FIELD / 2 + 0.16, yaw: 0 })
-  run(m, only(0, { S1: 180 }), 2)
+  run(m, only(0, { M4: 100 }), 2)
   assert.equal(m.pens[0].yellow, 1)
-  run(m, only(0, { S1: 180 }), 2)
+  run(m, only(0, { M4: 100 }), 2)
   assert.equal(m.pens[0].yellow, 1, 'cùng một đợt chỉ một thẻ')
-  run(m, only(0, { S1: 0 }), 4) // thu tay rồi ở trong rào đủ lâu để sang đợt mới
-  run(m, only(0, { S1: 180 }), 2)
+  run(m, only(0, { M4: -100 }), 4) // thu hết (0,2 m ở 0,08 m/s = 2,5 s) rồi ở trong rào đủ lâu để sang đợt mới
+  run(m, only(0, { M4: 100 }), 2)
   assert.equal(m.pens[0].yellow, 2)
   assert.equal(m.events.filter((e) => e.text.includes('S02')).length, 2)
   // 5 bóng cam trong Chữa Cháy = 25: đội 1 bị 2 thẻ vàng còn 5, các đội khác giữ 25.
@@ -287,10 +287,10 @@ test('G15 không tính khi một robot có góc trong Vùng Bảo Vệ / Khu Ti�
 })
 
 test('luyện tập: không hết giờ, không phạt (sự kiện ghi "luyện tập")', async () => {
-  const { robots, m } = await setup([CO, MAKER, MAKER, MAKER], true)
+  const { robots, m } = await setup(undefined, true)
   m.t = 0
   robots[0].setPose({ x: -0.6, z: -FIELD / 2 + 0.16, yaw: 0 })
-  run(m, only(0, { S1: 180 }), 2)
+  run(m, only(0, { M4: 100 }), 2)
   assert.equal(m.pens[0].yellow, 0)
   assert.ok(m.events.some((e) => e.text.includes('S02') && e.text.includes('luyện tập')))
   m.t = 179.9
@@ -372,4 +372,16 @@ test('số tên đội phải bằng số robot', async () => {
   const w = await FanrocWorld.create(1)
   const robots = [new RobotBody(w, MAKER, 'red', 0), new RobotBody(w, MAKER, 'red', 1)]
   assert.throws(() => new Match(w, robots, ['Đội 1'], { seed: 1 }), /tên đội/)
+})
+
+test('S02 do thanh răng lùi ra đuôi (Maker Nâng sát rào phía xa, đuôi hướng rào) và do tay S1 của Xe Cắm Cờ', async () => {
+  const LIFT: RobotConfig = { type: 'makerLift', drive: 'diff2', actuator: 'tt' }
+  const { robots, m } = await setup([LIFT, CO, MAKER, MAKER])
+  m.t = 0
+  // yaw π: mũi hướng +z, đuôi về rào phía xa (−z).
+  robots[0].setPose({ x: -0.6, z: -FIELD / 2 + 0.16, yaw: Math.PI })
+  robots[1].setPose({ x: 0.3, z: -FIELD / 2 + 0.16, yaw: 0 })
+  run(m, [{ ...NEUTRAL, M4: 100 }, { ...NEUTRAL, S1: 180 }, { ...NEUTRAL }, { ...NEUTRAL }], 2)
+  assert.equal(m.pens[0].yellow, 1, 'thanh răng ra sau đuôi')
+  assert.equal(m.pens[1].yellow, 1, 'tay cờ vươn ra mũi')
 })

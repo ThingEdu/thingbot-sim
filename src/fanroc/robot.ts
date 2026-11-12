@@ -10,7 +10,7 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import type { FanrocWorld } from './world.ts'
 import { HOLE, PEAK_Y, START_POSES, type Alliance, type Pose } from './layout.ts'
 import { servo360, type PortValues } from './ports.ts'
-import { chuteExit, LIFT_AXIS, ROBOTS, portMap, type PortMap, type RobotConfig, type RobotDef } from './robots.ts'
+import { chuteExit, LIFT_AXIS, rackExtent, rackOverhang, ROBOTS, portMap, type PortMap, type RobotConfig, type RobotDef } from './robots.ts'
 import { barYaw, climbOf, HOOK, pointAt, stepClimb, type Climb, type ClimbState } from './ladder.ts'
 
 export type Vec2 = { x: number; z: number }
@@ -153,6 +153,11 @@ export class RobotBody {
     return LIFT_AXIS[this.def.type] === 'forward' ? this.extend : 0
   }
 
+  /** Phần thanh răng M4 (họ Maker) nhô khỏi mép khung, trước hoặc sau theo `rack.forward`, m. */
+  private get rackOver(): number {
+    return rackOverhang(this.def, this.extend)
+  }
+
   /** Phần tay kẹp cờ đang vươn ra tới trước, m. */
   private get armReach(): number {
     return this.armFrac * (this.def.arm?.reach ?? 0)
@@ -160,12 +165,19 @@ export class RobotBody {
 
   /** Phần nhô ra trước mũi xe (vươn + tay kẹp, hoặc cửa lồng nâng bằng servo vượt mũi khung), m. */
   get forwardExtension(): number {
-    return this.forwardExtend + this.armReach + (this.def.chuteBehind ? 0 : Math.max(0, chuteExit(this.def, this.armFrac)?.reach ?? 0))
+    const rack = this.def.rack?.forward ? this.rackOver : 0
+    return this.forwardExtend + rack + this.armReach + (this.def.chuteBehind ? 0 : Math.max(0, chuteExit(this.def, this.armFrac)?.reach ?? 0))
   }
 
-  /** Tổng phần mở rộng ra khỏi kích thước xuất phát, m — đưa vào ruleChecks. */
+  /** Phần nhô ra sau đuôi xe (thanh răng lùi ra sau của Maker Nâng / Hút / Pro), m. */
+  get backExtension(): number {
+    return this.def.rack && !this.def.rack.forward ? this.rackOver : 0
+  }
+
+  /** Tổng phần mở rộng ra khỏi kích thước xuất phát (trước + sau, trừ phần đầu kia thanh răng thụt vào), m — đưa vào ruleChecks. */
   get extension(): number {
-    return this.forwardExtension
+    // Phần thanh răng nhô ra (đã tính ở trước hoặc sau) thay bằng mức mở rộng theo luật của thanh răng.
+    return this.forwardExtension + this.backExtension - this.rackOver + rackExtent(this.def, this.extend)
   }
 
   /** Điểm cách mũi xe thêm `ahead` theo phương ngang và cao `y` so với sàn. */
@@ -204,7 +216,7 @@ export class RobotBody {
     const t = this.body.translation()
     const { f, r } = this.axes()
     const front = this.def.size.l / 2 + this.forwardExtension
-    const back = -this.def.size.l / 2
+    const back = -this.def.size.l / 2 - this.backExtension
     const half = this.def.size.w / 2
     const at = (a: number, b: number): Vec2 => ({ x: t.x + f.x * a + r.x * b, z: t.z + f.z * a + r.z * b })
     return [at(front, -half), at(front, half), at(back, half), at(back, -half)]

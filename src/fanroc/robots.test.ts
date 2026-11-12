@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { chuteExit, portMap, ROBOTS, ruleChecks } from './robots.ts'
+import { chuteExit, portMap, rackExtent, rackOverhang, ROBOTS, ruleChecks } from './robots.ts'
 import { ZONES } from './layout.ts'
 
 test('portMap Maker diff2 + TT: L=M1, R=M2, nâng=M4, không hút (Human Player nạp bóng)', () => {
@@ -157,4 +157,17 @@ test('Luật V4: mọi mẫu × mọi đế × cơ cấu đều ≤ 5 servo kể
   assert.ok(ruleChecks({ type: 'co', drive: 'diff2', actuator: 'tt' }, 0).some((c) => c.text === 'Servo: 4 / 5'))
   assert.ok(ruleChecks({ type: 'co', drive: 'omni', actuator: 'tt' }, 0).some((c) => c.text === 'Servo: 5 / 5'))
   assert.ok(ruleChecks({ type: 'ui', drive: 'diff2', actuator: 'tt' }, 0).some((c) => c.text === 'Servo: 2 / 5'))
+})
+
+test('Thanh răng M4 họ Maker (không còn giá cờ): lúc thu không nhô; đẩy hết nhô 200 mm, mở rộng theo luật 161 mm (≤ 500 mm); robot khác 0', () => {
+  for (const t of ['maker', 'makerLift', 'makerIntake', 'makerPro'] as const) {
+    const def = ROBOTS[t]
+    assert.equal(rackOverhang(def, 0), 0, t)
+    assert.ok(Math.abs(rackOverhang(def, def.maxExtend) - 0.2) < 1e-9, t)
+    assert.ok(Math.abs(rackExtent(def, def.maxExtend) - 0.161) < 1e-9, t)
+    assert.ok(Math.max(def.size.w, def.size.l) + rackExtent(def, def.maxExtend) <= 0.5 + 1e-9, t)
+  }
+  assert.equal(ROBOTS.maker.rack!.forward, true)
+  assert.equal(ROBOTS.makerLift.rack!.forward, false)
+  for (const t of ['ui', 'co', 'sort'] as const) assert.equal(rackOverhang(ROBOTS[t], 0.08), 0, t)
 })

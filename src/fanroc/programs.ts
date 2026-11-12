@@ -206,8 +206,8 @@ export function teleopButtons(cfg: RobotConfig): Partial<Record<Ps2Button, strin
   if (ports.lift) {
     const what = def.mech.M4!.toLowerCase()
     // Họ Maker: thanh răng trượt ngang trên nóc, không lên xuống — Mẫu Maker (vẽ quay đầu) đẩy ra mũi, mẫu cải tiến lùi ra đuôi.
-    const back = def.cad === 'maker'
-    const toward = cfg.type === 'maker' ? 'đẩy ra mũi' : 'lùi ra đuôi'
+    const back = !!def.rack
+    const toward = def.rack?.forward ? 'đẩy ra mũi' : 'lùi ra đuôi'
     out.TRIANGLE = back ? `Giữ: ${what} ${toward}` : `Giữ: ${what} lên`
     out.CROSS = back ? `Giữ: ${what} thu về` : `Giữ: ${what} xuống`
   }

@@ -53,6 +53,12 @@ export interface RobotDef {
    * (S1 = 0°) tới đây theo S1 / 180 — với tới Rãnh 2–3. Phần vượt mũi khung tính vào mức mở rộng.
    */
   chuteLift?: { reach: number; y: number }
+  /**
+   * Thanh răng M4 trượt ngang trên nóc (họ Maker, CAD "Bộ thingbot mới"; luật V4 không còn giá cờ trên thanh): `end` = đầu
+   * thanh cách tâm xe lúc thu hết, `front` = phần đầu kia nhô khỏi mép khung lúc thu (đẩy thanh thì đầu đó ngắn lại tối đa
+   * chừng này), `forward` = thanh đẩy ra mũi (Mẫu Maker vẽ quay đầu, anh Tuấn chốt 10/11) thay vì lùi ra đuôi.
+   */
+  rack?: { end: number; front: number; forward: boolean }
   /** Dựng hình từ CAD Mẫu Maker (thân, lồng ống, thanh răng, bánh) và các phần cải tiến của nó. */
   cad?: 'maker'
 }
@@ -71,6 +77,8 @@ const MAKER: RobotDef = {
   // Thanh răng 300 mm, bánh răng giữa xe: lùi được ~200 mm (CAD) — đúng trần mở rộng 500 mm của luật.
   release: { y: 0.2, reach: 0.05 }, maxExtend: 0.2,
   arm: { reach: 0, up: 0.06 },
+  // Thanh răng: lúc thu đầu thanh ngang mép khung (CAD 150 mm), đầu kia nhô 39 mm; đẩy hết thì nhô thêm 200 mm.
+  rack: { end: 0.15, front: 0.039, forward: true },
   // Vòng cửa ra của lồng (CAD: tâm 68 mm trước tâm khung, cao 93 mm); bóng qua vòng rơi ra ở ~100 mm trước tâm.
   chute: { reach: -0.05, y: 0.093 },
   chuteBehind: true,
@@ -86,19 +94,19 @@ export const ROBOTS: Record<RobotType, RobotDef> = {
   maker: MAKER,
   // Ba mẫu cải tiến chỉ dùng linh kiện có trong CAD "Bộ thingbot mới" (servo MG996R, động cơ TT, bánh D65, thanh răng).
   makerLift: {
-    ...MAKER, chuteBehind: false, type: 'makerLift', name: 'Maker Nâng',
+    ...MAKER, chuteBehind: false, rack: { ...MAKER.rack!, forward: false }, type: 'makerLift', name: 'Maker Nâng',
     servos: { S1: 'Nâng cửa lồng (MG996R)', S2: 'Móc leo xà', S3: 'Cửa xả' },
     arm: undefined,
     chuteLift: CHUTE_LIFT,
   },
   makerIntake: {
-    ...MAKER, chuteBehind: false, type: 'makerIntake', name: 'Maker Hút',
+    ...MAKER, chuteBehind: false, rack: { ...MAKER.rack!, forward: false }, type: 'makerIntake', name: 'Maker Hút',
     size: { ...MAKER.size, h: TALL_H },
     mech: { M3: 'Con lăn hút', M4: 'Thanh trượt răng' },
     storage: 8,
   },
   makerPro: {
-    ...MAKER, chuteBehind: false, type: 'makerPro', name: 'Maker Pro',
+    ...MAKER, chuteBehind: false, rack: { ...MAKER.rack!, forward: false }, type: 'makerPro', name: 'Maker Pro',
     size: { ...MAKER.size, h: TALL_H },
     drives: ['omni', 'mecanum', 'diff2'],
     mech: { M3: 'Con lăn hút', M4: 'Thanh trượt răng' },
@@ -224,4 +232,17 @@ export function localGripPoint(def: RobotDef, extend: number, armFrac: number): 
   const arm = armFrac * (def.arm?.reach ?? 0)
   const y = def.release.y + up + armFrac * (def.arm?.up ?? 0)
   return { x: 0, y, z: def.size.l / 2 + def.release.reach + (axis === 'forward' ? extend : 0) + arm }
+}
+
+/** Phần thanh răng M4 nhô khỏi mép khung (ra trước mũi với `rack.forward`, còn lại ra sau đuôi), m; robot không có thanh 0. */
+export function rackOverhang(def: RobotDef, extend: number): number {
+  return def.rack ? Math.max(0, def.rack.end + extend - def.size.l / 2) : 0
+}
+
+/**
+ * Mức mở rộng một chiều theo luật của thanh răng: phần nhô ra trừ phần đầu kia ngắn lại (thanh trượt thì đầu bên kia
+ * cũng thụt vào), m; robot không có thanh 0.
+ */
+export function rackExtent(def: RobotDef, extend: number): number {
+  return Math.max(0, rackOverhang(def, extend) - Math.min(extend, def.rack?.front ?? 0))
 }

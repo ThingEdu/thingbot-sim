@@ -5,7 +5,7 @@ import { FanrocWorld, PHYSICS_DT } from './world.ts'
 import { RobotBody, V_MAX } from './robot.ts'
 import { NEUTRAL, type PortValues } from './ports.ts'
 import { BALL_R, HOLE, PEAK_Y } from './layout.ts'
-import { localGripPoint, ROBOTS, type RobotConfig } from './robots.ts'
+import { localGripPoint, portMap, ROBOTS, ruleChecks, type RobotConfig } from './robots.ts'
 
 const MAKER: RobotConfig = { type: 'maker', drive: 'diff2', actuator: 'tt' }
 
@@ -105,15 +105,38 @@ test('Xe Ủi không có cửa xả S3 (R33): lệnh S3 = 150 không xả bóng 
   assert.equal(w.balls[0].st, 'held')
 })
 
-test('Nâng/vươn M4 = 100: extend tăng 0.08 m/s, kẹp ở maxExtend; thanh răng họ Maker không mang cờ (V4) nên không tính mở rộng', async () => {
+test('Nâng/vươn M4 = 100: extend tăng 0.08 m/s, kẹp ở maxExtend, footprint dài thêm (Mẫu Maker: thanh răng ra mũi)', async () => {
   const { w, r } = await corridor()
   drive(w, r, { M4: 100 }, 1)
   assert.ok(Math.abs(r.extend - 0.08) < 0.005, `extend ${r.extend}`)
   drive(w, r, { M4: 100 }, 2)
   assert.equal(r.extend, ROBOTS.maker.maxExtend)
-  assert.equal(r.forwardExtension, 0)
+  const zs = r.footprint().map((c) => c.z)
+  const len = Math.max(...zs) - Math.min(...zs)
+  assert.ok(Math.abs(len - (ROBOTS.maker.size.l + ROBOTS.maker.maxExtend)) < 0.005, `dài ${len}`)
+  assert.ok(r.forwardExtension > 0.12 && r.backExtension === 0, `trước ${r.forwardExtension} / sau ${r.backExtension}`)
+  // Luật V4: thanh răng không còn giá cờ nhưng vẫn là cơ cấu thật — tính vào mở rộng (HUD / ruleChecks).
+  const ext = r.extension
+  assert.ok(Math.abs(ext - (0.2 - 0.039)) < 1e-6, `mở rộng theo luật ${ext}`)
+  assert.ok(ruleChecks(MAKER, ext).some((c) => c.text === 'Mở rộng một chiều: 461 mm / 500 mm'))
   drive(w, r, { M4: -100 }, 3)
   assert.equal(r.extend, 0)
+  assert.equal(r.extension, 0)
+})
+
+test('Maker Nâng / Hút / Pro: thanh răng M4 lùi ra sau đuôi — footprint vươn ra sau thân, mở rộng > 0', async () => {
+  for (const type of ['makerLift', 'makerIntake', 'makerPro'] as const) {
+    const { w, r } = await corridor({ type, drive: ROBOTS[type].drives[0], actuator: 'tt' })
+    const m4 = portMap({ type, drive: ROBOTS[type].drives[0], actuator: 'tt' }).lift!
+    drive(w, r, { [m4]: m4.startsWith('S') ? 180 : 100 } as Partial<PortValues>, 4)
+    assert.equal(r.extend, ROBOTS[type].maxExtend, type)
+    const t = r.body.translation()
+    // yaw 0: mũi hướng −z ⇒ đuôi ở +z.
+    const back = Math.max(...r.footprint().map((c) => c.z)) - t.z
+    assert.ok(Math.abs(back - (ROBOTS[type].size.l / 2 + 0.2)) < 0.005, `${type}: đuôi footprint ${back}`)
+    assert.ok(r.backExtension > 0.19 && r.forwardExtension === 0, `${type}: sau ${r.backExtension}`)
+    assert.ok(r.extension > 0.15, `${type}: mở rộng ${r.extension}`)
+  }
 })
 
 const CO: RobotConfig = { type: 'co', drive: 'diff2', actuator: 'tt' }
