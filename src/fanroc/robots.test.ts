@@ -47,7 +47,8 @@ test('ruleChecks Maker: R01 đạt, mở rộng 0.13 → 430 mm đạt, 3/4 đ�
   assert.ok(r.some((c) => /R01/.test(c.text) && /300/.test(c.text)))
   assert.ok(r.some((c) => /430 mm/.test(c.text)))
   assert.ok(r.some((c) => c.text === 'Động cơ TT: 3 / 4'))
-  assert.ok(r.some((c) => c.text === 'Servo: 3 / 5'))
+  // S2 móc + S3 cửa xả (không còn S1 "nâng tay" — luật V4).
+  assert.ok(r.some((c) => c.text === 'Servo: 2 / 5'), JSON.stringify(r))
 })
 
 test('ruleChecks: mở rộng quá 500 mm bị đỏ', () => {
@@ -56,10 +57,10 @@ test('ruleChecks: mở rộng quá 500 mm bị đỏ', () => {
   assert.equal(c?.ok, false)
 })
 
-test('ruleChecks Maker mecanum: 4 động cơ + 4 servo vẫn đạt', () => {
+test('ruleChecks Maker mecanum: 4 động cơ + 3 servo (S2, S3, S5 thanh răng servo 360) vẫn đạt', () => {
   const r = ruleChecks({ type: 'maker', drive: 'mecanum', actuator: 'tt' }, 0)
   assert.ok(r.some((c) => c.text === 'Động cơ TT: 4 / 4' && c.ok === true))
-  assert.ok(r.some((c) => c.text === 'Servo: 4 / 5' && c.ok === true))
+  assert.ok(r.some((c) => c.text === 'Servo: 3 / 5' && c.ok === true), JSON.stringify(r))
 })
 
 test('ruleChecks Xe Ủi: hai chiếc cạnh nhau vừa ô 375', () => {

@@ -71,12 +71,12 @@ const MAKER: RobotDef = {
   // servo S3 mở cửa ra cuối lồng; robot mẫu không có cơ cấu nâng hạ lồng nên chỉ tới Rãnh 1 (bậc thấp nhất).
   // Luật V4 (anh Tuấn chốt 12/11): họ Maker bỏ cắm cờ, cổng S2 (trước là kẹp cờ) làm móc leo xà.
   mech: { M4: 'Thanh trượt răng' },
-  servos: { S1: 'Nâng tay', S2: 'Móc leo xà', S3: 'Cửa xả' },
+  // S1 trống (luật V4: "nâng tay" chỉ nâng điểm kẹp cờ, họ Maker không còn cờ ⇒ bỏ hẳn, rà soát cuối 12/11).
+  servos: { S2: 'Móc leo xà', S3: 'Cửa xả' },
   storage: 4, hpLoad: false, flag: false,
   hook: { port: 'S2', button: 'SQUARE' },
   // Thanh răng 300 mm, bánh răng giữa xe: lùi được ~200 mm (CAD) — đúng trần mở rộng 500 mm của luật.
   release: { y: 0.2, reach: 0.05 }, maxExtend: 0.2,
-  arm: { reach: 0, up: 0.06 },
   // Thanh răng: lúc thu đầu thanh ngang mép khung (CAD 150 mm), đầu kia nhô 39 mm; đẩy hết thì nhô thêm 200 mm.
   rack: { end: 0.15, front: 0.039, forward: true },
   // Vòng cửa ra của lồng (CAD: tâm 68 mm trước tâm khung, cao 93 mm); bóng qua vòng rơi ra ở ~100 mm trước tâm.
@@ -96,7 +96,6 @@ export const ROBOTS: Record<RobotType, RobotDef> = {
   makerLift: {
     ...MAKER, chuteBehind: false, rack: { ...MAKER.rack!, forward: false }, type: 'makerLift', name: 'Maker Nâng',
     servos: { S1: 'Nâng cửa lồng (MG996R)', S2: 'Móc leo xà', S3: 'Cửa xả' },
-    arm: undefined,
     chuteLift: CHUTE_LIFT,
   },
   makerIntake: {
@@ -112,7 +111,6 @@ export const ROBOTS: Record<RobotType, RobotDef> = {
     mech: { M3: 'Con lăn hút', M4: 'Thanh trượt răng' },
     servos: { S1: 'Nâng cửa lồng (MG996R)', S2: 'Móc leo xà', S3: 'Cửa xả' },
     storage: 8,
-    arm: undefined,
     chuteLift: CHUTE_LIFT,
   },
   ui: {

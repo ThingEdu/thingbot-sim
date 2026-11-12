@@ -216,9 +216,10 @@ export function teleopButtons(cfg: RobotConfig): Partial<Record<Ps2Button, strin
     out.TRIANGLE = 'Nâng gàu hớt'
     out.CROSS = 'Hạ gàu hớt'
   }
+  // Tay S1 vươn tới trước: chỉ Xe Cắm Cờ (họ Maker bỏ "nâng tay" theo luật V4).
   if (def.arm) {
-    out.L1 = cfg.type === 'co' ? 'Vươn tay cờ' : 'Nâng tay'
-    out.L2 = cfg.type === 'co' ? 'Thu tay cờ' : 'Hạ tay'
+    out.L1 = 'Vươn tay cờ'
+    out.L2 = 'Thu tay cờ'
   }
   if (def.chuteLift) {
     out.L1 = 'Nâng cửa lồng: Rãnh 3'

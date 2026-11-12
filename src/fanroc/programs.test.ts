@@ -172,6 +172,24 @@ test('TeleOp Mẫu Maker: △ / ✕ vươn / thu (M4), ○ mở cửa xả S3, �
   assert.equal(runFor(sim, pad({ ps2_PSB_CROSS: 1 }), 200).M4, -100)
 })
 
+test('Luật V4: Mẫu Maker / Maker Hút không còn "nâng tay" — không có L1 / L2 trong bảng phím, mẫu TeleOp không đụng S1, không servo S1', () => {
+  for (const type of ['maker', 'makerIntake'] as const) {
+    const cfg = defaultConfig(type)
+    const b = teleopButtons(cfg)
+    assert.equal(b.L1, undefined, `${type} L1: ${b.L1}`)
+    assert.equal(b.L2, undefined, `${type} L2: ${b.L2}`)
+    assert.equal(ROBOTS[type].servos.S1, undefined, type)
+    assert.equal(ROBOTS[type].arm, undefined, type)
+    const sim = code(SAMPLES[type].teleop)
+    assert.equal(runFor(sim, pad({ ps2_PSB_L1: 1 }), 200).S1, null, `${type}: L1 vẫn ra lệnh S1`)
+    assert.equal(runFor(sim, pad({ ps2_PSB_L2: 1 }), 200).S1, null, `${type}: L2 vẫn ra lệnh S1`)
+  }
+  // Maker Nâng / Pro vẫn giữ L1 / R2 / L2 cho cửa lồng S1; Xe Cắm Cờ vẫn vươn / thu tay cờ.
+  assert.equal(teleopButtons(defaultConfig('makerLift')).L1, 'Nâng cửa lồng: Rãnh 3')
+  assert.equal(teleopButtons(defaultConfig('makerPro')).L2, 'Hạ cửa lồng: Rãnh 1')
+  assert.deepEqual([teleopButtons(defaultConfig('co')).L1, teleopButtons(defaultConfig('co')).L2], ['Vươn tay cờ', 'Thu tay cờ'])
+})
+
 test('TeleOp servo 360: R1 hút bằng S4 = 180° (Xe Phân Loại), △ nâng bằng S5 = 180° (Mẫu Maker), thả nút là 90° (dừng)', () => {
   const sort = code(sample({ type: 'sort', drive: 'diff2', actuator: 's360' }, 'teleop'))
   assert.equal(runFor(sort, pad(), 200).S4, 90)
