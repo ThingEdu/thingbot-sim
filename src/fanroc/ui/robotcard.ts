@@ -10,6 +10,8 @@ export interface CardInfo {
   program: string
   /** Tay PS2 thật đang lái (thắng bàn phím khi có tín hiệu) hay bàn phím. */
   input: 'Bàn phím' | 'Tay PS2'
+  /** Hai bạn chia đôi bàn phím: phím lái của bạn này ("W A S D" / "↑ ← ↓ →"), hiện cạnh "Bàn phím". */
+  keys?: string
   /** Số thứ tự tay cầm của bạn này (1, 2) và tình trạng. */
   pad: { n: number; status: SeatStatus }
   held: number
@@ -30,7 +32,7 @@ export function cardText(c: CardInfo): string[] {
   return [
     `${c.player} · ${c.robot}`,
     `Chương trình: ${c.program}`,
-    `Lái: ${c.input} · bóng ${c.held}/${c.storage}`,
+    `Lái: ${c.input}${c.keys && c.input === 'Bàn phím' ? ` ${c.keys}` : ''} · bóng ${c.held}/${c.storage}`,
     ...(pad ? [pad] : []),
     ...c.warnings,
   ]
@@ -65,6 +67,10 @@ export class WarningHold {
 const CSS = `
 .rc-me { position: absolute; left: 10px; bottom: 10px; z-index: 6; display: grid; gap: 6px; max-width: min(330px, calc(100% - 20px)); pointer-events: none; }
 .rc-me[hidden] { display: none; }
+/* Chia đôi màn hình (hai bạn): thẻ bạn 1 góc dưới nửa trái, thẻ bạn 2 góc dưới nửa phải. */
+/* Dòng điểm bật lên (.fd, dựng sau thẻ) lên trên thẻ bạn 2 để không đè. */
+.rc-me[data-split] ~ .fd { bottom: 96px; }
+.rc-me[data-split] { right: 10px; max-width: none; grid-template-columns: minmax(0, 330px) minmax(0, 330px); justify-content: space-between; align-items: end; }
 .rc-card { display: grid; gap: 2px; padding: 7px 10px; border-radius: 8px; background: #101425e0; color: #eef2fa; border: 1px solid #ffffff22; font: 12px/1.45 var(--font); box-shadow: 0 4px 14px #0007; }
 .rc-card b { font-size: 13px; }
 .rc-card .rc-in { display: inline-flex; gap: 5px; align-items: center; }
@@ -72,7 +78,8 @@ const CSS = `
 `
 
 export interface RobotCards {
-  update(cards: CardInfo[]): void
+  /** `split`: màn đang chia đôi ⇒ hai thẻ hai góc dưới (thứ tự thẻ = bạn 1, bạn 2 = nửa trái, nửa phải). */
+  update(cards: CardInfo[], split?: boolean): void
   visible(v: boolean): void
 }
 
@@ -90,7 +97,8 @@ export function createRobotCards(stage: HTMLElement): RobotCards {
   stage.append(box)
   let key = ''
   return {
-    update(cards) {
+    update(cards, split = false) {
+      box.toggleAttribute('data-split', split && cards.length === 2)
       const k = JSON.stringify(cards.map(cardText).concat([cards.map((c) => c.input)]))
       if (k === key) return
       key = k

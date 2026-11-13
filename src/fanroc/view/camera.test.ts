@@ -13,3 +13,18 @@ test('camera Theo robot: mức vừa lùi xa hơn bản cũ (0,6 m) và thấp h
   // Mức vừa cao hơn rào (0,3 m) để nhìn qua rào khi robot sát Khu Điều Khiển.
   assert.ok(mid.up > 0.3 && far.up > 0.3)
 })
+
+test('chia đôi màn hình (0.9.1): hai nửa không hở, không chồng; Toàn sân thành Ghế lái của mỗi bạn', async () => {
+  const { splitRects, splitView } = await import('./scene.ts')
+  for (const [w, h] of [[1440, 860], [1281, 720], [2, 1]]) {
+    const [a, b] = splitRects(w, h)
+    assert.deepEqual([a[0], a[1], b[1], a[3], b[3]], [0, 0, 0, h, h])
+    assert.equal(a[2] + b[2], w)
+    assert.equal(b[0], a[2])
+    assert.ok(Math.abs(a[2] - b[2]) <= 1)
+  }
+  assert.equal(splitView('field'), 'driver')
+  assert.equal(splitView('orbit'), 'driver')
+  assert.equal(splitView('follow'), 'follow')
+  assert.equal(splitView('driver'), 'driver')
+})

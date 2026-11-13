@@ -43,7 +43,7 @@ import { createHome, createPick, programText, robotName, type HomeInfo, type Hom
 import { createRules } from './ui/rules.ts'
 import { createRobotsGallery, viewerCount } from './ui/robots-gallery.ts'
 import { fanrocRules } from './rules-data.ts'
-import { assignSeat, createSettings, defaultSeats, playerSeat, seatOf, seatOptions, type SeatMode, type SettingsCtx } from './ui/settings.ts'
+import { assignSeat, createSettings, defaultSeats, playerSeat, seatOf, seatOptions, splitSeats, type SeatMode, type SettingsCtx } from './ui/settings.ts'
 import { createWorkshopBar, Drafts, resetVerified, saveVerified, sameProgram } from './ui/workshop.ts'
 import { createRobotCards, WarningHold, type CardInfo } from './ui/robotcard.ts'
 import { climbItem, createFeed, EventFeed, foulItem, scoreItem } from './ui/feed.ts'
@@ -434,6 +434,8 @@ async function start(): Promise<void> {
         return screen === 'mission' && mission ? { id: mission.id, result: mrun?.result ?? null, reason: mrun?.reason ?? null } : null
       },
       mySeat, keypads: () => keypads, workers: workerCount, viewers: viewerCount,
+      /** Hai ghế đang chia đôi màn hình (null: một màn) — 0.9.1. */
+      splitSeats: () => scene.splitSeats,
       pause: () => setPaused(true), resume: () => setPaused(false), stepBlock: () => stepBlock(),
       pose: (i: number) => {
         const p = game.robots[i].pose
@@ -594,6 +596,7 @@ async function start(): Promise<void> {
       draft: (p, cfg) => drafts.has(p, cfg),
       draftMsg: pickMsg,
       warn: (p, cfg) => (runMine ? oldWarn(p, cfg) : null),
+      pads: seats.read().status.filter((s) => s === 'ok').length,
     }),
     {
       saveDraft(p, cfg) {
@@ -610,6 +613,15 @@ async function start(): Promise<void> {
         pick.render()
       },
       setPlayer: (p) => ((pickPlayer = p), pick.render()),
+      setPlayers: (n) => {
+        // Như ⚙ › Hai bạn chơi; trận dựng theo số bạn mới lúc bấm Vào trận.
+        settings.layout2p = n === 2
+        saveSettings()
+        makePads()
+        pickPlayer = 0
+        showTabs()
+        pick.render()
+      },
       setCfg: (p, cfg) => (editors.setConfig(p, cfg), pick.render()),
       setPractice: (v) => ((pickPractice = v), pick.render()),
       setAlliance: (a) => ((settings.alliance = a), saveSettings(), pick.render()),
@@ -1283,7 +1295,8 @@ async function start(): Promise<void> {
     shell.status({
       robot: `${names[p]} · ${robotName(cfgOf(p))}`,
       input,
-      ports: seat >= 0 ? (game.ports[seat] ?? NEUTRAL) : NEUTRAL,
+      // 0.9.1 (anh Tuấn 13/11: thông số động cơ thừa): số M1–M4 chỉ hiện ở Chế độ giáo viên.
+      ports: settings.teacher ? (seat >= 0 ? (game.ports[seat] ?? NEUTRAL) : NEUTRAL) : null,
       block: state === 'running' || state === 'paused' ? editors.describe(p, editors.link(p).block) : null,
       fps,
     })
@@ -1301,13 +1314,14 @@ async function start(): Promise<void> {
         robot: robotName(cfgOf(p)),
         program: screen === 'workshop' ? 'đang sửa ở Xưởng' : screen === 'tmatch' ? tourLabel(p) : label(p),
         input: inputOf(p, status),
+        ...(players() === 2 ? { keys: p === 0 ? 'W A S D' : '↑ ← ↓ →' } : {}),
         pad: { n: p + 1, status: status[p] },
         held: r ? r.stored.length : 0,
         storage: r ? r.def.storage : 0,
         warnings: holds[p].update(performance.now(), deadZoneLines(game.ports[seat])),
       })
     }
-    cards.update(list)
+    cards.update(list, scene.splitSeats !== null)
   }
 
   // Bảng điểm: dòng điểm ≤ SCORE_HZ lần/giây; đếm ngược 3 s cuối xả bóng; còi; màn kết quả khi hết giờ.
@@ -1404,6 +1418,7 @@ async function start(): Promise<void> {
       }
     }
     // Sân nền đứng yên (Luật chơi, Robot mẫu): vẽ lại thưa (2 lần/giây) để đổi cỡ cửa sổ không để sân trống.
+    scene.split(splitSeats(players(), isMatch(), modes))
     if (live || now - lastIdleDraw >= IDLE_DRAW_MS) {
       lastIdleDraw = now
       scene.sync(game.world, game.robots, game.match, game.ports)

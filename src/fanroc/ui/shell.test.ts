@@ -59,11 +59,11 @@ test('defaultSide: khung Khối 40 %, Mã Arduino 24 %; cửa sổ ≤ 900 px ph
   assert.equal(defaultSide('code', 800), 560)
 })
 
-test('statusText: cổng M1–M4 và khối đang chạy; không có cổng (ghế không tồn tại) vẫn không vỡ', () => {
+test('statusText: cổng M1–M4 và khối đang chạy; không có cổng (0.9.1: ngoài Chế độ giáo viên) ⇒ ô động cơ trống', () => {
   const t = statusText({ robot: 'Robot 1 · Dế Xanh', input: 'Chương trình', ports: { ...NEUTRAL, M1: 60, M2: -60.4 }, block: 'đợi 1 giây', fps: 59.6 })
   assert.deepEqual(t, ['Robot 1 · Dế Xanh', 'Chương trình', 'M1 60 · M2 −60 · M3 0 · M4 0', 'Đang chạy khối: đợi 1 giây', '60 khung/giây'])
-  const u = statusText({ robot: '', input: 'Máy', ports: undefined as never, block: null, fps: 0 })
-  assert.equal(u[2], 'M1 0 · M2 0 · M3 0 · M4 0')
+  const u = statusText({ robot: '', input: 'Máy', ports: null, block: null, fps: 0 })
+  assert.equal(u[2], '')
   assert.equal(u[3], '')
 })
 

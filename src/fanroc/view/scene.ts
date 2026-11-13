@@ -29,6 +29,18 @@ export function followOffset(zoom: number): { back: number; up: number; ahead: n
 }
 export type Quality = 'low' | 'high'
 
+/** Một khung vẽ: x, y (gốc dưới-trái như WebGL), rộng, cao — px CSS. */
+export type ViewRect = [number, number, number, number]
+/** Hai nửa màn chia đôi (hai bạn, 0.9.1): nửa trái làm tròn xuống, nửa phải lấy phần còn lại, không hở, không chồng. */
+export function splitRects(w: number, h: number): [ViewRect, ViewRect] {
+  const left = Math.floor(w / 2)
+  return [[0, 0, left, h], [left, 0, w - left, h]]
+}
+/** Góc nhìn thật của một nửa màn chia đôi: Toàn sân (cả sân từ trên cao, chung cho mọi người) thành Ghế lái của liên minh robot đó. */
+export function splitView(v: CameraView): CameraView {
+  return v === 'field' || v === 'orbit' ? 'driver' : v
+}
+
 export interface FanrocScene {
   /**
    * Cập nhật hình theo trạng thái rồi vẽ một khung. `ports` (không bắt buộc) là giá trị cổng vừa ra lệnh cho từng robot,
@@ -36,6 +48,13 @@ export interface FanrocScene {
    */
   sync(world: FanrocWorld, robots: RobotBody[], match: Match, ports?: readonly PortValues[]): void
   camera(view: CameraView, robot?: number): void
+  /**
+   * Chia đôi màn hình (hai bạn, 0.9.1): nửa trái camera theo robot `seats[0]`, nửa phải theo `seats[1]`, cùng góc nhìn
+   * đang chọn (`splitView`). null = một màn như cũ. Gọi mỗi khung được: không đổi thì không làm gì.
+   */
+  split(seats: readonly [number, number] | null): void
+  /** Hai ghế đang chia đôi (null: một màn) — phép thử. */
+  readonly splitSeats: readonly [number, number] | null
   /**
    * Vệt robot (chỉ màn nhiệm vụ con rùa gọi): mỗi đoạn một dải phẳng sát mặt thảm (y = 0,002), màu TRAIL_COLORS;
    * `path` = đường gợi ý trắng nét đứt. `null` xoá cả vệt lẫn đường gợi ý. Gọi mỗi khung được: chỉ dựng lại đoạn có thêm điểm.
@@ -373,6 +392,15 @@ export function createScene(el: HTMLElement): FanrocScene {
   const scene = new THREE.Scene()
   scene.background = new THREE.Color(COLORS.background)
   const camera = new THREE.PerspectiveCamera(FOV, 1, 0.01, 50)
+  /** Camera nửa phải khi chia đôi (bạn 2); không có OrbitControls — luôn bám robot / ghế lái. */
+  const cameraB = new THREE.PerspectiveCamera(FOV, 1, 0.01, 50)
+  const targetB = new THREE.Vector3(0, 0, 0)
+  const divider = document.createElement('div')
+  divider.className = 'sc-split'
+  divider.hidden = true
+  divider.setAttribute('aria-hidden', 'true')
+  Object.assign(divider.style, { position: 'absolute', top: '0', bottom: '0', left: 'calc(50% - 2px)', width: '4px', background: '#0b0f1c', boxShadow: '0 0 0 1px #ffffff33', zIndex: '4', pointerEvents: 'none' })
+  el.append(divider)
   const controls = new OrbitControls(camera, renderer.domElement)
   controls.enableDamping = true
   controls.maxPolarAngle = Math.PI * 0.49
@@ -596,14 +624,28 @@ export function createScene(el: HTMLElement): FanrocScene {
   let followIdx = 0
   let followZoom = 1
   let zoomEase = 0
+  /** Góc nhìn / robot người chơi chọn (giữ lại để bỏ chia đôi thì về đúng góc cũ). */
+  let chosen: CameraView = 'field'
+  let chosenRobot = 0
+  /** Chia đôi: ghế của nửa trái, nửa phải (null: một màn). */
+  let pair: [number, number] | null = null
+  let viewB: CameraView = 'driver'
+  let zoomB = 1
+  let goalB: { pos: THREE.Vector3; target: THREE.Vector3 } | null = null
+  const size = new THREE.Vector2()
   // Lăn chuột ở góc Theo robot: đổi mức gần / vừa / xa (các góc khác OrbitControls tự phóng to).
   renderer.domElement.addEventListener(
     'wheel',
     (e) => {
-      if (view !== 'follow') return
+      const right = pair !== null && e.offsetX >= renderer.domElement.clientWidth / 2
+      if ((right ? viewB : view) !== 'follow') return
       e.preventDefault()
-      followZoom = Math.max(0, Math.min(FOLLOW_ZOOM.length - 1, followZoom + Math.sign(e.deltaY)))
-      zoomEase = 40 // vài chục khung trượt mượt sang mức mới thay vì nhảy
+      const step = (z: number) => Math.max(0, Math.min(FOLLOW_ZOOM.length - 1, z + Math.sign(e.deltaY)))
+      if (right) zoomB = step(zoomB)
+      else {
+        followZoom = step(followZoom)
+        zoomEase = 40 // vài chục khung trượt mượt sang mức mới thay vì nhảy
+      }
     },
     { passive: false },
   )
@@ -640,9 +682,13 @@ export function createScene(el: HTMLElement): FanrocScene {
     renderer.setSize(w, hh, false)
     renderer.domElement.style.width = '100%'
     renderer.domElement.style.height = '100%'
-    camera.aspect = w / hh
+    const [a, b] = splitRects(w, hh)
+    camera.aspect = pair ? Math.max(1, a[2]) / hh : w / hh
     camera.updateProjectionMatrix()
-    if (view === 'field') setFieldView()
+    cameraB.aspect = Math.max(1, b[2]) / hh
+    cameraB.updateProjectionMatrix()
+    if (pair) applyCamera()
+    else if (view === 'field') setFieldView()
   }
   const ro = new ResizeObserver(resize)
   ro.observe(el)
@@ -774,6 +820,57 @@ export function createScene(el: HTMLElement): FanrocScene {
     })
   }
 
+  /** Chỗ đặt camera Theo robot và điểm nhìn cho robot ở `p`, mức xa `zoom` (chỉ số FOLLOW_ZOOM). */
+  function followPose(p: { x: number; z: number; yaw: number }, zoom: number): { pos: THREE.Vector3; target: THREE.Vector3 } {
+    const fx = -Math.sin(p.yaw)
+    const fz = -Math.cos(p.yaw)
+    // Sau-trên robot; mức vừa trở lên đủ cao để nhìn qua rào (0,3 m) khi robot còn ở ô xuất phát sát rào.
+    const o = followOffset(FOLLOW_ZOOM[zoom])
+    return {
+      pos: new THREE.Vector3(p.x - fx * o.back, o.up, p.z - fz * o.back),
+      target: new THREE.Vector3(p.x + fx * o.ahead, 0.06, p.z + fz * o.ahead),
+    }
+  }
+  /**
+   * Mắt người lái đứng sau Khu Điều Khiển của liên minh robot `robot`, cao và lùi xa để thấy trọn sân cả Khu Xuất Phát
+   * (góc mặc định của trận, anh Tuấn 10/11: nhìn rộng); khung dọc (hay nửa màn chia đôi) thì lùi xa thêm như Toàn sân.
+   */
+  function driverGoal(robot: number, aspect: number): { pos: THREE.Vector3; target: THREE.Vector3 } {
+    const a = built?.[robot]?.alliance ?? (robot % 2 === 0 ? 'red' : 'blue') // ghế [Đỏ 0, Xanh 0, Đỏ 1, Xanh 1]
+    const x = a === 'red' ? -0.45 : 0.45
+    const k = Math.max(1, 1.1 / aspect)
+    return { pos: new THREE.Vector3(x, 2.25 * k, DRIVER_Z.z0 + 0.95 * k), target: new THREE.Vector3(x * 0.2, 0, -0.05) }
+  }
+  /** Đặt góc nhìn theo lựa chọn của người chơi; chia đôi thì cả hai nửa (Toàn sân ⇒ Ghế lái). */
+  function applyCamera(): void {
+    if (camera.fov !== FOV) ((camera.fov = FOV), camera.updateProjectionMatrix())
+    view = pair ? splitView(chosen) : chosen
+    followIdx = pair ? pair[0] : chosenRobot
+    if (view === 'field') setFieldView()
+    else if (view === 'driver') goal = driverGoal(followIdx, camera.aspect)
+    else goal = null
+    if (pair) {
+      viewB = splitView(chosen)
+      goalB = viewB === 'driver' ? driverGoal(pair[1], cameraB.aspect) : null
+    }
+  }
+  /** Camera nửa phải (chia đôi): bám robot pair[1] hoặc trượt tới ghế lái. */
+  function updateCameraB(robots: RobotBody[]): void {
+    if (!pair) return
+    const r = robots[pair[1]]
+    if (viewB === 'follow' && r) {
+      const f = followPose(r.pose, zoomB)
+      const k = cameraB.position.distanceTo(f.pos) > 0.12 ? 1 : 0.15
+      cameraB.position.lerp(f.pos, k)
+      targetB.lerp(f.target, k)
+    } else if (goalB) {
+      cameraB.position.lerp(goalB.pos, 0.12)
+      targetB.lerp(goalB.target, 0.12)
+      if (cameraB.position.distanceTo(goalB.pos) < 0.003) goalB = null
+    }
+    cameraB.lookAt(targetB)
+  }
+
   function updateCamera(robots: RobotBody[]): void {
     if (view === 'orbit') {
       const a = (performance.now() / 1000) * ORBIT_SPEED
@@ -783,13 +880,7 @@ export function createScene(el: HTMLElement): FanrocScene {
       return
     }
     if (view === 'follow' && robots[followIdx]) {
-      const p = robots[followIdx].pose
-      const fx = -Math.sin(p.yaw)
-      const fz = -Math.cos(p.yaw)
-      // Sau-trên robot; mức vừa trở lên đủ cao để nhìn qua rào (0,3 m) khi robot còn ở ô xuất phát sát rào.
-      const o = followOffset(FOLLOW_ZOOM[followZoom])
-      const pos = new THREE.Vector3(p.x - fx * o.back, o.up, p.z - fz * o.back)
-      const target = new THREE.Vector3(p.x + fx * o.ahead, 0.06, p.z + fz * o.ahead)
+      const { pos, target } = followPose(robots[followIdx].pose, followZoom)
       // Ở tốc độ xem cao robot đi xa mỗi khung: bám thẳng khi lệch nhiều, chỉ làm mượt khi lệch ít.
       const k = zoomEase > 0 ? (zoomEase--, 0.12) : camera.position.distanceTo(pos) > 0.12 ? 1 : 0.15
       camera.position.lerp(pos, k)
@@ -815,23 +906,51 @@ export function createScene(el: HTMLElement): FanrocScene {
       const gy = BOX.y0 + ((BOX.y1 - BOX.y0) * 0.55) / 2
       dispenser.gate.position.y += ((open ? gy + GATE_OPEN : gy) - dispenser.gate.position.y) * 0.2
       updateCamera(robots)
-      controls.enabled = view !== 'follow' && view !== 'orbit'
+      updateCameraB(robots)
+      // Chia đôi: kéo chuột không xoay camera (hai nửa luôn bám robot / ghế lái của mỗi bạn).
+      controls.enabled = !pair && view !== 'follow' && view !== 'orbit'
       controls.update()
+      if (!pair) {
+        renderer.render(scene, camera)
+        return
+      }
+      renderer.getSize(size)
+      const [a, b] = splitRects(size.x, size.y)
+      renderer.setScissorTest(true)
+      renderer.setViewport(...a)
+      renderer.setScissor(...a)
       renderer.render(scene, camera)
+      // Nửa phải dùng lại bản đồ bóng đổ vừa vẽ ở nửa trái (cùng cảnh, cùng khung): đỡ một lần vẽ bóng mỗi khung.
+      const auto = renderer.shadowMap.autoUpdate
+      renderer.shadowMap.autoUpdate = false
+      renderer.setViewport(...b)
+      renderer.setScissor(...b)
+      renderer.render(scene, cameraB)
+      renderer.shadowMap.autoUpdate = auto
+      renderer.setScissorTest(false)
+      renderer.setViewport(0, 0, size.x, size.y)
     },
     camera(v, robot = 0) {
-      if (camera.fov !== FOV) ((camera.fov = FOV), camera.updateProjectionMatrix())
-      view = v
-      followIdx = robot
-      if (v === 'field') setFieldView()
-      else if (v === 'driver') {
-        // Mắt người lái đứng sau Khu Điều Khiển của liên minh robot đó, cao và lùi xa để thấy trọn sân cả Khu Xuất Phát
-        // (góc mặc định của trận, anh Tuấn 10/11: nhìn rộng); khung dọc thì lùi xa thêm như Toàn sân.
-        const a = built?.[robot]?.alliance ?? (robot % 2 === 0 ? 'red' : 'blue') // ghế [Đỏ 0, Xanh 0, Đỏ 1, Xanh 1]
-        const x = a === 'red' ? -0.45 : 0.45
-        const k = Math.max(1, 1.1 / camera.aspect)
-        goal = { pos: new THREE.Vector3(x, 2.25 * k, DRIVER_Z.z0 + 0.95 * k), target: new THREE.Vector3(x * 0.2, 0, -0.05) }
-      } else goal = null
+      chosen = v
+      chosenRobot = robot
+      applyCamera()
+    },
+    split(seats) {
+      const next: [number, number] | null = seats ? [seats[0], seats[1]] : null
+      if (JSON.stringify(next) === JSON.stringify(pair)) return
+      const was = pair
+      pair = next
+      divider.hidden = !pair
+      // Nửa phải mới mở: đặt camera ngay chỗ nhìn (không trượt từ gốc toạ độ).
+      if (pair && !was) {
+        cameraB.position.copy(camera.position)
+        targetB.copy(controls.target)
+      }
+      resize()
+      applyCamera()
+    },
+    get splitSeats() {
+      return pair
     },
     quality: setQuality,
     trail: setTrail,
@@ -870,6 +989,7 @@ export function createScene(el: HTMLElement): FanrocScene {
     dispose() {
       ro.disconnect()
       controls.dispose()
+      divider.remove()
       // Lưới / vật liệu dùng chung (núi, robot, bóng) chỉ giải phóng một lần.
       setTrail(null)
       for (const m of [...trailMats, pathMat]) m.dispose()

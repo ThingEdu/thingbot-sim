@@ -17,7 +17,8 @@ export type InputKind = 'Bàn phím' | 'Tay PS2' | 'Chương trình' | 'Máy'
 export interface StatusInfo {
   robot: string
   input: InputKind
-  ports: PortValues
+  /** Cổng M1–M4 đang ra lệnh; null = không hiện (0.9.1: chỉ Chế độ giáo viên mới hiện số động cơ). */
+  ports: PortValues | null
   block: string | null
   fps: number
 }
@@ -172,13 +173,13 @@ export function runState(state: LinkState | 'none', o: RunOpts) {
 const MOTORS = ['M1', 'M2', 'M3', 'M4'] as const
 const num = (v: number) => String(Math.round(v) || 0).replace('-', '−')
 
-/** Chữ các ô của thanh trạng thái: robot · cách lái · M1–M4 · khối đang chạy · khung hình/giây. */
+/** Chữ các ô của thanh trạng thái: robot · cách lái · M1–M4 (khi có) · khối đang chạy · khung hình/giây. */
 export function statusText(s: StatusInfo): [string, string, string, string, string] {
   const p = s.ports
   return [
     s.robot,
     s.input,
-    MOTORS.map((m) => `${m} ${num(p?.[m] ?? 0)}`).join(' · '),
+    p ? MOTORS.map((m) => `${m} ${num(p[m] ?? 0)}`).join(' · ') : '',
     s.block ? `Đang chạy khối: ${s.block}` : '',
     `${Math.round(s.fps)} khung/giây`,
   ]
@@ -519,7 +520,7 @@ export function createShell(root: HTMLElement, opts: { thingblockUrl?: string } 
         const name = INPUT_ICON[s.input]
         if (name) st.input.prepend(icon(name, 14))
       }
-      if (st.ports.textContent !== ports) st.ports.textContent = ports
+      if (st.ports.textContent !== ports) ((st.ports.textContent = ports), (st.ports.hidden = !ports))
       if (st.block.textContent !== block) st.block.textContent = block
       if (st.fps.textContent !== fps) st.fps.textContent = fps
     },

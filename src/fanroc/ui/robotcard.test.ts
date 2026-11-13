@@ -32,3 +32,9 @@ test('WarningHold: dòng cảnh báo không nháy — ở lại WARN_HOLD_MS sau
   assert.deepEqual(h.update(2 * WARN_HOLD_MS - 1, []), [b])
   assert.deepEqual(h.update(2 * WARN_HOLD_MS, []), [])
 })
+
+test('hai bạn (0.9.1): thẻ ghi phím lái của bạn đó khi lái bàn phím; tay PS2 thì không', () => {
+  assert.equal(cardText({ ...base, keys: 'W A S D' })[2], 'Lái: Bàn phím W A S D · bóng 2/6')
+  assert.equal(cardText({ ...base, keys: '↑ ← ↓ →', input: 'Tay PS2' })[2], 'Lái: Tay PS2 · bóng 2/6')
+  assert.equal(cardText(base)[2], 'Lái: Bàn phím · bóng 2/6')
+})

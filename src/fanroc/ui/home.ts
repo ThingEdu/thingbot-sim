@@ -223,7 +223,7 @@ const TILE_TEXT: Record<TileId, { title: string; text: (i: HomeInfo) => (string 
         ? [Object.assign(document.createElement('b'), { textContent: i.tournament.text }), i.tournament.corrupt ? ' · bấm để mở Giải mới' : '']
         : ['Đúng luật FANROC · 8 đội · 1–2 bạn'],
   },
-  match: { title: 'Trận lẻ · Đấu tập', text: () => ['Một trận 3 phút, hoặc sân tự do'] },
+  match: { title: 'Trận lẻ · Đấu tập', text: () => ['Một trận 3 phút, hoặc sân tự do · một hoặc hai bạn'] },
   missions: { title: 'Nhiệm vụ', text: (i) => [`Con rùa robot · ${i.missions.done}/${i.missions.total} `, icon('check', 14)] },
   workshop: {
     title: 'Xưởng lập trình',
@@ -364,12 +364,16 @@ export interface PickState {
   draftMsg: { text: string; ok: boolean } | null
   /** Cảnh báo cho chương trình đã lưu của bạn p với robot cfg (vd. lưu theo luật cũ); null = không có. */
   warn?(p: 0 | 1, cfg: RobotConfig): string | null
+  /** Số tay cầm đang nhận đúng bố cục (đủ 2 mà đang Một bạn ⇒ gợi ý chơi chia đôi màn hình). */
+  pads?: number
 }
 
 export interface PickActions {
   saveDraft(p: 0 | 1, cfg: RobotConfig): void
   dropDraft(p: 0 | 1, cfg: RobotConfig): void
   setPlayer(p: 0 | 1): void
+  /** Một bạn / Hai bạn (0.9.1: hai bạn ⇒ chia đôi màn hình, mỗi bạn một liên minh cùng một robot máy). */
+  setPlayers(n: 1 | 2): void
   setCfg(p: 0 | 1, cfg: RobotConfig): void
   setPractice(v: boolean): void
   setAlliance(a: Alliance): void
@@ -448,7 +452,17 @@ export function createPick(root: HTMLElement, get: () => PickState, act: PickAct
     head.append(h1)
     const rows: HTMLElement[] = [
       row('Chế độ', segment([['match', 'Trận lẻ · 10 s + 3 phút'], ['practice', 'Đấu tập · không tính giờ']], s.practice ? 'practice' : 'match', (v) => act.setPractice(v === 'practice'))),
+      row('Số bạn', segment([['1', 'Một bạn'], ['2', 'Hai bạn · chia đôi màn hình']], String(s.players) as '1' | '2', (v) => act.setPlayers(v === '2' ? 2 : 1))),
     ]
+    if (s.players === 2) {
+      const n = el('div', 'pk-note', `${s.names[0]} lái nửa trái (W A S D), ${s.names[1]} lái nửa phải (↑ ← ↓ →) — hoặc mỗi bạn một tay PS2. Mỗi bạn một liên minh, cùng một robot máy.`)
+      n.dataset.role = 'two-note'
+      rows.push(n)
+    } else if ((s.pads ?? 0) >= 2) {
+      const n = el('div', 'pk-note', 'Đã nhận 2 tay cầm — chọn Hai bạn để chơi chia đôi màn hình.')
+      n.dataset.role = 'pads-note'
+      rows.push(n)
+    }
     if (s.players === 2) rows.push(row('Chọn robot cho', segment([['0', s.names[0]], ['1', s.names[1]]], String(p), (v) => act.setPlayer(Number(v) as 0 | 1))))
     const cards = el('div', 'pk-cards')
     cards.setAttribute('aria-label', 'Robot của em')

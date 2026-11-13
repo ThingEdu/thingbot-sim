@@ -43,8 +43,12 @@ Bàn phím là tay cầm PS2 ảo. Bảng đầy đủ nằm ở ⚙ › Phím �
 | U O Y P | nút L1 R1 L2 R2 |
 | giữ J (□), nhả ra | móc leo xà: giữ là giơ móc, nhả là kéo robot lên xà. Xe Cắm Cờ dùng O (R1) vì □ là kẹp cờ |
 
-Có tay cầm thật (gamepad) thì cắm vào máy là dùng được. Hai bạn chơi chung một máy: bật ⚙ › Hai bạn chơi, bàn phím
-chia đôi, mỗi bạn một nửa.
+Có tay cầm thật (gamepad) thì cắm vào máy là dùng được.
+
+**Hai bạn chơi chung một máy:** ở màn chọn robot (Trận lẻ · Đấu tập), chọn **Số bạn › Hai bạn · chia đôi màn hình**.
+Màn hình chia đôi: nửa trái là camera của bạn 1, nửa phải của bạn 2. Bạn 1 lái bằng W A S D, bạn 2 bằng các phím mũi
+tên; mỗi bạn cũng có thể dùng một tay cầm. Mỗi bạn ở một liên minh, chơi cùng một robot máy. ⚙ › Camera đổi góc nhìn
+cho cả hai nửa: Ghế lái (nhìn rộng từ phía liên minh của mình) hoặc Theo robot.
 
 Trong trận:
 

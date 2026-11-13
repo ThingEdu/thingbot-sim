@@ -590,6 +590,115 @@ async function missionList(page) {
   await page.locator('.hm[data-screen="missions"] .ml-card').first().waitFor()
 }
 async function missionTests() {
+
+  // ---------- 0.9.1: hai bạn chia đôi màn hình, thanh trạng thái gọn ----------
+  /** Màn chính › Trận lẻ › Số bạn: Hai bạn › Vào trận (đi bằng giao diện thật), chờ pha xả bóng. */
+  const twoSplit = async (page) => {
+    await open(page)
+    await page.locator('.hm-tile[data-tile="match"]').click()
+    await page.locator('.pk-acts .main').waitFor()
+    await page.locator('button', { hasText: 'Hai bạn · chia đôi màn hình' }).click()
+    await page.locator('[data-role="two-note"]').waitFor({ timeout: 5000 })
+    await page.locator('.pk-acts .main').click()
+    await page.waitForFunction(() => window.__fanroc.screen === 'match' && window.__fanroc.match.t < -8, null, { timeout: 30000 })
+  }
+  await test('E12 Hai bạn (0.9.1): Trước trận › Hai bạn ⇒ màn chia đôi [bạn 1 | bạn 2], mỗi liên minh 1 bạn + 1 máy, hai thẻ hai góc có phím; W chỉ lái nửa trái, ↑ chỉ lái nửa phải; về Một bạn ⇒ một màn', async (page) => {
+    await twoSplit(page)
+    const pair = await page.evaluate(() => window.__fanroc.splitSeats())
+    expect(JSON.stringify(pair) === '[0,1]', `ghế chia đôi ${JSON.stringify(pair)}`)
+    const drivers = await page.evaluate(() => [0, 1, 2, 3].map((i) => window.__fanroc.session.driver(i).kind))
+    expect(drivers[2] === 'agent' && drivers[3] === 'agent', `ghế máy: ${drivers.join(', ')}`)
+    expect(await page.locator('.sc-split').isVisible(), 'không thấy vạch chia đôi')
+    expect((await page.locator('.rc-me[data-split] .rc-card').count()) === 2, 'thiếu hai thẻ robot chia đôi')
+    const cards = await page.locator('.rc-card').evaluateAll((cs) => cs.map((c) => ({ x: c.getBoundingClientRect().x, t: c.innerText })))
+    const half = await page.evaluate(() => innerWidth / 2)
+    expect(cards[0].x < half && cards[1].x > half, `thẻ: ${cards.map((c) => Math.round(c.x)).join(', ')} / nửa ${half}`)
+    expect(/W A S D/.test(cards[0].t) && /↑ ← ↓ →/.test(cards[1].t), `phím trên thẻ: ${cards.map((c) => c.t.replace(/\n/g, ' | ')).join(' ‖ ')}`)
+    await skipRelease(page)
+    const a0 = await pose(page, 0)
+    const b0 = await pose(page, 1)
+    await page.keyboard.down('KeyW')
+    await page.waitForTimeout(1200)
+    await page.keyboard.up('KeyW')
+    await page.waitForTimeout(1000) // xe trôi hết sau khi nhả phím
+    const a1 = await pose(page, 0)
+    const b1 = await pose(page, 1)
+    expect(dist(a0, a1) > 0.15 && dist(b0, b1) < 0.03, `W: bạn 1 đi ${dist(a0, a1).toFixed(2)} m, bạn 2 đi ${dist(b0, b1).toFixed(2)} m`)
+    await page.keyboard.down('ArrowUp')
+    await page.waitForTimeout(1200)
+    await page.keyboard.up('ArrowUp')
+    await page.waitForTimeout(400)
+    const a2 = await pose(page, 0)
+    const b2 = await pose(page, 1)
+    expect(dist(b1, b2) > 0.15 && dist(a1, a2) < 0.03, `↑: bạn 2 đi ${dist(b1, b2).toFixed(2)} m, bạn 1 đi ${dist(a1, a2).toFixed(2)} m`)
+    // Về Một bạn (⚙ › Hai bạn chơi) ⇒ một màn, một thẻ, không vạch.
+    await (await bar(page, 'Một bạn')).click()
+    await page.waitForFunction(() => window.__fanroc.splitSeats() === null, null, { timeout: 30000 })
+    await closeSettings(page)
+    await page.waitForTimeout(300)
+    expect(!(await page.locator('.sc-split').isVisible()), 'một bạn mà vạch chia đôi còn hiện')
+    expect((await page.locator('.rc-me[data-split]').count()) === 0, 'một bạn mà thẻ còn chia đôi')
+    return `bạn 1 W ${dist(a0, a1).toFixed(2)} m, bạn 2 ↑ ${dist(b1, b2).toFixed(2)} m · thẻ x ${cards.map((c) => Math.round(c.x)).join(' / ')}`
+  })
+
+  await test('E13 Hai bạn chia đôi, đồ hoạ Thấp: khung hình trung bình 5 s ≥ 30 fps; Theo robot ⇒ hai nửa bám hai robot khác nhau', async (page) => {
+    await twoSplit(page)
+    await (await bar(page, 'Thấp')).click()
+    await (await bar(page, 'Theo robot')).click()
+    await closeSettings(page)
+    await skipRelease(page)
+    await page.waitForTimeout(500)
+    const fps = await page.evaluate(
+      () =>
+        new Promise((ok) => {
+          let frames = 0
+          const t0 = performance.now()
+          const tick = (now) => {
+            if (now - t0 >= 5000) return ok((frames * 1000) / (now - t0))
+            frames++
+            requestAnimationFrame(tick)
+          }
+          requestAnimationFrame(tick)
+        }),
+    )
+    expect(fps >= 30, `${fps.toFixed(1)} fps`)
+    // Nửa trái / nửa phải vẽ khác nhau (hai camera theo hai robot ở hai đầu Khu Xuất Phát): chênh trung bình từng điểm
+    // ảnh giữa hai vùng cùng vị trí trong mỗi nửa. Cùng một camera cho hai nửa: chênh ~0 (chỉ khử răng cưa).
+    const shot = await page.locator('#stage canvas').screenshot()
+    const diff = await page.evaluate(async (b64) => {
+      const img = new Image()
+      img.src = `data:image/png;base64,${b64}`
+      await img.decode()
+      const c = Object.assign(document.createElement('canvas'), { width: img.width, height: img.height })
+      const g = c.getContext('2d')
+      g.drawImage(img, 0, 0)
+      const w = Math.floor(img.width / 2)
+      const y = Math.round(img.height * 0.3)
+      const h = Math.round(img.height * 0.4)
+      const a = g.getImageData(4, y, w - 8, h).data
+      const b = g.getImageData(w + 4, y, w - 8, h).data
+      let sum = 0
+      for (let i = 0; i < a.length; i += 4) sum += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2])
+      return sum / (a.length / 4) / 3
+    }, shot.toString('base64'))
+    expect(diff > 8, `hai nửa gần như giống nhau (chênh trung bình ${diff.toFixed(1)}/255)`)
+    return `${fps.toFixed(1)} fps (đồ hoạ thấp, hai lần vẽ mỗi khung) · hai nửa chênh ${diff.toFixed(1)}/255`
+  })
+
+  await test('E14 thanh trạng thái (0.9.1): Xưởng không hiện số M1–M4; Chế độ giáo viên ⇒ có', async (page) => {
+    await open(page)
+    await go(page, 'workshop')
+    await page.waitForTimeout(400)
+    const plain = await page.locator('.sh-status').innerText()
+    expect(!/M1 /.test(plain), `Xưởng: ${plain.replace(/\n/g, ' | ')}`)
+    await settings(page)
+    await page.locator('.st-pop [data-role="teacher"] button', { hasText: 'Bật' }).click()
+    await closeSettings(page)
+    await page.waitForTimeout(400)
+    const teacher = await page.locator('.sh-status').innerText()
+    expect(/M1 0 · M2 0 · M3 0 · M4 0/.test(teacher), `giáo viên: ${teacher.replace(/\n/g, ' | ')}`)
+    return plain.replace(/\n/g, ' | ')
+  })
   await test('N7 nhiệm vụ 2: danh sách → thẻ 2, lời giải mẫu ▶ ⇒ trong 5 s mục tiêu đầu ✓, có vệt; Trận lẻ ⇒ không vệt', async (page) => {
     await open(page)
     await missionList(page)

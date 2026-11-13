@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { assignSeat, defaultSeats, keyName, keyRows, playerSeat, seatOf, seatOptions } from './settings.ts'
+import { assignSeat, defaultSeats, keyName, keyRows, playerSeat, seatOf, seatOptions, splitSeats } from './settings.ts'
 import { defaultConfig, sample, teleopButtons } from '../programs.ts'
 import { KEY_TABLE } from '../keys.ts'
 import { ROBOTS, type RobotConfig, type RobotType } from '../robots.ts'
@@ -85,4 +85,13 @@ test('nhãn △/✕ họ Maker: thanh răng đẩy ra mũi (Mẫu Maker) / lùi 
     assert.match(b.TRIANGLE ?? '', type === 'maker' ? /đẩy ra mũi/ : /lùi ra đuôi/, type)
     assert.match(b.CROSS ?? '', /thu về/, type)
   }
+})
+
+test('splitSeats (0.9.1): chỉ chia đôi khi hai bạn cùng lái ở Trận lẻ / Đấu tập — nửa trái bạn 1, nửa phải bạn 2', () => {
+  const two = defaultSeats('red', 'medium', 2)
+  assert.deepEqual(splitSeats(2, true, two), [0, 1])
+  assert.deepEqual(splitSeats(2, true, defaultSeats('blue', 'medium', 2)), [1, 0], 'bạn 1 Xanh vẫn ở nửa trái')
+  assert.equal(splitSeats(1, true, defaultSeats('red', 'medium', 1)), null)
+  assert.equal(splitSeats(2, false, two), null, 'màn khác (giải đấu, Xưởng…) một camera')
+  assert.equal(splitSeats(2, true, assignSeat(two, 1, 'agent-hard', 'medium')), null, 'bạn 2 không lái robot nào')
 })

@@ -51,6 +51,18 @@ export function playerSeat(modes: readonly SeatMode[], p: 0 | 1): number {
   return modes.indexOf(`player-${p}`)
 }
 
+/**
+ * Hai ghế chia đôi màn hình (0.9.1, anh Tuấn 13/11: "góc view của UrSim chia đôi màn hình cho 2 người"): hai bạn cùng
+ * lái ở Trận lẻ / Đấu tập ⇒ [ghế bạn 1, ghế bạn 2] (nửa trái, nửa phải); một bạn, bạn nào không lái, hay màn khác
+ * (giải đấu giữ một camera chung) ⇒ null.
+ */
+export function splitSeats(players: 1 | 2, onMatch: boolean, modes: readonly SeatMode[]): [number, number] | null {
+  if (players !== 2 || !onMatch) return null
+  const a = playerSeat(modes, 0)
+  const b = playerSeat(modes, 1)
+  return a >= 0 && b >= 0 ? [a, b] : null
+}
+
 /** Các lựa chọn của ô chọn ghế (Nâng cao). */
 export function seatOptions(names: readonly [string, string], players: 1 | 2): [SeatMode, string][] {
   const out: [SeatMode, string][] = [['player-0', `${names[0]} lái`]]
