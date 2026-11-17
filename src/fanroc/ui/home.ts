@@ -9,6 +9,7 @@ import { V_MAX } from '../robot.ts'
 import { armOverhang, ROBOTS, type Drive, type RobotConfig, type RobotType } from '../robots.ts'
 import { icon } from './icons.ts'
 import { STATUS_H } from './shell.ts'
+import { brandStrip } from './brand.ts'
 
 export type TileId = 'tournament' | 'match' | 'missions' | 'workshop' | 'lan'
 /** Thứ tự ô (cũng là thứ tự Tab): Giải đấu trước, chọn sẵn. */
@@ -121,6 +122,7 @@ const CSS = `
 .hm-tile .k { position: absolute; right: 12px; top: 10px; font-size: 11px; background: #0005; padding: 2px 8px; border-radius: 10px; }
 .hm-tile:not([aria-current="true"]) .k { display: none; }
 .hm-hint { color: #aab3c7; font-size: 12.5px; }
+.hm-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; max-width: 800px; }
 .hm-links { display: flex; flex-wrap: wrap; gap: 10px; max-width: 800px; }
 .hm-link { display: inline-flex; gap: 8px; align-items: center; font: 800 14px var(--font); color: #eef2fa; background: #0007; border: 1px solid #fff3; border-radius: 10px; padding: 9px 16px; cursor: pointer; }
 .hm-link small { font-weight: 500; color: #c2cbea; font-size: 12px; }
@@ -315,7 +317,9 @@ export function createHome(root: HTMLElement, on: { open(item: HomeItem): void; 
       tiles[l] = b
       links.append(b)
     }
-    inner.replaceChildren(top, el('div', 'hm-sp'), grid, links, el('div', 'hm-hint', 'Mũi tên chọn · Enter vào'))
+    const foot = el('div', 'hm-foot')
+    foot.append(el('div', 'hm-hint', 'Mũi tên chọn · Enter vào'), brandStrip(46))
+    inner.replaceChildren(top, el('div', 'hm-sp'), grid, links, foot)
     select(current, false)
   }
 

@@ -44,6 +44,11 @@ export const CREDITS: readonly Credit[] = [
     license: 'của ThingEdu, đồng ý công khai 06/11/2026',
   },
   {
+    name: 'Logo ThingEdu (bản Bridge) và Maker Việt',
+    from: 'Bộ nhận diện ThingEdu-Brand (01-logo/direction-b-bridge) và logo Maker Việt của anh Tuấn (ThingEdu), chọn dùng 18/11/2026',
+    license: 'của ThingEdu / Maker Việt, chỉ dùng để ghi nhận trong game',
+  },
+  {
     name: 'Luật chơi',
     from: 'Thể lệ FANROC 2026–2027 của Ban tổ chức FANROC — game tóm tắt bằng lời riêng, không chép văn bản',
     license: 'tên FANROC dùng có xin phép (06/11/2026)',

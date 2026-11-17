@@ -55,6 +55,7 @@ import {
 } from './ui/tournament.ts'
 import { THINGBLOCK_URL } from '../../scripts/game-config.ts'
 import { createMissionHud, createMissionList, mergeProgress, missionCards, pendingGoals, renderSideList, saveMissionVerified, totalStars } from './ui/missions.ts'
+import { brandStrip } from './ui/brand.ts'
 import { createLanScreen, lanSeats, localSeat, teamInfo, type LanView, type Role } from './ui/lan.ts'
 import { lanBackend, type LanRoom } from './net/backend.ts'
 import { GuestRoom, HostRoom, type TeamInfo } from './net/room.ts'
@@ -1712,9 +1713,10 @@ async function start(): Promise<void> {
 
 const loading = document.createElement('div')
 loading.className = 'sh-loading'
-loading.textContent = 'Sân đang tải…'
-loading.style.cssText = 'position:absolute;inset:0;display:grid;place-items:center;color:#ccc;font-size:15px'
+loading.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;gap:18px;align-items:center;justify-content:center;color:#ccc;font-size:15px'
+const loadingText = Object.assign(document.createElement('div'), { textContent: 'Sân đang tải…' })
+loading.append(brandStrip(64), loadingText)
 stage.append(loading)
 start().catch((e) => {
-  loading.textContent = `Không khởi tạo được sân: ${e instanceof Error ? e.message : String(e)}`
+  loadingText.textContent = `Không khởi tạo được sân: ${e instanceof Error ? e.message : String(e)}`
 })

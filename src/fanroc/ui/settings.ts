@@ -14,6 +14,7 @@ import type { Screen } from './router.ts'
 import { robotName } from './home.ts'
 import { SOURCE_URL } from './external.ts'
 import { CREDITS } from '../credits.ts'
+import { brandStrip } from './brand.ts'
 
 // ---------- Ghế ----------
 /**
@@ -318,6 +319,9 @@ export function createSettings(): SettingsPopover {
     const credits = el('details')
     credits.dataset.role = 'credits'
     credits.append(el('summary', undefined, 'Nguồn (mã, khối, CAD, luật)'))
+    const brands = el('div', 'st-credit')
+    brands.append(brandStrip(34))
+    credits.append(brands)
     for (const c of CREDITS) credits.append(el('div', 'st-credit', `${c.name} — ${c.from} — ${c.license}`))
     parts.push(credits)
     pop.replaceChildren(...parts)

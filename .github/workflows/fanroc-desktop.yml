@@ -71,7 +71,7 @@ jobs:
           releaseBody: |
             Bộ cài TiFa — ThingBot FanRoc Challenge, game mô phỏng ThingBot FanRoc.
 
-            Giấy phép AGPL-3.0. Mã nguồn đúng của bản này: https://github.com/${{ github.repository }}/tree/${{ github.ref_name }} (cùng khối ThingBlock https://github.com/ThingEdu/thingblock-editor/tree/${{ env.THINGBLOCK_REF }}). Bộ cài kèm `LICENSE`, `NGUON.md` (nguồn từng phần) và `THIRD_PARTY_LICENSES.txt` (MIT / Apache-2.0 của three.js, Rapier, JSZip, scratch-blocks, UrSimulator).
+            Giấy phép AGPL-3.0. Mã nguồn đúng của bản này: https://github.com/${{ github.repository }}/tree/${{ github.ref_name }} (cùng khối ThingBlock https://github.com/ThingEdu/thingblock-editor/tree/${{ env.THINGBLOCK_REF }}). Bộ cài kèm `LICENSE`, `NGUON.md` (nguồn từng phần) và `THIRD_PARTY_LICENSES.txt` (MIT / Apache-2.0 của three.js, Rapier, JSZip, scratch-blocks, UrSimulator, tokio, tokio-tungstenite, if-addrs).
 
             Hướng dẫn cho học sinh (chơi thi đấu → nhiệm vụ lập trình từng bước → chia sẻ tệp .tb): https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/fanroc/huong-dan-hoc-sinh.md
 
