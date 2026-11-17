@@ -149,6 +149,8 @@ export class Match {
   /** Luyện tập: không hết giờ, không phạt, không có giai đoạn xả bóng nhìn thấy được. */
   readonly practice: boolean
   private final: { tally: FieldTally; score: ScoreBreakdown } | null = null
+  /** Phiên gương của máy khách LAN (net/snapshot.ts): tally / điểm là số máy chủ gửi, không tự tính từ thế giới. */
+  private mirrored: { tally: FieldTally; score: ScoreBreakdown } | null = null
   private readonly climbWarned: boolean[]
   private readonly climb: Episode[]
   private readonly out: Episode[]
@@ -261,6 +263,7 @@ export class Match {
 
   /** Trạng thái sân để chấm: sau t = 180 là bản đã chốt, trước đó là bản tức thời (cho bảng điểm). */
   tally(): FieldTally {
+    if (this.mirrored) return structuredClone(this.mirrored.tally)
     if (this.final) return structuredClone(this.final.tally)
     const held = new Set<number>()
     for (const r of this.robots) {
@@ -273,8 +276,21 @@ export class Match {
   }
 
   result(): { score: ScoreBreakdown; teams: { team: string; score: number }[] } {
-    const score = this.final ? { ...this.final.score } : scoreTally(this.tally())
+    const score = this.mirrored ? { ...this.mirrored.score } : this.final ? { ...this.final.score } : scoreTally(this.tally())
     return { score, teams: this.teams.map((team, i) => ({ team, score: teamScore(score.total, this.pens[i]) })) }
+  }
+
+  /**
+   * Máy khách LAN: chép trạng thái trận của máy chủ (đồng hồ, pha, phạt, cờ, sự kiện mới từ chỉ số `evFrom`, tally và
+   * điểm). Phiên gương không bao giờ `step`.
+   */
+  mirror(m: { t: number; phase: Phase; pens: Penalty[]; flags: boolean[]; evFrom: number; events: MatchEvent[]; tally: FieldTally; score: ScoreBreakdown }): void {
+    this.t = m.t
+    this.phase = m.phase
+    m.pens.forEach((p, i) => this.pens[i] && Object.assign(this.pens[i], p))
+    m.flags.forEach((f, i) => (this.flags[i] = f))
+    if (m.evFrom <= this.events.length) this.events.splice(m.evFrom, this.events.length - m.evFrom, ...m.events)
+    this.mirrored = { tally: m.tally, score: m.score }
   }
 
   // ---------- Trọng tài ----------

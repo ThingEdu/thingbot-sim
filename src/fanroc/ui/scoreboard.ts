@@ -42,8 +42,12 @@ export function multText(s: ScoreBreakdown): string | null {
 
 const SKILL_NAME: Record<Skill, string> = { easy: 'Dễ', medium: 'Vừa', hard: 'Khó' }
 
-/** Nhãn chương trình của một ghế: agent ⇒ "Máy Dễ|Vừa|Khó"; chương trình khối ⇒ nhãn người gọi truyền (Xưởng: "Của em vN"), mặc định "Mặc định". */
-export function programLabel(d: { kind: 'agent'; skill: Skill } | { kind: 'program' }, label?: string): string {
+/**
+ * Nhãn chương trình của một ghế: agent ⇒ "Máy Dễ|Vừa|Khó"; chương trình khối ⇒ nhãn người gọi truyền (Xưởng: "Của em
+ * vN"), mặc định "Mặc định"; máy khách LAN ('remote') ⇒ nhãn truyền vào, mặc định "Máy bạn".
+ */
+export function programLabel(d: { kind: 'agent'; skill: Skill } | { kind: 'program' } | { kind: 'remote' }, label?: string): string {
+  if (d.kind === 'remote') return label ?? 'Máy bạn'
   return d.kind === 'agent' ? `Máy ${SKILL_NAME[d.skill]}` : (label ?? 'Mặc định')
 }
 

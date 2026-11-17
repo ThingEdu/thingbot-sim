@@ -26,6 +26,8 @@ export type Driver =
   /** Chương trình khối (Xưởng / nhiệm vụ / mặc định): robot đi theo cổng của bo ảo; chưa chạy / dừng / lỗi ⇒ đứng yên. */
   | { kind: 'program'; link: RobotLink }
   | { kind: 'agent'; skill: Skill }
+  /** Thi qua LAN: cổng robot do máy khách gửi lên (chương trình chạy ở máy khách); máy chủ đọc bản mới nhất mỗi bước. */
+  | { kind: 'remote'; ports: () => PortValues }
 export type SeatSpec = { cfg: RobotConfig; team: string; driver: Driver }
 export type GameMode = 'match' | 'practice' | 'mission'
 
@@ -232,8 +234,8 @@ export class GameSession {
     return d.kind === 'agent' ? new Agent(this.robots[i], this.cfgs[i], d.skill, this.seed * 10 + i) : null
   }
 
-  /** Chương trình đã nạp và đang chờ thì chạy khi cổng mở. */
-  private startLoaded(): void {
+  /** Chương trình đã nạp và đang chờ thì chạy khi cổng mở (máy khách LAN gọi mỗi khung: phiên gương không advance). */
+  startLoaded(): void {
     if (!this.canRun) return
     for (const l of this.links()) if (l.state === 'loaded') l.start()
   }
@@ -243,7 +245,7 @@ export class GameSession {
     this.startLoaded()
     const view = { world: this.world, robots: this.robots, match: this.match, humans: this.humans }
     this.drivers.forEach((d, i) => {
-      this.ports[i] = d.kind === 'program' ? d.link.ports() : this.agents[i]!.update(view, PHYSICS_DT)
+      this.ports[i] = d.kind === 'program' ? d.link.ports() : d.kind === 'remote' ? d.ports() : this.agents[i]!.update(view, PHYSICS_DT)
     })
     const ctx = { world: this.world, robots: this.robots, phase: this.match.phase }
     for (const h of this.humans) h.auto(ctx, PHYSICS_DT)
