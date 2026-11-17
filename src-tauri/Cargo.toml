@@ -7,6 +7,8 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/ThingEdu/thingbot-sim"
 edition = "2021"
 rust-version = "1.77.2"
+# Gói còn có bin fanroc-lan-hub (hub LAN cho dev / e2e); app chính là bin này.
+default-run = "thingbot-fanroc-game"
 
 [lib]
 name = "app_lib"
@@ -21,3 +23,10 @@ tauri = { version = "2.11.3", features = ["devtools"] }
 # Mở link ngoài (mã nguồn AGPL) bằng trình duyệt của máy; quyền mở link giới hạn ở capabilities/default.json.
 # 2.5.5: bản mới nhất còn chạy với tauri 2.11 (2.6+ kéo tauri lên 2.12).
 tauri-plugin-opener = "=2.5.5"
+# Thi hai máy qua LAN (src/lan.rs): hub WebSocket, đèn hiệu UDP, ống nối TCP. tokio đã có sẵn qua tauri.
+tokio = { version = "1", features = ["net", "rt-multi-thread", "sync", "time", "io-util", "macros"] }
+tokio-tungstenite = "0.26"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+if-addrs = "0.13"
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
