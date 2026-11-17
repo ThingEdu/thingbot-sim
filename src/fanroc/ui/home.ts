@@ -10,9 +10,9 @@ import { armOverhang, ROBOTS, type Drive, type RobotConfig, type RobotType } fro
 import { icon } from './icons.ts'
 import { STATUS_H } from './shell.ts'
 
-export type TileId = 'tournament' | 'match' | 'missions' | 'workshop'
+export type TileId = 'tournament' | 'match' | 'missions' | 'workshop' | 'lan'
 /** Thứ tự ô (cũng là thứ tự Tab): Giải đấu trước, chọn sẵn. */
-export const TILES: readonly TileId[] = ['tournament', 'match', 'missions', 'workshop']
+export const TILES: readonly TileId[] = ['tournament', 'match', 'missions', 'workshop', 'lan']
 /** Hai mục nhỏ dưới 4 ô (làm quen đề thi, spec §6.7): Luật chơi, Robot mẫu. */
 export type HomeLink = 'rules' | 'robots'
 export const LINKS: readonly HomeLink[] = ['rules', 'robots']
@@ -21,13 +21,14 @@ export type HomeItem = TileId | HomeLink
 
 /**
  * Lưới ô của màn chính (máy tính): Giải đấu chiếm cột trái hai hàng; hàng trên Trận lẻ · Đấu tập rồi Nhiệm vụ; hàng
- * dưới Xưởng lập trình trải hai cột. Phím mũi tên đi theo lưới đó; đi ra ngoài lưới thì đứng yên.
+ * dưới Xưởng lập trình rồi Thi qua mạng LAN. Phím mũi tên đi theo lưới đó; đi ra ngoài lưới thì đứng yên.
  */
 const MOVES: Record<HomeItem, Partial<Record<'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight', HomeItem>>> = {
   tournament: { ArrowRight: 'match', ArrowDown: 'rules' },
   match: { ArrowLeft: 'tournament', ArrowRight: 'missions', ArrowDown: 'workshop' },
-  missions: { ArrowLeft: 'match', ArrowDown: 'workshop' },
-  workshop: { ArrowUp: 'match', ArrowLeft: 'tournament', ArrowDown: 'rules' },
+  missions: { ArrowLeft: 'match', ArrowDown: 'lan' },
+  workshop: { ArrowUp: 'match', ArrowLeft: 'tournament', ArrowRight: 'lan', ArrowDown: 'rules' },
+  lan: { ArrowUp: 'missions', ArrowLeft: 'workshop', ArrowDown: 'rules' },
   // Hàng mục nhỏ nằm dưới cả lưới ô.
   rules: { ArrowUp: 'workshop', ArrowRight: 'robots' },
   robots: { ArrowUp: 'workshop', ArrowLeft: 'rules' },
@@ -113,7 +114,8 @@ const CSS = `
 .hm-tile[data-tile="tournament"] h3 { font-size: 26px; }
 .hm-tile[data-tile="match"] { background: linear-gradient(150deg, #2463eb, #142f8a); }
 .hm-tile[data-tile="missions"] { background: linear-gradient(150deg, #1fa860, #0d5e35); }
-.hm-tile[data-tile="workshop"] { grid-column: span 2; background: linear-gradient(150deg, #f2a516, #a35f00); }
+.hm-tile[data-tile="workshop"] { background: linear-gradient(150deg, #f2a516, #a35f00); }
+.hm-tile[data-tile="lan"] { background: linear-gradient(150deg, #8a4fe0, #4a1d8f); }
 .hm-tile[aria-current="true"] { outline: 3px solid #ffcf5a; outline-offset: 2px; }
 .hm-tile:hover { filter: brightness(1.08); }
 .hm-tile .k { position: absolute; right: 12px; top: 10px; font-size: 11px; background: #0005; padding: 2px 8px; border-radius: 10px; }
@@ -127,7 +129,7 @@ const CSS = `
 @media (max-width: 700px) {
   .hm-in { padding: 16px; }
   .hm-tiles { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
-  .hm-tile[data-tile="tournament"], .hm-tile[data-tile="workshop"] { grid-row: auto; grid-column: auto; }
+  .hm-tile[data-tile="tournament"] { grid-row: auto; grid-column: auto; }
   .hm-tile[data-tile="tournament"] { min-height: 120px; }
 }
 /* Trước trận: chọn robot như chọn đội. */
@@ -229,6 +231,7 @@ const TILE_TEXT: Record<TileId, { title: string; text: (i: HomeInfo) => (string 
     title: 'Xưởng lập trình',
     text: () => ['Lập trình robot của em bằng khối'],
   },
+  lan: { title: 'Thi qua mạng LAN', text: () => ['Hai máy, hai liên minh · cùng Wi-Fi'] },
 }
 
 const LINK_TEXT: Record<HomeLink, { title: string; text: string; icon: 'book' | 'robot' }> = {

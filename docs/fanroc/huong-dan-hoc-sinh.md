@@ -50,6 +50,13 @@ Màn hình chia đôi: nửa trái là camera của bạn 1, nửa phải của 
 tên; mỗi bạn cũng có thể dùng một tay cầm. Mỗi bạn ở một liên minh, chơi cùng một robot máy. ⚙ › Camera đổi góc nhìn
 cho cả hai nửa: Ghế lái (nhìn rộng từ phía liên minh của mình) hoặc Theo robot.
 
+**Thi hai máy qua mạng LAN:** hai máy cùng một mạng Wi-Fi / LAN và cùng phiên bản TiFa. Ở màn chính chọn **Thi qua
+mạng LAN**. Một máy bấm **Tạo phòng** — máy này là máy chủ, liên minh Đỏ, màn hình hiện địa chỉ IP. Máy kia chọn phòng
+trong danh sách (hoặc gõ địa chỉ IP đó) rồi bấm **Vào phòng** — liên minh Xanh. Mỗi máy một hoặc hai bạn (⚙ › Hai bạn
+chơi); ghế trống là robot máy. Hai bên bấm **Sẵn sàng**, đếm ngược 3 giây là vào trận. Lần đầu máy hỏi có cho TiFa
+dùng mạng không thì bấm **Cho phép**. Mất mạng giữa trận thì robot của máy đó đứng yên; nối lại trong 10 giây là chơi
+tiếp.
+
 Trong trận:
 
 - Bảng điểm ở trên. Mỗi lần được cộng, bị trừ điểm hay bị trọng tài phạt, góc phải dưới hiện **một dòng báo kèm lý do**,

@@ -6,16 +6,17 @@ import { ROBOTS } from '../robots.ts'
 import { V_MAX } from '../robot.ts'
 import { defaultConfig } from '../programs.ts'
 
-test('TILES: 4 ô, Giải đấu đầu tiên (chọn sẵn)', () => {
-  assert.deepEqual([...TILES], ['tournament', 'match', 'missions', 'workshop'])
+test('TILES: 5 ô, Giải đấu đầu tiên (chọn sẵn), Thi qua mạng LAN cuối', () => {
+  assert.deepEqual([...TILES], ['tournament', 'match', 'missions', 'workshop', 'lan'])
 })
 
 test('tileMove: phím mũi tên đi theo lưới ô; ra ngoài lưới / phím khác thì đứng yên', () => {
   const rows: [Parameters<typeof tileMove>[0], string, string][] = [
     ['tournament', 'ArrowRight', 'match'], ['tournament', 'ArrowLeft', 'tournament'], ['tournament', 'ArrowDown', 'rules'], ['tournament', 'ArrowUp', 'tournament'],
     ['match', 'ArrowLeft', 'tournament'], ['match', 'ArrowRight', 'missions'], ['match', 'ArrowDown', 'workshop'], ['match', 'ArrowUp', 'match'],
-    ['missions', 'ArrowLeft', 'match'], ['missions', 'ArrowDown', 'workshop'], ['missions', 'ArrowRight', 'missions'], ['missions', 'ArrowUp', 'missions'],
-    ['workshop', 'ArrowUp', 'match'], ['workshop', 'ArrowLeft', 'tournament'], ['workshop', 'ArrowRight', 'workshop'], ['workshop', 'ArrowDown', 'rules'],
+    ['missions', 'ArrowLeft', 'match'], ['missions', 'ArrowDown', 'lan'], ['missions', 'ArrowRight', 'missions'], ['missions', 'ArrowUp', 'missions'],
+    ['workshop', 'ArrowUp', 'match'], ['workshop', 'ArrowLeft', 'tournament'], ['workshop', 'ArrowRight', 'lan'], ['workshop', 'ArrowDown', 'rules'],
+    ['lan', 'ArrowUp', 'missions'], ['lan', 'ArrowLeft', 'workshop'], ['lan', 'ArrowRight', 'lan'], ['lan', 'ArrowDown', 'rules'],
     // Hàng mục nhỏ dưới 4 ô: Luật chơi · Robot mẫu.
     ['rules', 'ArrowRight', 'robots'], ['rules', 'ArrowUp', 'workshop'], ['rules', 'ArrowLeft', 'rules'], ['rules', 'ArrowDown', 'rules'],
     ['robots', 'ArrowLeft', 'rules'], ['robots', 'ArrowUp', 'workshop'], ['robots', 'ArrowRight', 'robots'], ['robots', 'ArrowDown', 'robots'],
@@ -24,7 +25,7 @@ test('tileMove: phím mũi tên đi theo lưới ô; ra ngoài lưới / phím k
   for (const [from, key, to] of rows) assert.equal(tileMove(from, key), to, `${from} + ${key}`)
 })
 
-test('LINKS: hai mục nhỏ Luật chơi, Robot mẫu — ngoài 4 ô chính', () => {
+test('LINKS: hai mục nhỏ Luật chơi, Robot mẫu — ngoài các ô chính', () => {
   assert.deepEqual([...LINKS], ['rules', 'robots'])
   for (const l of LINKS) assert.ok(!(TILES as readonly string[]).includes(l))
 })
@@ -69,7 +70,14 @@ test('router: camera mặc định theo màn (trận / đấu tập / Xưởng T
   assert.equal(defaultCamera('treplay'), 'field')
   assert.equal(defaultCamera('rules'), 'orbit')
   assert.equal(defaultCamera('robots'), 'orbit')
-  assert.equal(SCREENS.length, 11)
+  assert.equal(defaultCamera('lan'), 'field')
+  assert.equal(defaultCamera('lanmatch'), 'driver')
+  assert.equal(SCREENS.length, 13)
+})
+
+test('router: trận hai máy qua LAN có bảng điểm, khối; không thanh chạy (không ⏸ ⏭ ×2); phòng chờ phủ sân', () => {
+  assert.deepEqual(chrome('lanmatch'), { ...chrome('match'), runbar: false })
+  assert.deepEqual(chrome('lan'), chrome('tournament'))
 })
 
 test('router: trận giải đấu như trận lẻ (khối, thanh chạy, bảng điểm); Xem nhanh chỉ bảng điểm, không thanh chạy', () => {

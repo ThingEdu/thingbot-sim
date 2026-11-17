@@ -10,6 +10,7 @@ import type { MatchEvent, Penalty } from '../match.ts'
 import type { Phase } from '../layout.ts'
 import type { FieldTally, ScoreBreakdown } from '../scoring.ts'
 import type { ClimbState } from '../ladder.ts'
+import type { PortValues } from '../ports.ts'
 
 const ST = { box: 'b', field: 'f', held: 'h', tray: 't', out: 'o' } as const
 const ST_OF: Record<string, BallState['st']> = { b: 'box', f: 'field', h: 'held', t: 'tray', o: 'out' }
@@ -40,6 +41,8 @@ export interface Snapshot {
   tally: FieldTally
   score: ScoreBreakdown
   trays: { o: number; g: number }[]
+  /** Cổng từng robot ở bước vừa chạy (hình: con lăn quay, cửa xả, kẹp cờ). */
+  ports: PortValues[]
   robots: RobotSnap[]
   /** Trạng thái từng bóng, một chữ mỗi quả (b f h t o). */
   balls: string
@@ -94,6 +97,7 @@ export function capture(g: GameSession, frame: number, evFrom: number): Snapshot
     tally: m.tally(),
     score: m.result().score,
     trays: g.humans.map((h) => ({ ...h.tray })),
+    ports: g.ports.map((p) => ({ ...p })),
     robots,
     balls,
     nums: Float32Array.from(nums),
@@ -174,5 +178,6 @@ export function apply(g: GameSession, s: Snapshot): boolean {
   })
   g.match.mirror(s)
   s.trays.forEach((t, i) => g.humans[i] && Object.assign(g.humans[i].tray, t))
+  s.ports.forEach((p, i) => i < g.ports.length && (g.ports[i] = p))
   return true
 }

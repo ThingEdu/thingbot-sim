@@ -6,7 +6,7 @@
  *     N3–N6, N6b–N6d, N2c (màn chính / ⚙ / Xưởng, Task 13) · N11, N11b, N11c (Luật chơi + Robot mẫu, Task 17) ·
  *     N7, N7b, N8 (nhiệm vụ, Task 14) · N8c (nhiệm vụ 11 Leo Thang Cứu Hỏa, luật V4) · N9, N9b–N9i, N10 (giải đấu, Task 15; N9i luật V4) · N1, N1b, N1c (vỏ, Task 11) ·
  *     N2, N2b (bảng điểm, Task 12) · E1–E4, E6–E11 (ý cũ của sân, viết lại theo giao diện mới ở Task 16; E5 Human
- *     Player bấm phím đã xoá cùng tính năng)
+ *     Player bấm phím đã xoá cùng tính năng) · L1–L4 (Thi qua mạng LAN: hai trang + hub Rust; cần `cargo build --bin fanroc-lan-hub` trong src-tauri)
  *   FANROC_URL=http://localhost:5191/mo-phong/fanroc.html npm run e2e:fanroc   # dùng trang đang chạy sẵn
  *   npm run e2e:fanroc -- E3 E5        # chỉ chạy các phép thử có tên bắt đầu như vậy
  *
@@ -242,6 +242,7 @@ async function main() {
   await missionTests()
   await tournamentTests()
   await shellTests()
+  await lanTests()
 
   await test('E1 trang tải, không lỗi console, tiêu đề và chữ bảng điểm tiếng Việt', async (page) => {
     await open(page)
@@ -927,11 +928,11 @@ async function gameTests() {
     return `${t0.join(' · ')} → em chọn Xe Phân Loại: ${t1.join(' · ')} · nhiệm vụ 12: ${t2.join(' · ')}`
   })
 
-  await test('N3 màn chính: 4 ô, Giải đấu chọn sẵn, phím mũi tên đổi ô, Enter ⇒ Giải đấu (màn ghi danh)', async (page) => {
+  await test('N3 màn chính: 5 ô (thêm Thi qua mạng LAN), Giải đấu chọn sẵn, phím mũi tên đổi ô, Enter ⇒ Giải đấu (màn ghi danh)', async (page) => {
     await open(page)
     await page.waitForTimeout(800) // camera quay chậm vào chỗ
     const tiles = await page.locator('.hm[data-screen="home"] .hm-tile').evaluateAll((es) => es.map((e) => e.dataset.tile))
-    expect(JSON.stringify(tiles) === '["tournament","match","missions","workshop"]', `ô: ${tiles.join(', ')}`)
+    expect(JSON.stringify(tiles) === '["tournament","match","missions","workshop","lan"]', `ô: ${tiles.join(', ')}`)
     const sel = () => page.locator('.hm-tile[aria-current="true"]').getAttribute('data-tile')
     expect((await sel()) === 'tournament', `ô chọn sẵn: ${await sel()}`)
     const line = await page.locator('.hm-sub').innerText()
@@ -948,11 +949,11 @@ async function gameTests() {
     await page.locator('.hm[data-screen="tournament"] button', { hasText: 'Về màn chính' }).click()
     await page.locator('.hm[data-screen="home"]').waitFor()
     const moves = []
-    for (const k of ['ArrowRight', 'ArrowRight', 'ArrowDown', 'ArrowUp', 'ArrowLeft']) {
+    for (const k of ['ArrowRight', 'ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'ArrowLeft']) {
       await page.keyboard.press(k)
       moves.push(await sel())
     }
-    expect(JSON.stringify(moves) === '["match","missions","workshop","match","tournament"]', `mũi tên: ${moves.join(' → ')}`)
+    expect(JSON.stringify(moves) === '["match","missions","lan","workshop","match","tournament"]', `mũi tên: ${moves.join(' → ')}`)
     await page.keyboard.press('ArrowRight')
     await page.keyboard.press('Enter') // ô Trận lẻ · Đấu tập ⇒ Trước trận
     await page.locator('.hm[data-screen="pick"]').waitFor()
@@ -1262,7 +1263,7 @@ async function gameTests() {
     const links = await page.locator('.hm[data-screen="home"] .hm-link').evaluateAll((es) => es.map((e) => `${e.dataset.link}:${e.textContent}`))
     expect(links.length === 2 && /^rules:Luật chơi/.test(links[0]) && /^robots:Robot mẫu/.test(links[1]), `mục nhỏ: ${links.join(' | ')}`)
     const tiles = await page.locator('.hm[data-screen="home"] .hm-tile').count()
-    expect(tiles === 4, `màn chính có ${tiles} ô`)
+    expect(tiles === 5, `màn chính có ${tiles} ô`)
     await page.keyboard.press('ArrowDown')
     const cur = await page.locator('.hm-link[aria-current="true"]').getAttribute('data-link')
     expect(cur === 'rules', `↓ từ Giải đấu ⇒ ${cur}`)
@@ -2119,6 +2120,183 @@ async function shellTests() {
     expect(run.y >= sb.y + sb.height, `thanh chạy y=${run.y} đè bảng điểm (đáy ${sb.y + sb.height})`)
     if (SHOTS) await page.screenshot({ path: resolve(SHOTS, 't12-match.png') })
     return `"${m1}" → "${m2}" → "${m3}" · bảng điểm đáy ${Math.round(sb.y + sb.height)} px, thanh chạy ${Math.round(run.y)} px · không chữ nổi`
+  })
+}
+
+// ---------- Thi qua mạng LAN (spec 2026-11-18-fanroc-lan-design.md) ----------
+// Hai trang Chromium (hai "máy") nối hub Rust thật (`fanroc-lan-hub`, cùng mã với app) qua `?lanhub=`. Mỗi phép thử
+// một hub riêng trên cổng trống.
+const HUB_BIN = resolve(ROOT, 'src-tauri/target/debug/fanroc-lan-hub')
+async function startHub() {
+  const port = await freePort()
+  const hub = spawn(HUB_BIN, [String(port)], { stdio: ['ignore', 'pipe', 'pipe'] })
+  await new Promise((ok, fail) => {
+    let out = ''
+    hub.stdout.on('data', (d) => ((out += d), out.includes('hub ') && ok()))
+    hub.once('exit', (c) => fail(new Error(`hub thoát (${c}): ${out} — chạy: cd src-tauri && cargo build --bin fanroc-lan-hub`)))
+    hub.once('error', fail)
+  })
+  return { port, stop: () => hub.kill('SIGTERM') }
+}
+/** Mở trang thứ hai (máy kia) trong ngữ cảnh riêng, cùng hub. */
+async function otherMachine(hubPort, errors) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } })
+  const page = await context.newPage()
+  page.on('pageerror', (e) => errors.push(`máy khách: ${e.message}`))
+  page.on('console', (m) => m.type() === 'error' && !/WebSocket/.test(m.text()) && errors.push(`máy khách: ${m.text()}`))
+  await page.addInitScript(FAKE_PADS)
+  await openLan(page, hubPort)
+  return { page, context }
+}
+async function openLan(page, hubPort) {
+  await page.goto(`${URL_}?lanhub=ws://127.0.0.1:${hubPort}`)
+  await page.waitForFunction(() => window.__fanroc?.editors && window.__fanroc.screen === 'home', null, { timeout: 60000 })
+  // Vào bằng ô của màn chính như học sinh.
+  await page.locator('.hm-tile[data-tile="lan"]').click()
+  await page.locator('.hm[data-screen="lan"]:not([hidden])').waitFor({ timeout: 15000 })
+}
+const lanState = (page) => page.evaluate(() => ({ ...window.__fanroc.lan, role: window.__fanroc.lan.role, stage: window.__fanroc.lan.stage, note: window.__fanroc.lan.note, guestOnline: window.__fanroc.lan.guestOnline, screen: window.__fanroc.screen }))
+/** Máy chủ tạo phòng, máy khách vào, hai bên Sẵn sàng ⇒ cả hai ở trận đang thi đấu. */
+async function lanMatch(host, guest) {
+  await host.locator('button[data-key="create"]').click()
+  await host.waitForFunction(() => window.__fanroc.lan.role === 'host', null, { timeout: 10000 })
+  await guest.locator('button[data-key="join"]').click()
+  for (const p of [host, guest]) await p.waitForFunction(() => window.__fanroc.lan.stage === 'lobby', null, { timeout: 10000 })
+  const names = await host.locator('.ln-side[data-side="guest"] .who').innerText()
+  for (const p of [host, guest]) await p.locator('button[data-key="ready"]').click()
+  for (const p of [host, guest])
+    await p.waitForFunction(() => window.__fanroc.screen === 'lanmatch' && window.__fanroc.lan.stage === 'playing', null, { timeout: 30000 })
+  return names
+}
+
+async function lanTests() {
+  // Hub dựng một lần cho cả nhóm thì phép thử sau dính phòng của phép thử trước: mỗi phép thử một hub.
+  await test('L1 LAN: tạo phòng, vào phòng, Sẵn sàng ⇒ trận hai máy; W ở máy khách lái robot Xanh trên cả hai máy', async (host, errors) => {
+    const hub = await startHub()
+    let other
+    try {
+      await openLan(host, hub.port)
+      other = await otherMachine(hub.port, errors)
+      const guest = other.page
+      const who = await lanMatch(host, guest)
+      expect((await lanState(host)).role === 'host' && (await lanState(guest)).role === 'guest', 'vai hai máy')
+      const seeds = await Promise.all([host, guest].map((p) => p.evaluate(() => [window.__fanroc.lan.seed, window.__fanroc.session.seed])))
+      expect(seeds[0][0] === seeds[1][0] && seeds[0][1] === seeds[1][1], `cùng seed: ${JSON.stringify(seeds)}`)
+      await host.evaluate(() => window.__fanroc.lan.setTime(-0.02)) // bỏ 10 s xả bóng
+      await guest.waitForFunction(() => window.__fanroc.match.phase === 'play', null, { timeout: 15000 })
+      await guest.waitForFunction(() => window.__fanroc.editors.state(0) === 'running', null, { timeout: 15000 })
+      const h0 = await pose(host, 1)
+      const r0 = await pose(host, 0)
+      await guest.keyboard.down('KeyW')
+      await guest.waitForTimeout(1500)
+      await guest.keyboard.up('KeyW')
+      await guest.waitForTimeout(400)
+      const h1 = await pose(host, 1)
+      const g1 = await pose(guest, 1)
+      const r1 = await pose(host, 0)
+      expect(dist(h0, h1) > 0.15, `robot Xanh trên máy chủ chạy ${dist(h0, h1).toFixed(3)} m`)
+      expect(dist(h1, g1) < 0.05, `máy khách vẽ đúng chỗ máy chủ (lệch ${dist(h1, g1).toFixed(3)} m)`)
+      expect(dist(r0, r1) < 0.02, `robot Đỏ của máy chủ không bị W máy khách lái (${dist(r0, r1).toFixed(3)} m)`)
+      const balls = await Promise.all([host, guest].map((p) => p.evaluate(() => window.__fanroc.world.balls.map((b) => b.st).join(''))))
+      expect(balls[0] === balls[1], 'trạng thái 300 quả bóng hai máy giống nhau')
+      return `${who.replace(/\n/g, ' / ')} · Xanh chạy ${dist(h0, h1).toFixed(2)} m · lệch hai máy ${dist(h1, g1).toFixed(3)} m`
+    } finally {
+      await other?.context.close()
+      hub.stop()
+    }
+  })
+
+  await test('L2 LAN: hết giờ ⇒ hai máy cùng bảng điểm (số của máy chủ), nút Về phòng chờ', async (host, errors) => {
+    const hub = await startHub()
+    let other
+    try {
+      await openLan(host, hub.port)
+      other = await otherMachine(hub.port, errors)
+      const guest = other.page
+      await lanMatch(host, guest)
+      await host.evaluate(() => window.__fanroc.lan.setTime(176))
+      for (const p of [host, guest]) await p.locator('.sb-result:not([hidden])').waitFor({ timeout: 20000 })
+      const res = await Promise.all([host, guest].map((p) => p.evaluate(() => JSON.stringify(window.__fanroc.match.result()))))
+      expect(res[0] === res[1], `kết quả khác nhau:\n${res[0]}\n${res[1]}`)
+      const big = await Promise.all([host, guest].map((p) => p.locator('.sb-result .sb-big').innerText()))
+      expect(big[0] === big[1], `điểm trên màn kết quả: ${big}`)
+      await guest.locator('.sb-result button', { hasText: 'Về phòng chờ' }).click()
+      await host.locator('.sb-result button', { hasText: 'Về phòng chờ' }).click()
+      for (const p of [host, guest]) await p.waitForFunction(() => window.__fanroc.screen === 'lan' && window.__fanroc.lan.stage === 'lobby', null, { timeout: 10000 })
+      return `điểm ${big[0]} trên cả hai máy · về phòng chờ`
+    } finally {
+      await other?.context.close()
+      hub.stop()
+    }
+  })
+
+  await test('L3 LAN: máy khách mất mạng giữa trận (đang giữ D quay tại chỗ) ⇒ máy chủ báo, robot Xanh đứng yên, trận chạy tiếp; tắt hẳn cũng vậy', async (host, errors) => {
+    const hub = await startHub()
+    let other
+    try {
+      await openLan(host, hub.port)
+      other = await otherMachine(hub.port, errors)
+      const guest = other.page
+      await lanMatch(host, guest)
+      await host.evaluate(() => window.__fanroc.lan.setTime(-0.02))
+      await guest.waitForFunction(() => window.__fanroc.editors.state(0) === 'running', null, { timeout: 15000 })
+      // Quay tại chỗ (không đâm rào nên không tự dừng): nếu máy chủ còn dùng lệnh cũ thì góc còn đổi mãi.
+      await guest.keyboard.down('KeyD')
+      await guest.waitForTimeout(500)
+      const spin0 = await pose(host, 1)
+      await guest.waitForTimeout(300)
+      const spin1 = await pose(host, 1)
+      expect(Math.abs(spin1.yaw - spin0.yaw) > 0.05, `robot Xanh chưa quay theo phím D (${deg(spin1.yaw - spin0.yaw).toFixed(1)}°)`)
+      await guest.evaluate(() => window.__fanroc.lan.mute()) // rút dây mạng: máy khách vẫn giữ D, chỉ thôi gửi
+      await host.waitForFunction(() => window.__fanroc.lan.guestOnline === false, null, { timeout: 6000 })
+      const note = (await lanState(host)).note ?? ''
+      expect(/mất kết nối/.test(note), `lời báo máy chủ: "${note}"`)
+      await host
+        .waitForFunction(() => /mất kết nối/.test(document.querySelector('.ln-badge')?.textContent ?? ''), null, { timeout: 3000 })
+        .catch(() => {})
+      const badge = await host.locator('.ln-badge').innerText()
+      expect(/mất kết nối/.test(badge), `chữ trên sân: "${badge}"`)
+      await host.waitForTimeout(300)
+      const a = await pose(host, 1)
+      const t0 = await host.evaluate(() => window.__fanroc.match.t)
+      await host.waitForTimeout(1200)
+      const b = await pose(host, 1)
+      const t1 = await host.evaluate(() => window.__fanroc.match.t)
+      const turned = Math.abs(Math.atan2(Math.sin(b.yaw - a.yaw), Math.cos(b.yaw - a.yaw)))
+      expect(dist(a, b) < 0.01 && turned < 0.02, `robot Xanh còn chạy ${dist(a, b).toFixed(3)} m / quay ${deg(turned).toFixed(1)}° khi máy khách mất mạng`)
+      expect(t1 - t0 > 0.8, `trận chạy tiếp (${t0.toFixed(1)} → ${t1.toFixed(1)} s)`)
+      await other.context.close() // tắt hẳn máy khách: máy chủ vẫn thi đấu
+      other = null
+      await host.waitForTimeout(800)
+      const st = await lanState(host)
+      expect(st.stage === 'playing' && st.screen === 'lanmatch', `máy chủ sau khi khách tắt: ${st.stage} / ${st.screen}`)
+      return `"${note}" · Xanh đứng yên · đồng hồ ${t0.toFixed(1)} → ${t1.toFixed(1)} s`
+    } finally {
+      await other?.context.close()
+      hub.stop()
+    }
+  })
+
+  await test('L4 LAN: máy khác phiên bản giao thức ⇒ bị từ chối, máy chủ vẫn chờ', async (host) => {
+    const hub = await startHub()
+    try {
+      await openLan(host, hub.port)
+      await host.locator('button[data-key="create"]').click()
+      await host.waitForFunction(() => window.__fanroc.lan.stage === 'waiting', null, { timeout: 10000 })
+      const reply = await new Promise((ok, fail) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${hub.port}`)
+        const timer = setTimeout(() => fail(new Error('không có trả lời')), 5000)
+        ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', proto: 999, info: { team: 'Lạ', team2: 'Lạ 2', players: 1, robots: [], skill: 'easy', app: '9' } }))
+        ws.onmessage = (e) => (clearTimeout(timer), ws.close(), ok(String(e.data)))
+      })
+      expect(JSON.parse(reply).reason === 'proto', `trả lời: ${reply}`)
+      await host.waitForTimeout(300)
+      const st = await lanState(host)
+      expect(st.stage === 'waiting', `máy chủ: ${st.stage}`)
+      return `trả lời ${reply} · máy chủ vẫn chờ`
+    } finally {
+      hub.stop()
+    }
   })
 }
 

@@ -21,7 +21,10 @@ export const COUNTDOWN_MS = 3000
 export const PING_MS = 1000
 
 export interface TeamInfo {
+  /** Tên đội ô trái (bạn 1). */
   team: string
+  /** Tên đội ô phải: bạn 2, hoặc tên đội máy khi chỉ một bạn. */
+  team2: string
   players: 1 | 2
   /** Robot ô trái, ô phải của liên minh (ô phải chỉ dùng khi có robot máy hay bạn thứ hai). */
   robots: [RobotConfig, RobotConfig]

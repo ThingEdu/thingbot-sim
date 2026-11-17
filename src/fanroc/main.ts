@@ -55,6 +55,12 @@ import {
 } from './ui/tournament.ts'
 import { THINGBLOCK_URL } from '../../scripts/game-config.ts'
 import { createMissionHud, createMissionList, mergeProgress, missionCards, pendingGoals, renderSideList, saveMissionVerified, totalStars } from './ui/missions.ts'
+import { createLanScreen, lanSeats, localSeat, teamInfo, type LanView, type Role } from './ui/lan.ts'
+import { lanBackend, type LanRoom } from './net/backend.ts'
+import { GuestRoom, HostRoom, type TeamInfo } from './net/room.ts'
+import { wsTransport } from './net/transport.ts'
+import { apply as applySnapshot, capture, decode, encode } from './net/snapshot.ts'
+import tauriConf from '../../src-tauri/tauri.conf.json' with { type: 'json' }
 
 const shell = createShell(document.querySelector<HTMLElement>('#app')!, { thingblockUrl: THINGBLOCK_URL })
 const stage = shell.stage
@@ -202,6 +208,7 @@ async function start(): Promise<void> {
     if (screen === 'workshop') return p === wsPlayer ? seatOf(p, settings.alliance) : -1
     if (screen === 'mission') return p === 0 ? 0 : -1
     if (screen === 'tmatch') return tourSeat(p)
+    if (screen === 'lanmatch') return lan ? localSeat(lan.role, p, players()) : -1
     return isMatch() ? playerSeat(modes, p) : -1
   }
   /** Ghế camera "Theo robot" bám theo: robot của bạn đang mở thẻ khối, không có thì Robot 1. */
@@ -255,6 +262,24 @@ async function start(): Promise<void> {
       })
       return named(GameSession.create({ mode: 'match', seed: matchSeed(t, tourIndex), seats: list }), list.map((x) => x.team))
     }
+    if (screen === 'lanmatch' && lan?.host && lan.guest) {
+      // Trận hai máy: máy chủ lái ghế mình bằng chương trình, ghế máy khách bằng cổng gửi lên ('remote'), ghế trống là
+      // robot máy. Máy khách dựng phiên gương cùng seed / robot (không advance); ghế máy chủ đứng yên ở phía khách.
+      const L = lan
+      const host = L.room instanceof HostRoom ? L.room : null
+      const s = lanSeats(L.host!, L.guest!)
+      list = s.who.map((w, i) => {
+        let driver: Driver
+        if ('agent' in w) driver = { kind: 'agent', skill: w.agent }
+        else if (w.side === L.role) driver = { kind: 'program', link: editors.link(w.player) }
+        else if (host) {
+          const k = w.player
+          driver = { kind: 'remote', ports: () => host.ports(k) }
+        } else driver = { kind: 'program', link: idle[i] }
+        return { cfg: s.cfgs[i], team: s.teams[i], driver }
+      })
+      return named(GameSession.create({ mode: 'match', seed: L.room.seed, seats: list }), s.teams)
+    }
     if (isMatch()) {
       mode = screen === 'practice' ? 'practice' : 'match'
       list = [0, 1, 2, 3].map((i) => ({ cfg: seatCfg(i), team: seatTeam(i), driver: seatDriver(i) }))
@@ -296,6 +321,11 @@ async function start(): Promise<void> {
         const p = PLAYERS.find((x) => tourSeat(x) === i)
         return p === undefined ? programLabel(game.driver(i)) : tourLabel(p)
       }
+      if (screen === 'lanmatch' && lan?.host && lan.guest) {
+        const w = lanSeats(lan.host, lan.guest).who[i]
+        if ('agent' in w) return programLabel({ kind: 'agent', skill: w.agent })
+        return w.side === lan.role ? label(w.player) : 'Máy bạn'
+      }
       if (!isMatch()) return programLabel(game.driver(i))
       const m = modes[i]
       const p = modeOwner(m)
@@ -314,6 +344,7 @@ async function start(): Promise<void> {
         // Xưởng: chỉ thẻ của bạn đang sửa (Chạy / Lưu cùng tác động lên một chương trình).
         if (screen === 'mission') return p === 0 && mission ? `${names[0]} · Nhiệm vụ ${mission.n}` : null
         if (screen === 'tmatch') return tourSeat(p) >= 0 ? `${names[p]} · ${robotName(cfgOf(p))}` : null
+        if (screen === 'lanmatch') return seatOfPlayer(p) >= 0 ? `${names[p]} · ${robotName(cfgOf(p))}` : null
         const used = screen === 'workshop' ? p === wsPlayer : p === 0 || players() === 2 || modes.some((m) => modeOwner(m) === p)
         return used ? `${names[p]} · ${robotName(cfgOf(p))}` : null
       }),
@@ -441,6 +472,32 @@ async function start(): Promise<void> {
         const p = game.robots[i].pose
         return { x: p.x, z: p.z, yaw: p.yaw }
       },
+      /** Thi qua mạng LAN (e2e): vai, giai đoạn phòng, lời báo; máy chủ tua giờ trận. */
+      lan: {
+        get role() {
+          return lan?.role ?? null
+        },
+        get stage() {
+          return lan?.room.stage ?? null
+        },
+        get note() {
+          return lan ? (lan.room instanceof GuestRoom ? (lan.room.rejected ?? lan.room.note) : lan.room.note) : lanChoose.note
+        },
+        get guestOnline() {
+          return lan?.room instanceof HostRoom ? lan.room.guestOnline : null
+        },
+        get seed() {
+          return lan?.room.seed ?? null
+        },
+        setTime: (t: number) => {
+          if (lan?.role === 'host' && screen === 'lanmatch') game.match.t = t
+        },
+        /** Như rút dây mạng: máy này thôi gửi thư (vẫn chạy, vẫn giữ phím). */
+        mute: () => {
+          const t = (lan?.room as unknown as { transport?: { send(d: unknown): void } } | undefined)?.transport
+          if (t) t.send = () => {}
+        },
+      },
     }
   }
 
@@ -491,6 +548,16 @@ async function start(): Promise<void> {
             game.match.log(`Giải đấu · trận ${tourIndex + 1}/${tour.schedule.length}: robot của em chạy chương trình khi hết 10 giây xả bóng`)
           }
           if (screen === 'treplay') game.match.log(`Xem nhanh trận ${tourIndex + 1} (×40) — kết quả đã ghi không đổi`)
+          if (screen === 'lanmatch' && lan) {
+            for (const p of PLAYERS) if (seatOfPlayer(p) >= 0) editors.run(p)
+            lan.frame = 0
+            lan.evSent = 0
+            lan.snap = null
+            if (lan.room instanceof HostRoom) {
+              game.match.log('Thi qua mạng LAN: robot của em chạy chương trình khi hết 10 giây xả bóng')
+              lan.room.hostLoaded()
+            } else lan.room.loaded()
+          }
           if (screen === 'mission') missionReady()
           expose()
           scene.camera(cam, mySeat())
@@ -1009,6 +1076,8 @@ async function start(): Promise<void> {
     rules.hide()
     gallery.hide()
     tScreen.hide()
+    lanScreen.hide()
+    if (next !== 'lan' && next !== 'lanmatch' && lan) closeLan(null)
     missionList.hide()
     if (next !== 'mission') missionHud.hide()
     mrun = null
@@ -1031,7 +1100,8 @@ async function start(): Promise<void> {
     board.clearFx()
     feed.clear()
     feedView.visible(c.scoreboard)
-    cards.visible(isMatch() || next === 'workshop' || next === 'tmatch')
+    cards.visible(isMatch() || next === 'workshop' || next === 'tmatch' || next === 'lanmatch')
+    lanBadge.hidden = next !== 'lanmatch'
     // Xem nhanh chạy ×40 (không có chương trình nào nên R24 không khoá); rời Xem nhanh về ×1.
     if (next === 'treplay') requested = 40
     else if (prevScreen === 'treplay') requested = 1
@@ -1044,6 +1114,7 @@ async function start(): Promise<void> {
       for (const p of PLAYERS) if (playerSeat(modes, p) >= 0) editors.load(p, programFor(p))
     } else clearFollowers()
     if (next === 'tmatch') for (const p of PLAYERS) if (tourSeat(p) >= 0) editors.load(p, tourProgram(p))
+    if (next === 'lanmatch') for (const p of PLAYERS) if (seatOfPlayer(p) >= 0) editors.load(p, programFor(p))
     // Nhiệm vụ: hộp công cụ của nhiệm vụ; màn khác: hộp công cụ đầy đủ.
     editors.setToolbox(0, next === 'mission' && mission ? mission.toolbox : TOOLBOX)
     if (next === 'mission' && mission) {
@@ -1069,6 +1140,7 @@ async function start(): Promise<void> {
     showTabs()
     if (next === 'workshop' || isMatch()) editors.show(next === 'workshop' ? wsPlayer : 0)
     if (next === 'tmatch') editors.show(Math.max(0, PLAYERS.findIndex((p) => tourSeat(p) >= 0)))
+    if (next === 'lanmatch') editors.show(0)
     cam = defaultCamera(next)
   }
   /** Sau khi phiên mới đã dựng: hiện màn phủ (màn chính / màn chờ). */
@@ -1080,6 +1152,7 @@ async function start(): Promise<void> {
     else if (next === 'missions') missionList.show(missionCards(store))
     else if (next === 'mission') showSide()
     else if (next === 'tournament') showTour(tourCorrupt ? 'corrupt' : !tour ? 'register' : nextMatch(tour) === null ? 'podium' : 'pit')
+    else if (next === 'lan') showLan()
   }
   let going = Promise.resolve()
   /** Đổi màn; 'mission' cần `arg.id` (thiếu ⇒ nhiệm vụ vừa làm). Nhiệm vụ trận (12) mở màn Trận lẻ, robot máy mức Dễ. */
@@ -1241,8 +1314,204 @@ async function start(): Promise<void> {
     })()
   }
 
+  // ---------- Thi qua mạng LAN (spec 2026-11-18-fanroc-lan-design.md) ----------
+  const lanNet = lanBackend()
+  /** Phòng đang mở (máy chủ / máy khách); null = chưa vào phòng (màn chọn Tạo / Vào phòng). */
+  type Lan = {
+    role: Role
+    room: HostRoom | GuestRoom
+    /** Địa chỉ WebSocket tới hub / ống nối trên máy này (máy khách nối lại bằng địa chỉ này). */
+    url: string
+    addrs: string[]
+    host: TeamInfo | null
+    guest: TeamInfo | null
+    /** Máy chủ: số khung đã gửi, số sự kiện máy khách đã có. Máy khách: ảnh chụp mới nhất chưa áp. */
+    frame: number
+    evSent: number
+    snap: ArrayBuffer | null
+  }
+  let lan: Lan | null = null
+  const lanChoose = { rooms: [] as LanRoom[], addr: '', note: null as string | null, busy: false }
+  let lanRoomsAt = 0
+  const lanInfo = (role: Role): TeamInfo => {
+    const second = role === 'host' ? 2 : 3
+    return teamInfo({
+      names,
+      players: players(),
+      robots: [cfgOf(0), players() === 2 ? cfgOf(1) : lineupConfig(second)],
+      skill: settings.skill,
+      machine: TEAMS[second],
+      app: tauriConf.version,
+    })
+  }
+  const lanView = (): LanView => {
+    if (!lan) return { kind: 'choose', desktop: lanNet.desktop, rooms: lanChoose.rooms, addr: lanChoose.addr, note: lanChoose.note, busy: lanChoose.busy }
+    const r = lan.room
+    const host = r instanceof HostRoom
+    return {
+      kind: 'lobby',
+      role: lan.role,
+      stage: r.stage,
+      host: host ? r.info : r.host,
+      guest: host ? r.guest : r.info,
+      ready: r.ready,
+      addrs: lan.addrs,
+      note: r.note,
+      rtt: host ? (r.guestOnline ? r.rtt : null) : r.stage === 'waiting' ? null : r.rtt,
+    }
+  }
+  const showLan = () => {
+    if (screen === 'lan') lanScreen.show(lanView())
+  }
+  /** Rời phòng (Về màn chính, Rời phòng, phòng đóng): báo bên kia, tắt hub / ống nối. */
+  const closeLan = (note: string | null) => {
+    const L = lan
+    lan = null
+    lanChoose.note = note
+    lanChoose.busy = false
+    if (!L) return
+    if (L.room.stage !== 'closed') L.room.leave()
+    void (L.role === 'host' ? lanNet.stopHost() : lanNet.leave()).catch(() => {})
+  }
+  const lanFail = (e: unknown) => {
+    lanChoose.busy = false
+    lanChoose.note = e instanceof Error ? e.message : String(e)
+    showLan()
+  }
+  const lanCreate = async () => {
+    if (lan || lanChoose.busy) return
+    lanChoose.busy = true
+    lanChoose.note = null
+    showLan()
+    try {
+      const { url, addrs } = await lanNet.host(names[0])
+      const room = new HostRoom(await wsTransport(url), lanInfo('host'))
+      const L: Lan = { role: 'host', room, url, addrs, host: room.info, guest: null, frame: 0, evSent: 0, snap: null }
+      room.onStart = (_seed, guest) => {
+        L.guest = guest
+        void go('lanmatch')
+      }
+      room.onChange = showLan
+      lan = L
+      lanChoose.busy = false
+      showLan()
+    } catch (e) {
+      void lanNet.stopHost().catch(() => {})
+      lanFail(new Error(`Không tạo được phòng: ${e instanceof Error ? e.message : String(e)}`))
+    }
+  }
+  const lanJoin = async (addr: string) => {
+    if (lan || lanChoose.busy) return
+    if (lanNet.desktop && !addr.trim()) return
+    lanChoose.busy = true
+    lanChoose.note = null
+    lanChoose.addr = addr
+    showLan()
+    try {
+      const url = await lanNet.join(addr)
+      const room = new GuestRoom(await wsTransport(url), lanInfo('guest'))
+      const L: Lan = { role: 'guest', room, url, addrs: [], host: null, guest: room.info, frame: 0, evSent: 0, snap: null }
+      room.onStart = (seed, host, guest) => {
+        L.host = host
+        L.guest = guest
+        // Nối lại giữa trận: phiên gương cùng seed vẫn còn ⇒ báo đã sẵn, ảnh chụp chạy tiếp.
+        if (screen === 'lanmatch' && game.seed === seed && game !== replacing) room.loaded()
+        else void go('lanmatch')
+      }
+      room.onSnapshot = (b) => (L.snap = b)
+      room.onReconnect = () => void wsTransport(url).then((t) => room.rejoin(t), () => room.rejoinFailed())
+      room.onChange = showLan
+      lan = L
+      lanChoose.busy = false
+      showLan()
+    } catch (e) {
+      void lanNet.leave().catch(() => {})
+      lanFail(new Error(`Không vào được phòng ở ${addr || 'máy này'}: ${e instanceof Error ? e.message : String(e)}`))
+    }
+  }
+  /** Hết trận ⇒ Về phòng chờ (đấu lại cùng đối thủ: hai bên bấm Sẵn sàng lại). */
+  const lanAgain = () => {
+    if (lan?.room instanceof HostRoom) lan.room.again()
+    void go('lan')
+  }
+  const lanScreen = createLanScreen(overlay, {
+    create: () => void lanCreate(),
+    join: (addr) => void lanJoin(addr),
+    setAddr: (a) => void (lanChoose.addr = a),
+    ready: (on) => lan?.room.setReady(on),
+    leave: () => {
+      closeLan(null)
+      showLan()
+    },
+    home: () => void go('home'),
+  })
+  /** Chấm mạng / đếm ngược / lời báo rớt mạng góc trên sân trong trận hai máy. */
+  const lanBadge = document.createElement('div')
+  lanBadge.className = 'ln-badge'
+  lanBadge.setAttribute('role', 'status')
+  lanBadge.style.cssText =
+    'position:absolute;left:50%;top:64px;transform:translateX(-50%);z-index:6;padding:4px 12px;border-radius:12px;background:#000a;color:#eef2fa;font:700 13px var(--font);pointer-events:none;white-space:nowrap'
+  lanBadge.hidden = true
+  stage.append(lanBadge)
+  /** Cổng robot bạn p của máy này (máy khách gửi lên mỗi khung). */
+  const localPorts = (p: Player) => (lan && localSeat(lan.role, p, players()) >= 0 ? editors.link(p).ports() : NEUTRAL)
+  /** Mỗi khung: phòng tick; máy chủ chạy sân + gửi ảnh chụp; máy khách áp ảnh chụp + gửi cổng; phòng đóng ⇒ về màn chọn. */
+  const lanFrame = (dt: number, now: number) => {
+    if (!lan) {
+      if (screen === 'lan' && lanNet.desktop && now - lanRoomsAt >= 1000) {
+        lanRoomsAt = now
+        void lanNet.rooms().then((r) => {
+          lanChoose.rooms = r
+          showLan()
+        }, () => {})
+      }
+      return
+    }
+    const L = lan
+    const r = L.room
+    r.tick()
+    if (r.stage === 'closed') {
+      const note = (r instanceof GuestRoom ? r.rejected : null) ?? r.note ?? 'Phòng đã đóng'
+      closeLan(note)
+      if (screen !== 'lan') void go('lan')
+      else showLan()
+      return
+    }
+    const ours = screen === 'lanmatch' && game.seed === r.seed && game !== replacing
+    if (r instanceof HostRoom) {
+      if (ours && r.stage === 'playing') {
+        game.advance(dt, 1, { steps: MAX_STEPS, ms: STEP_BUDGET_MS })
+        const from = r.resync ? 0 : L.evSent
+        r.resync = false
+        r.snapshot(encode(capture(game, ++L.frame, from)))
+        L.evSent = game.match.events.length
+        if (game.match.phase === 'end') r.end()
+      }
+    } else if (ours) {
+      if (L.snap) {
+        const snap = decode(L.snap)
+        L.snap = null
+        if (snap) applySnapshot(game, snap)
+      }
+      game.startLoaded() // phiên gương không advance: mở bo ảo khi ảnh chụp báo hết 10 s xả bóng
+      const mine = [localPorts(0), localPorts(1)]
+      r.input(mine)
+      for (const p of PLAYERS) {
+        const seat = seatOfPlayer(p)
+        if (seat >= 0) game.ports[seat] = mine[p]
+      }
+    }
+    if (screen === 'lanmatch') {
+      const cd = r.countdown()
+      const rtt = r instanceof HostRoom ? (r.guestOnline ? r.rtt : null) : r.rtt
+      lanBadge.textContent = r.note ?? (cd > 0 ? `Bắt đầu sau ${Math.ceil(cd)}…` : r.stage === 'loading' ? 'Đang chờ máy bạn dựng sân…' : `Mạng LAN · ${rtt === null ? '—' : `${Math.round(rtt)} ms`}`)
+      lanBadge.dataset.warn = String(r.note !== null)
+      lanBadge.style.color = r.note ? '#ffcf5a' : '#eef2fa'
+    }
+  }
+
   // ---------- Bàn phím ----------
-  const driving = () => isMatch() || screen === 'tmatch' || screen === 'workshop' || screen === 'mission' || (screen === 'tournament' && tScreen.view === 'keytest')
+  const driving = () => isMatch() || screen === 'tmatch' || screen === 'lanmatch' || screen === 'workshop' || screen === 'mission' || (screen === 'tournament' && tScreen.view === 'keytest')
   document.addEventListener('keydown', (e) => {
     // Esc khi ⚙ đang mở: settings.ts (đăng ký trước) đóng ⚙ và chặn sự kiện bằng stopImmediatePropagation (R128).
     if (popover.shown) return
@@ -1303,7 +1572,7 @@ async function start(): Promise<void> {
   }
 
   const showCards = (status: SeatStatus[]) => {
-    if (!(isMatch() || screen === 'workshop' || screen === 'tmatch')) return
+    if (!(isMatch() || screen === 'workshop' || screen === 'tmatch' || screen === 'lanmatch')) return
     const list: CardInfo[] = []
     for (const p of PLAYERS) {
       const seat = seatOfPlayer(p)
@@ -1371,6 +1640,7 @@ async function start(): Promise<void> {
           finishTourMatch(m)
           board.result(view, { home: () => void go('home'), next: () => void go('tournament') })
         } else if (screen === 'treplay') board.result(view, { home: () => void go('home'), next: () => void go('tournament'), nextLabel: 'Về Pit' })
+        else if (screen === 'lanmatch') board.result(view, { home: () => void go('home'), next: () => lanAgain(), nextLabel: 'Về phòng chờ' })
         else
           board.result(view, {
             again: () => void restart(),
@@ -1406,7 +1676,8 @@ async function start(): Promise<void> {
     last = now
     // Trận máy đang chạy ngầm (màn giải đấu): sân nền đứng yên để nhường máy cho trận ngầm.
     const live = chrome(screen).live
-    if (live && !(screen === 'tournament' && machineRun)) game.advance(dt, speed, { steps: MAX_STEPS * Math.max(1, speed), ms: STEP_BUDGET_MS })
+    if (live && screen !== 'lanmatch' && !(screen === 'tournament' && machineRun)) game.advance(dt, speed, { steps: MAX_STEPS * Math.max(1, speed), ms: STEP_BUDGET_MS })
+    lanFrame(dt, now)
     if (screen === 'mission' && mission) {
       // Vệt + đường gợi ý, ô số đo, thẻ thử thách tự tích ✓ (chấm thử ≤ PREVIEW_HZ lần/giây).
       const tr = mrun?.trail
@@ -1418,7 +1689,7 @@ async function start(): Promise<void> {
       }
     }
     // Sân nền đứng yên (Luật chơi, Robot mẫu): vẽ lại thưa (2 lần/giây) để đổi cỡ cửa sổ không để sân trống.
-    scene.split(splitSeats(players(), isMatch(), modes))
+    scene.split(screen === 'lanmatch' ? (players() === 2 ? [seatOfPlayer(0), seatOfPlayer(1)] : null) : splitSeats(players(), isMatch(), modes))
     if (live || now - lastIdleDraw >= IDLE_DRAW_MS) {
       lastIdleDraw = now
       scene.sync(game.world, game.robots, game.match, game.ports)

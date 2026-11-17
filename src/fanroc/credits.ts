@@ -27,6 +27,11 @@ export const CREDITS: readonly Credit[] = [
     from: 'https://github.com/AendeGitHub/UrSimulator src/sim/RobotSim.ts — viết lại cho đế ThingBot, không chép nguyên văn',
     license: 'MIT (Copyright (c) 2026 Khussein)',
   },
+  {
+    name: 'Mạng LAN của app desktop (tokio-tungstenite, tokio, if-addrs)',
+    from: 'https://github.com/snapview/tokio-tungstenite (tokio-tungstenite@0.26.2), https://github.com/tokio-rs/tokio (tokio@1.52.3), https://github.com/messense/if-addrs (if-addrs@0.13.4)',
+    license: 'MIT (if-addrs: MIT hoặc BSD-3-Clause)',
+  },
   { name: 'Đọc / ghi tệp .tb (JSZip)', from: 'https://github.com/Stuk/jszip (jszip@3.10.1)', license: 'MIT hoặc GPL-3.0' },
   {
     name: 'Số đo sân + lưới núi',

@@ -6,7 +6,7 @@ import { NEUTRAL } from '../ports.ts'
 import type { RobotConfig } from '../robots.ts'
 
 const MAKER: RobotConfig = { type: 'maker', drive: 'diff2', actuator: 'tt' }
-const info = (team: string): TeamInfo => ({ team, players: 1, robots: [MAKER, MAKER], skill: 'medium', app: '1.0.0' })
+const info = (team: string): TeamInfo => ({ team, team2: `${team} 2`, players: 1, robots: [MAKER, MAKER], skill: 'medium', app: '1.0.0' })
 const flush = () => new Promise((r) => setTimeout(r, 0))
 
 function setup() {

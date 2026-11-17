@@ -40,6 +40,7 @@ function view(g: GameSession) {
     tally: g.match.tally(),
     result: g.match.result(),
     trays: g.humans.map((h) => h.tray),
+    ports: g.ports,
   }
 }
 

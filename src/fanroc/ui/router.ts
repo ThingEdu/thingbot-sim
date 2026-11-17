@@ -5,10 +5,11 @@ import type { Activity } from './shell.ts'
 
 /** 'tournament' = các màn giải đấu phủ sân (ghi danh, thử phím, lịch, Pit, bục trao giải); 'tmatch' = trận của giải có
  * người chơi; 'treplay' = Xem nhanh một trận máy đã chơi ngầm (×40, không ghi kết quả); 'rules' = Luật chơi, 'robots' =
- * Robot mẫu (hai mục nhỏ của màn chính, phủ sân như màn chính). */
-export type Screen = 'home' | 'match' | 'practice' | 'workshop' | 'missions' | 'mission' | 'tournament' | 'tmatch' | 'treplay' | 'rules' | 'robots'
+ * Robot mẫu (hai mục nhỏ của màn chính, phủ sân như màn chính); 'lan' = phòng chờ Thi qua mạng LAN (phủ sân), 'lanmatch' =
+ * trận hai máy (máy chủ chạy sân, máy khách vẽ theo ảnh chụp — net/). */
+export type Screen = 'home' | 'match' | 'practice' | 'workshop' | 'missions' | 'mission' | 'tournament' | 'tmatch' | 'treplay' | 'rules' | 'robots' | 'lan' | 'lanmatch'
 
-export const SCREENS: readonly Screen[] = ['home', 'match', 'practice', 'workshop', 'missions', 'mission', 'tournament', 'tmatch', 'treplay', 'rules', 'robots']
+export const SCREENS: readonly Screen[] = ['home', 'match', 'practice', 'workshop', 'missions', 'mission', 'tournament', 'tmatch', 'treplay', 'rules', 'robots', 'lan', 'lanmatch']
 
 /**
  * Camera mặc định khi vào màn (spec §6.5; camera không lưu — §8.7): màn chính quay chậm quanh sân, trận / đấu tập
@@ -24,6 +25,7 @@ export function defaultCamera(s: Screen): CameraView {
     case 'match':
     case 'practice':
     case 'tmatch':
+    case 'lanmatch':
       return 'driver'
     case 'workshop':
       return 'follow'
@@ -60,12 +62,16 @@ export function chrome(s: Screen): ScreenChrome {
       return { activity: ['blocks', 'code', 'serial'], runbar: true, scoreboard: true, live: true, dev: false }
     case 'treplay':
       return { activity: [], runbar: false, scoreboard: true, live: true, dev: false }
+    // Trận hai máy: không ⏸ ⏭ ×2 (thanh chạy ẩn), vẫn mở được khối / mã / Serial của robot mình.
+    case 'lanmatch':
+      return { activity: ['blocks', 'code', 'serial'], runbar: false, scoreboard: true, live: true, dev: false }
     case 'workshop':
       return { activity: ['blocks', 'code', 'serial'], runbar: true, scoreboard: false, live: true, dev: true }
     case 'mission':
       return { activity: ['blocks', 'code', 'serial', 'missions'], runbar: true, scoreboard: false, live: true, dev: true }
     case 'missions':
     case 'tournament':
+    case 'lan':
       return { activity: [], runbar: false, scoreboard: false, live: true, dev: false }
   }
 }
