@@ -161,6 +161,8 @@ export interface TourActions {
   play(): void
   replay(i: number): void
   newTour(): void
+  /** Màn Ban tổ chức (giải FANROC thật, trọng tài chấm bằng điện thoại). */
+  btc(): void
   home(): void
 }
 
@@ -364,6 +366,18 @@ export function createTournamentScreen(root: HTMLElement, act: TourActions): Tou
     return a
   }
   const homeBtn = () => btn('Về màn chính', act.home, undefined, 'home')
+  /** Lối vào màn Ban tổ chức (giải thật, khác giải mô phỏng ở trên). */
+  const btcBox = () => {
+    const b = el('div', 'tn-box')
+    const go = btn('Tổ chức giải thật (Ban tổ chức)', act.btc)
+    go.dataset.role = 'btc'
+    b.append(
+      el('h3', undefined, 'Ban tổ chức giải FANROC thật'),
+      el('div', 'pk-note', 'Nhập danh sách đội từ Excel, sinh lịch thi, trọng tài chấm bằng điện thoại, màn chiếu điểm, xuất Excel — cho robot thật trên sân thật.'),
+      acts(go),
+    )
+    return b
+  }
 
   return {
     get shown() {
@@ -421,6 +435,7 @@ export function createTournamentScreen(root: HTMLElement, act: TourActions): Tou
         rules,
         players,
         acts(btn(v.players === 2 ? 'Thử phím' : 'Bốc thăm lịch đấu', act.register, 'main', 'play'), homeBtn()),
+        btcBox(),
       )
     },
     keytest(names, status) {

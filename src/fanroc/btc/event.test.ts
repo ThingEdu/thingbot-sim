@@ -150,3 +150,9 @@ test('reduce thuần: không sửa đối tượng vào', () => {
   reduce(p, { t: 'result.edit', roundId: 'r1', matchId: 'r1-1', result: p.rounds[0].results['r1-1'], now: 5 })
   assert.deepEqual(p, before)
 })
+
+test('event.name: đổi tên giải (bỏ khoảng trắng thừa); tên trống ⇒ lỗi, không đổi', () => {
+  const s = reduce(base(), { t: 'event.name', name: '  Vòng khu vực Hà Nội  ' })
+  assert.equal(s.name, 'Vòng khu vực Hà Nội')
+  assert.throws(() => reduce(s, { t: 'event.name', name: '   ' }), /Tên giải/)
+})

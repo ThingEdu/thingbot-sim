@@ -58,6 +58,7 @@ import { createMissionHud, createMissionList, mergeProgress, missionCards, pendi
 import { brandStrip } from './ui/brand.ts'
 import { createLanScreen, lanSeats, localSeat, teamInfo, type LanView, type Role } from './ui/lan.ts'
 import { lanBackend, type LanRoom } from './net/backend.ts'
+import { createBtcScreen } from './ui/btc.ts'
 import { GuestRoom, HostRoom, type TeamInfo } from './net/room.ts'
 import { wsTransport } from './net/transport.ts'
 import { apply as applySnapshot, capture, decode, encode } from './net/snapshot.ts'
@@ -499,6 +500,13 @@ async function start(): Promise<void> {
           if (t) t.send = () => {}
         },
       },
+      /** Ban tổ chức (e2e): bộ điều hành giải thật; tua đồng hồ trận của sân `field` tới `elapsedSec` giây đã chạy. */
+      btc: {
+        get host() {
+          return btcScreen.host
+        },
+        setClock: (field: number, elapsedSec: number) => btcScreen.host?.skipTo(field, elapsedSec),
+      },
     }
   }
 
@@ -741,6 +749,7 @@ async function start(): Promise<void> {
       tourSaveFailed = !saveTournamentVerified(store, null)
       showTour('register')
     },
+    btc: () => void go('btc'),
     home: () => void go('home'),
   })
   const tControls = PLAYERS.map((p) => configControls(() => cfgOf(p), (cfg) => editors.setConfig(p, cfg)))
@@ -1078,6 +1087,7 @@ async function start(): Promise<void> {
     gallery.hide()
     tScreen.hide()
     lanScreen.hide()
+    btcScreen.hide()
     if (next !== 'lan' && next !== 'lanmatch' && lan) closeLan(null)
     missionList.hide()
     if (next !== 'mission') missionHud.hide()
@@ -1154,6 +1164,7 @@ async function start(): Promise<void> {
     else if (next === 'mission') showSide()
     else if (next === 'tournament') showTour(tourCorrupt ? 'corrupt' : !tour ? 'register' : nextMatch(tour) === null ? 'podium' : 'pit')
     else if (next === 'lan') showLan()
+    else if (next === 'btc') void btcScreen.show()
   }
   let going = Promise.resolve()
   /** Đổi màn; 'mission' cần `arg.id` (thiếu ⇒ nhiệm vụ vừa làm). Nhiệm vụ trận (12) mở màn Trận lẻ, robot máy mức Dễ. */
@@ -1446,6 +1457,8 @@ async function start(): Promise<void> {
     },
     home: () => void go('home'),
   })
+  // ---------- Ban tổ chức: giải thật, trọng tài chấm bằng điện thoại (spec 2026-11-18-fanroc-btc-trong-tai-design.md) ----------
+  const btcScreen = createBtcScreen(overlay, { home: () => void go('home'), tournament: () => void go('tournament'), sound })
   /** Chấm mạng / đếm ngược / lời báo rớt mạng góc trên sân trong trận hai máy. */
   const lanBadge = document.createElement('div')
   lanBadge.className = 'ln-badge'

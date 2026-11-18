@@ -34,6 +34,11 @@ export const CREDITS: readonly Credit[] = [
   },
   { name: 'Đọc / ghi tệp .tb (JSZip)', from: 'https://github.com/Stuk/jszip (jszip@3.10.1)', license: 'MIT hoặc GPL-3.0' },
   {
+    name: 'Mã QR địa chỉ trọng tài / màn chiếu (qrcode-generator)',
+    from: 'https://github.com/kazuhikoarase/qrcode-generator (qrcode-generator@1.4.4)',
+    license: 'MIT (Copyright (c) 2009 Kazuhiko Arase)',
+  },
+  {
     name: 'Số đo sân + lưới núi',
     from: 'CAD "Lắp sân.step" do anh Tuấn (ThingEdu) gửi 03/11/2026',
     license: 'của ThingEdu, đồng ý công khai 06/11/2026',

@@ -39,6 +39,7 @@ export function newEvent(name: string, _seed: number): EventState {
 }
 
 export type Action =
+  | { t: 'event.name'; name: string } // đổi tên giải (màn BTC)
   | { t: 'teams'; teams: Omit<Team, 'id' | 'withdrawn'>[] } // thay cả danh sách (chỉ khi chưa có vòng nào có kết quả)
   | { t: 'team.add'; team: Omit<Team, 'id' | 'withdrawn'> } | { t: 'team.edit'; id: string; patch: Partial<Omit<Team, 'id'>> }
   | { t: 'team.withdraw'; id: string }
@@ -71,6 +72,12 @@ export function reduce(s0: EventState, a: Action): EventState {
     return l
   }
   switch (a.t) {
+    case 'event.name': {
+      const name = a.name.trim()
+      if (!name) throw new Error('Tên giải không được để trống')
+      s.name = name.slice(0, 80)
+      break
+    }
     case 'teams': {
       if (hasResults(s)) throw new Error('Đã có kết quả, không thể thay cả danh sách đội')
       s.teams = a.teams.map((t, i) => ({ ...t, id: `t${i + 1}`, withdrawn: false }))

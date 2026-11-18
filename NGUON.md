@@ -11,6 +11,7 @@ ThingBot FanRoc Challenge (bộ cài TiFa) dùng lại các phần dưới đây
 | Cách đặt vận tốc robot mỗi bước (UrSimulator) | https://github.com/AendeGitHub/UrSimulator `src/sim/RobotSim.ts` — viết lại cho đế ThingBot (`src/fanroc/robot.ts`), không chép nguyên văn | MIT (Copyright (c) 2026 Khussein) |
 | Mạng LAN của app desktop (tokio-tungstenite, tokio, if-addrs) | https://github.com/snapview/tokio-tungstenite (`tokio-tungstenite@0.26.2`), https://github.com/tokio-rs/tokio (`tokio@1.52.3`), https://github.com/messense/if-addrs (`if-addrs@0.13.4`) — `src-tauri/src/lan.rs` (Thi qua mạng LAN) | MIT (if-addrs: MIT hoặc BSD-3-Clause) |
 | Đọc / ghi tệp .tb (JSZip) | https://github.com/Stuk/jszip (`jszip@3.10.1`) | MIT hoặc GPL-3.0 |
+| Mã QR địa chỉ trọng tài / màn chiếu (qrcode-generator) | https://github.com/kazuhikoarase/qrcode-generator (`qrcode-generator@1.4.4`) — `src/fanroc/btc/qr.ts` (màn Ban tổ chức) | MIT (Copyright (c) 2009 Kazuhiko Arase) |
 | Số đo sân + lưới núi | CAD "Lắp sân.step" do anh Tuấn (ThingEdu) gửi 03/11/2026 → `src/fanroc/layout.ts`, `src/fanroc/assets/mountain-mesh.json` | của ThingEdu, đồng ý công khai 06/11/2026 |
 | Hình Mẫu Maker và linh kiện 3 mẫu cải tiến | CAD Onshape "Bộ thingbot mới" của anh Tuấn (ThingEdu) → `src/fanroc/assets/robot-maker.json`, `robot-parts.json` (công cụ `scripts/cad/`) | của ThingEdu, đồng ý công khai 06/11/2026 |
 | Logo ThingEdu và Maker Việt | Logo do anh Tuấn (ThingEdu) gửi, dùng từ 18/11/2026 → `src/fanroc/assets/brand/` | của ThingEdu / Maker Việt, chỉ dùng để ghi nhận trong game |

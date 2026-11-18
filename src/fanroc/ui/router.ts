@@ -6,10 +6,11 @@ import type { Activity } from './shell.ts'
 /** 'tournament' = các màn giải đấu phủ sân (ghi danh, thử phím, lịch, Pit, bục trao giải); 'tmatch' = trận của giải có
  * người chơi; 'treplay' = Xem nhanh một trận máy đã chơi ngầm (×40, không ghi kết quả); 'rules' = Luật chơi, 'robots' =
  * Robot mẫu (hai mục nhỏ của màn chính, phủ sân như màn chính); 'lan' = phòng chờ Thi qua mạng LAN (phủ sân), 'lanmatch' =
- * trận hai máy (máy chủ chạy sân, máy khách vẽ theo ảnh chụp — net/). */
-export type Screen = 'home' | 'match' | 'practice' | 'workshop' | 'missions' | 'mission' | 'tournament' | 'tmatch' | 'treplay' | 'rules' | 'robots' | 'lan' | 'lanmatch'
+ * trận hai máy (máy chủ chạy sân, máy khách vẽ theo ảnh chụp — net/); 'btc' = Ban tổ chức điều hành giải thật
+ * (đội, lịch, trọng tài chấm bằng điện thoại — btc/, phủ sân như màn giải đấu). */
+export type Screen = 'home' | 'match' | 'practice' | 'workshop' | 'missions' | 'mission' | 'tournament' | 'tmatch' | 'treplay' | 'rules' | 'robots' | 'lan' | 'lanmatch' | 'btc'
 
-export const SCREENS: readonly Screen[] = ['home', 'match', 'practice', 'workshop', 'missions', 'mission', 'tournament', 'tmatch', 'treplay', 'rules', 'robots', 'lan', 'lanmatch']
+export const SCREENS: readonly Screen[] = ['home', 'match', 'practice', 'workshop', 'missions', 'mission', 'tournament', 'tmatch', 'treplay', 'rules', 'robots', 'lan', 'lanmatch', 'btc']
 
 /**
  * Camera mặc định khi vào màn (spec §6.5; camera không lưu — §8.7): màn chính quay chậm quanh sân, trận / đấu tập
@@ -72,6 +73,7 @@ export function chrome(s: Screen): ScreenChrome {
     case 'missions':
     case 'tournament':
     case 'lan':
+    case 'btc':
       return { activity: [], runbar: false, scoreboard: false, live: true, dev: false }
   }
 }

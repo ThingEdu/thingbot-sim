@@ -72,12 +72,18 @@ test('router: camera mặc định theo màn (trận / đấu tập / Xưởng T
   assert.equal(defaultCamera('robots'), 'orbit')
   assert.equal(defaultCamera('lan'), 'field')
   assert.equal(defaultCamera('lanmatch'), 'driver')
-  assert.equal(SCREENS.length, 13)
+  assert.equal(defaultCamera('btc'), 'field')
+  assert.equal(SCREENS.length, 14)
 })
 
 test('router: trận hai máy qua LAN có bảng điểm, khối; không thanh chạy (không ⏸ ⏭ ×2); phòng chờ phủ sân', () => {
   assert.deepEqual(chrome('lanmatch'), { ...chrome('match'), runbar: false })
   assert.deepEqual(chrome('lan'), chrome('tournament'))
+})
+
+test('router: màn Ban tổ chức phủ sân như màn giải đấu', () => {
+  assert.ok(SCREENS.includes('btc'))
+  assert.deepEqual(chrome('btc'), chrome('tournament'))
 })
 
 test('router: trận giải đấu như trận lẻ (khối, thanh chạy, bảng điểm); Xem nhanh chỉ bảng điểm, không thanh chạy', () => {
