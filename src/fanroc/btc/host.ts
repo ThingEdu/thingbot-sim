@@ -248,8 +248,9 @@ export class BtcHost {
     return this.state.teams.find((t) => t.id === id)?.name ?? id
   }
 
+  /** Tên theo ghế (luôn 2 phần tử, ghế trống = '') để khớp pens[side][k] và official. */
   private names(seats: [Seat, Seat]): string[] {
-    return seats.filter((x): x is string => x !== null).map((x) => this.name(x))
+    return seats.map((x) => this.name(x))
   }
 
   private match(id: string): EMatch | undefined {
@@ -293,7 +294,14 @@ export class BtcHost {
     const cr = cid ? roundOfMatch(this.state, cid) : undefined
     const cm = cid ? this.match(cid) : undefined
     if (!l && cid && cr?.results[cid] && cm) {
-      official = teamPoints(cr.results[cid], cm).map((t) => ({ name: this.name(t.id), score: t.score }))
+      const pts = teamPoints(cr.results[cid], cm)
+      official = []
+      for (const side of SIDES) {
+        cm[side].forEach((id, seat) => {
+          const t = id === null ? undefined : pts.find((x) => x.id === id)
+          if (t) official!.push({ side, seat: seat as 0 | 1, name: this.name(id), score: t.score })
+        })
+      }
     }
     const round = this.roundFor(field)
     const busy = new Set(Object.values(this.state.live).filter((x): x is Live => !!x).map((x) => x.matchId))
@@ -303,7 +311,7 @@ export class BtcHost {
     const shown = m ?? cm
     return {
       t: 'screen', field,
-      teams: shown ? { red: this.names(shown.red), blue: this.names(shown.blue) } : { red: [], blue: [] },
+      teams: shown ? { red: this.names(shown.red), blue: this.names(shown.blue) } : { red: ['', ''], blue: ['', ''] },
       phase: l ? l.phase : 'idle',
       clock: this.clock(field, l),
       score: liveScore(l?.sheets.red, l?.sheets.blue),

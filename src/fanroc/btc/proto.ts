@@ -17,12 +17,15 @@ export type RefView = {
 
 /** BTC ⇒ màn chiếu của một sân. */
 export type ScreenView = {
-  t: 'screen'; field: number; teams: Record<Side, string[]>; phase: Live['phase'] | 'idle'; clock: number | null
+  t: 'screen'; field: number; teams: Record<Side, string[]> /* luôn 2 phần tử theo ghế, '' = ghế trống */; phase: Live['phase'] | 'idle'; clock: number | null
   score: ScoreBreakdown; pens: Record<Side, Pens[]>; refs: Record<Side, 'off' | 'on' | 'sent'>
-  official: { name: string; score: number }[] | null
+  official: { side: Side; seat: 0 | 1; name: string; score: number }[] | null
   next: { teams: Record<Side, string[]>; time: string } | null
   ranking: { rank: number; name: string; total: number }[]
 }
+
+/** Số sân hiện trên trang chọn sân (trọng tài / màn chiếu). */
+export const FIELD_PICKER = 4
 
 export type Deny = { t: 'deny'; reason: 'code' | 'taken' | 'waiting' }
 

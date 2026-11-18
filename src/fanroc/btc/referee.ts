@@ -4,7 +4,7 @@ import { brandStrip } from '../ui/brand.ts'
 import { emptySheet, type HalfSheet, type Side } from './event.ts'
 import { sameTarget, type Target } from './halfmap.ts'
 import { browserBtc, connectClient } from './link.ts'
-import type { BtcView, ClientMsg, RefView } from './proto.ts'
+import { FIELD_PICKER, type BtcView, type ClientMsg, type RefView } from './proto.ts'
 import { addFault, bump, reconcile, removeFault, type FaultKind } from './refmodel.ts'
 import { RefQueue, refKey } from './refqueue.ts'
 import { clockText, CSS, entryHtml, mainHtml, messageHtml, statusText, topHtml, type Conn, type SubmitState, type Tab } from './referee-ui.ts'
@@ -12,7 +12,7 @@ import { FAULTS } from '../faults.ts'
 
 const DEVICE_KEY = 'fanroc.v1.btc.device'
 const JOIN_KEY = 'fanroc.v1.btc.join' // sessionStorage: tải lại trang không phải nhập lại mã
-const FIELDS = 4
+const FIELDS = FIELD_PICKER
 const DEBOUNCE_MS = 150
 
 function safeGet(st: () => Storage, k: string): string | null {

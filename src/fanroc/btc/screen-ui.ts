@@ -3,11 +3,11 @@
 // của máy BTC rồi vẽ. Không import gì của game 3D / vật lý (chỉ half.ts, scoring.ts, link.ts, proto.ts kiểu).
 import { brandStrip } from '../ui/brand.ts'
 import { browserBtc, connectClient } from './link.ts'
-import type { BtcView, ScreenView } from './proto.ts'
+import { FIELD_PICKER, type BtcView, type ScreenView } from './proto.ts'
 import { esc, fieldName } from './referee-ui.ts'
-import { screenLines } from './screen.ts'
+import { screenLines, sidePanelHtml } from './screen.ts'
 
-const FIELDS = 4
+const FIELDS = FIELD_PICKER
 const MAX_ROWS = 12
 
 type Conn = 'connecting' | 'online' | 'offline' | 'nobtc'
@@ -38,6 +38,7 @@ table.sc-t td { padding: calc(var(--u) * .5) calc(var(--u) * 1); border-top: 1px
 table.sc-t td:last-child { text-align: right; font-weight: 900; font-variant-numeric: tabular-nums; }
 .sc-det { display: grid; grid-template-columns: 1fr 1fr; column-gap: calc(var(--u) * 3); font-size: calc(var(--u) * 2.1); }
 .sc-det div { display: flex; justify-content: space-between; gap: 1em; padding: calc(var(--u) * .45) calc(var(--u) * 1); border-top: 1px solid #ffffff22; }
+.sc-det .p-red { background: #c8253c55; } .sc-det .p-blue { background: #2456d655; }
 .sc-det div b { white-space: nowrap; font-weight: 900; font-variant-numeric: tabular-nums; text-align: right; }
 .sc-refs { font-size: calc(var(--u) * 1.9); color: #ffcf5a; font-weight: 800; }
 .sc-wait { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--u) * 2); min-height: 0; }
@@ -62,7 +63,6 @@ export const clockText = (sec: number | null): string => {
   const s = Math.max(0, Math.floor(sec))
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
-const SIDE_NAME = { red: 'ĐỎ', blue: 'XANH' } as const
 
 function statusChip(c: Conn): string {
   if (c === 'online') return '<span class="sc-st ok" id="sc-st">đã nối</span>'
@@ -74,15 +74,6 @@ function statusChip(c: Conn): string {
 const REF_TEXT = { off: 'chưa nối', on: 'đã nối', sent: 'đã gửi kiểm kê ✓' } as const
 export const refsText = (v: ScreenView): string => `Trọng tài Đỏ: ${REF_TEXT[v.refs.red]} · Trọng tài Xanh: ${REF_TEXT[v.refs.blue]}`
 
-/** Điểm chính thức: bốn mục theo thứ tự Đỏ 1, Đỏ 2, Xanh 1, Xanh 2 (teamPoints của máy BTC). */
-function sidePanel(v: ScreenView, side: 'red' | 'blue'): string {
-  const names = v.teams[side]
-  const off = v.official
-  const base = side === 'red' ? 0 : 2
-  const rows = names.map((n, i) => `<div class="tn">${esc(n || '—')}</div>${off && off[base + i] ? `<div class="ts">${off[base + i].score} điểm</div>` : ''}`).join('')
-  return `<div class="sc-side ${side}"><h2>${SIDE_NAME[side]}</h2>${rows}</div>`
-}
-
 function liveHtml(v: ScreenView): string {
   const official = v.official !== null
   const label = official ? 'ĐIỂM CHÍNH THỨC' : v.phase === 'ready' ? 'SẴN SÀNG' : v.phase === 'inventory' ? 'KIỂM KÊ · ĐIỂM TẠM' : 'ĐIỂM TẠM'
@@ -92,13 +83,13 @@ function liveHtml(v: ScreenView): string {
   if (official) {
     mid = `<div class="sc-big sc-off" id="sc-total">${label}</div><div class="sc-calc">trận đã chốt</div>`
   } else mid = `<div class="sc-clock" id="sc-clock">${clockText(v.clock)}</div><div class="sc-big" id="sc-total">${s.total}</div><div class="sc-lab">${label}</div><div class="sc-calc">${calc}</div>`
-  const table = official ? '' : `<div class="sc-det">${screenLines(v).map((l) => `<div><span>${esc(l.label)}</span><b>${esc(l.value)}</b></div>`).join('')}</div>`
-  return `<div class="sc-row">${sidePanel(v, 'red')}<div class="sc-mid">${mid}</div>${sidePanel(v, 'blue')}</div>${table}${official ? '' : `<div class="sc-refs">${esc(refsText(v))}</div>`}`
+  const table = official ? '' : `<div class="sc-det">${screenLines(v).map((l) => `<div${l.side ? ` class="p-${l.side}"` : ''}><span>${esc(l.label)}</span><b>${esc(l.value)}</b></div>`).join('')}</div>`
+  return `<div class="sc-row">${sidePanelHtml(v, 'red')}<div class="sc-mid">${mid}</div>${sidePanelHtml(v, 'blue')}</div>${table}${official ? '' : `<div class="sc-refs">${esc(refsText(v))}</div>`}`
 }
 
 function idleHtml(v: ScreenView): string {
   const next = v.next
-    ? `<div class="sc-vs"><span class="r">Đỏ</span> ${esc(v.next.teams.red.join(' · ') || '—')}<br><span class="b">Xanh</span> ${esc(v.next.teams.blue.join(' · ') || '—')}</div><div class="sc-time">${esc(v.next.time)}</div>`
+    ? `<div class="sc-vs"><span class="r">Đỏ</span> ${esc(v.next.teams.red.filter(Boolean).join(' · ') || '—')}<br><span class="b">Xanh</span> ${esc(v.next.teams.blue.filter(Boolean).join(' · ') || '—')}</div><div class="sc-time">${esc(v.next.time)}</div>`
     : '<div class="sc-vs">Chưa có trận kế tiếp</div>'
   const rows = v.ranking.map((r) => `<tr><td>${r.rank}</td><td>${esc(r.name)}</td><td>${r.total}</td></tr>`).join('')
   const rank = v.ranking.length ? `<div class="sc-rank" id="sc-rank"><table class="sc-t" id="sc-rank-t"><tbody>${rows}</tbody></table></div>` : '<div class="sc-vs">Chưa có kết quả</div>'

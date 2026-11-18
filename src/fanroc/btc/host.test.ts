@@ -211,7 +211,8 @@ test('hai bên gửi kiểm kê ⇒ refs sent; BTC chốt ⇒ màn chiếu có o
   const v = h.last('s1') as ScreenView
   assert.equal(v.phase, 'idle')
   assert.deepEqual(v.official, [
-    { name: 'Đội A', score: 10 }, { name: 'Đội B', score: 10 }, { name: 'Đội C', score: 10 }, { name: 'Đội D', score: 10 },
+    { side: 'red', seat: 0, name: 'Đội A', score: 10 }, { side: 'red', seat: 1, name: 'Đội B', score: 10 },
+    { side: 'blue', seat: 0, name: 'Đội C', score: 10 }, { side: 'blue', seat: 1, name: 'Đội D', score: 10 },
   ])
   assert.deepEqual(v.next?.time, '08:07')
   assert.equal(v.ranking.length, 4)
@@ -378,4 +379,22 @@ test('state đã lưu bị hỏng ở một sân ⇒ tick sân khác vẫn chạ
   h.clock.t += 190_000
   assert.doesNotThrow(() => h.host.tick())
   assert.equal(h.host.state.live[1]!.phase, 'inventory')
+})
+
+test('ghế trống: màn chiếu teams luôn 2 phần tử theo ghế, official khớp side/seat', () => {
+  const s = reduce(base(), { t: 'round.schedule', roundId: 'r1', matches: [{ id: 'r1-1', slot: 0, field: 0, red: ['t1', null], blue: [null, 't4'] }] })
+  const h = harness(s)
+  for (const p of ['c1', 'c2', 's1']) h.host.onPeer(p, true)
+  h.host.onMessage('s1', { t: 'join', role: 'screen', field: 0 })
+  h.host.onMessage('c1', joinRef('d1', 'red'))
+  h.host.onMessage('c2', joinRef('d2', 'blue'))
+  h.host.dispatch({ t: 'live.start', field: 0, matchId: 'r1-1', now: h.clock.t })
+  assert.deepEqual((h.last('s1') as ScreenView).teams, { red: ['Đội A', ''], blue: ['', 'Đội D'] })
+  h.host.dispatch({ t: 'live.whistle', field: 0 })
+  h.host.onMessage('c1', op('d1', 1, { ...sheet(0), fire: { o: 2, g: 0 } }, true, 'red'))
+  h.host.onMessage('c2', op('d2', 1, sheet(0), true, 'blue'))
+  h.host.dispatch({ t: 'live.commit', field: 0, now: h.clock.t })
+  assert.deepEqual((h.last('s1') as ScreenView).official, [
+    { side: 'red', seat: 0, name: 'Đội A', score: 10 }, { side: 'blue', seat: 1, name: 'Đội D', score: 10 },
+  ])
 })
