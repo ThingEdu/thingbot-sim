@@ -34,8 +34,8 @@ function harness(s: EventState = base()) {
 const joinRef = (device: string, side: 'red' | 'blue' = 'red', code = '1234', field = 0): ClientMsg =>
   ({ t: 'join', role: 'ref', field, side, code, device })
 const sheet = (o: number): HalfSheet => ({ ...emptySheet(), decorO: o })
-const op = (device: string, seq: number, s: HalfSheet, submit = false, side: 'red' | 'blue' = 'red'): ClientMsg =>
-  ({ t: 'op', device, seq, field: 0, side, sheet: s, submit })
+const op = (device: string, seq: number, s: HalfSheet, submit = false, side: 'red' | 'blue' = 'red', matchId = 'r1-1'): ClientMsg =>
+  ({ t: 'op', device, seq, field: 0, side, matchId, sheet: s, submit })
 
 test('join sai mã hoặc sân chưa có mã ⇒ deny code', () => {
   const h = harness()
@@ -259,4 +259,123 @@ test('khởi động lại từ state đã lưu (inventory) ⇒ trọng tài n�
   assert.equal(v.phase, 'inventory')
   assert.equal(v.sheet.decorO, 4)
   assert.deepEqual(v.sheet, sheet(4))
+})
+
+test('op của trận trước (matchId cũ) sau khi sân bắt đầu trận mới ⇒ bỏ, chỉ trả khung nhìn', () => {
+  const h = harness()
+  h.host.onPeer('c1', true)
+  h.host.onMessage('c1', joinRef('d1'))
+  h.host.dispatch({ t: 'live.start', field: 0, matchId: 'r1-1', now: h.clock.t })
+  h.host.dispatch({ t: 'live.abort', field: 0 })
+  h.host.dispatch({ t: 'live.start', field: 0, matchId: 'r1-2', now: h.clock.t })
+  const n = h.saves.length
+  h.host.onMessage('c1', op('d1', 5, sheet(3), false, 'red', 'r1-1'))
+  assert.equal(h.saves.length, n)
+  assert.equal(h.host.state.live[0]!.sheets.red, undefined)
+  assert.equal((h.last('c1') as RefView).match?.id, 'r1-2')
+  // seq 5 bị bỏ nên chưa tính: op đúng trận cùng seq 5 vẫn được nhận
+  h.host.onMessage('c1', op('d1', 5, sheet(3), false, 'red', 'r1-2'))
+  assert.equal(h.saves.length, n + 1)
+})
+
+test('một máy không giữ được cả ghế Đỏ và Xanh của cùng sân', () => {
+  const h = harness()
+  h.host.onPeer('c1', true)
+  h.host.onMessage('c1', joinRef('d1', 'red'))
+  h.host.onMessage('c1', joinRef('d1', 'blue'))
+  assert.deepEqual(h.last('c1'), { t: 'deny', reason: 'taken' })
+  h.host.onPeer('c2', true)
+  h.host.onMessage('c2', joinRef('d2', 'blue'))
+  assert.equal((h.last('c2') as RefView).side, 'blue')
+})
+
+test('mã sân sai kiểu / quá dài ⇒ deny code', () => {
+  const h = harness()
+  h.host.onPeer('c1', true)
+  h.host.onMessage('c1', { t: 'join', role: 'ref', field: 0, side: 'red', code: 1234, device: 'd1' } as never)
+  assert.deepEqual(h.last('c1'), { t: 'deny', reason: 'code' })
+  h.host.onMessage('c1', joinRef('d1', 'red', '1234'.repeat(3)))
+  assert.deepEqual(h.last('c1'), { t: 'deny', reason: 'code' })
+})
+
+/** Hai sân đang đấu (r1-1 sân 0, r1-3 sân 1), trọng tài d1 giữ Đỏ sân 0, màn chiếu sân 0. */
+function twoFields() {
+  const s0 = reduce(base(), { t: 'round.schedule', roundId: 'r1', matches: [
+    { id: 'r1-1', slot: 0, field: 0, red: ['t1', 't2'], blue: ['t3', 't4'] },
+    { id: 'r1-2', slot: 1, field: 0, red: ['t1', 't3'], blue: ['t2', 't4'] },
+    { id: 'r1-3', slot: 0, field: 1, red: ['t2', 't3'], blue: ['t1', 't4'] },
+  ] })
+  const h = harness(s0)
+  for (const p of ['c1', 's1']) h.host.onPeer(p, true)
+  h.host.onMessage('s1', { t: 'join', role: 'screen', field: 0 })
+  h.host.onMessage('c1', joinRef('d1'))
+  h.host.dispatch({ t: 'live.start', field: 0, matchId: 'r1-1', now: h.clock.t })
+  h.host.dispatch({ t: 'live.start', field: 1, matchId: 'r1-3', now: h.clock.t })
+  return h
+}
+
+const good = (): Record<string, unknown> => ({ t: 'op', device: 'd1', seq: 1, field: 0, side: 'red', matchId: 'r1-1', sheet: emptySheet(), submit: false })
+const withSheet = (patch: (x: Record<string, any>) => void) => {
+  const m = good()
+  const sh = structuredClone(emptySheet()) as unknown as Record<string, any>
+  patch(sh)
+  m.sheet = sh
+  return m
+}
+const fault = { team: 0, code: 'G1', kind: 'minor', at: 3 }
+const GARBAGE: [string, unknown][] = [
+  ['null', null], ['số', 42], ['chuỗi', 'op'], ['mảng', []], ['rỗng', {}], ['op trơn', { t: 'op' }],
+  ['field chuỗi', { ...good(), field: '0' }], ['field âm', { ...good(), field: -1 }], ['field quá lớn', { ...good(), field: 99 }],
+  ['seq chuỗi', { ...good(), seq: '5' }], ['seq khổng lồ', { ...good(), seq: 1e20 }], ['seq 0', { ...good(), seq: 0 }],
+  ['seq lẻ', { ...good(), seq: 1.5 }], ['side lạ', { ...good(), side: 'green' }], ['device rỗng', { ...good(), device: '' }],
+  ['device dài', { ...good(), device: 'x'.repeat(65) }], ['device số', { ...good(), device: 7 }], ['matchId số', { ...good(), matchId: 1 }],
+  ['sheet rỗng', { ...good(), sheet: {} }], ['sheet null', { ...good(), sheet: null }],
+  ['decorO 1e9', withSheet((x) => { x.decorO = 1e9 })], ['decorO lẻ', withSheet((x) => { x.decorO = 1.5 })],
+  ['fire âm', withSheet((x) => { x.fire.o = -50 })], ['fire chuỗi', withSheet((x) => { x.fire.g = '3' })],
+  ['mtn thiếu rãnh', withSheet((x) => { x.mtn[0].pop() })], ['mtn một núi', withSheet((x) => { x.mtn.pop() })],
+  ['mtn 301', withSheet((x) => { x.mtn[1][2].g = 301 })],
+  ['cờ chuỗi', withSheet((x) => { x.flags = ['a', false] })], ['leo lạ', withSheet((x) => { x.climbs = ['fly', 'none'] })],
+  ['phạt đỏ chuỗi', withSheet((x) => { x.pens[0].red = 'yes' })], ['lỗi nhẹ 21', withSheet((x) => { x.pens[1].minor = 21 })],
+  ['thiếu pens', withSheet((x) => { x.pens = [x.pens[0]] })],
+  ['51 lỗi', withSheet((x) => { x.faults = Array.from({ length: 51 }, () => ({ ...fault })) })],
+  ['mã lỗi dài', withSheet((x) => { x.faults = [{ ...fault, code: 'X'.repeat(17) }] })],
+  ['lỗi đội 2', withSheet((x) => { x.faults = [{ ...fault, team: 2 }] })], ['lỗi kind lạ', withSheet((x) => { x.faults = [{ ...fault, kind: 'boom' }] })],
+  ['lỗi at NaN', withSheet((x) => { x.faults = [{ ...fault, at: 'x' }] })],
+  ['join field chuỗi', { t: 'join', role: 'ref', field: '0', side: 'blue', code: '1234', device: 'd9' }],
+  ['join side lạ', { t: 'join', role: 'ref', field: 0, side: 'green', code: '1234', device: 'd9' }],
+  ['join device số', { t: 'join', role: 'ref', field: 0, side: 'blue', code: '1234', device: 9 }],
+  ['screen field âm', { t: 'join', role: 'screen', field: -1 }], ['screen field chuỗi', { t: 'join', role: 'screen', field: 'a' }],
+]
+
+test('thư rác: không ném, không lưu, state không đổi, sân khác vẫn thổi còi', () => {
+  for (const [name, m] of GARBAGE) {
+    const h = twoFields()
+    const n = h.saves.length
+    const before = structuredClone(h.host.state)
+    assert.doesNotThrow(() => h.host.onMessage('c1', m as ClientMsg), name)
+    assert.doesNotThrow(() => h.host.onPeer(m as string, true), name)
+    assert.equal(h.saves.length, n, name)
+    assert.deepEqual(h.host.state, before, name)
+    h.clock.t += 190_000
+    assert.doesNotThrow(() => h.host.tick(), name)
+    assert.equal(h.host.state.live[0]!.phase, 'inventory', name)
+    assert.equal(h.host.state.live[1]!.phase, 'inventory', name)
+  }
+  // đối chứng: thư đúng thì được nhận (bảng trên không đỏ vì lý do khác)
+  const h = twoFields()
+  const n = h.saves.length
+  h.host.onMessage('c1', withSheet((x) => { x.faults = [{ ...fault }]; x.decorO = 300 }) as ClientMsg)
+  assert.equal(h.saves.length, n + 1)
+})
+
+test('state đã lưu bị hỏng ở một sân ⇒ tick sân khác vẫn chạy', () => {
+  const h0 = twoFields()
+  const s = structuredClone(h0.host.state)
+  s.live[0]!.sheets.red = {} as HalfSheet // file cũ hỏng
+  const h = harness(s)
+  h.host.onPeer('s1', true)
+  h.host.onMessage('s1', { t: 'join', role: 'screen', field: 0 })
+  h.clock.t += 190_000
+  assert.doesNotThrow(() => h.host.tick())
+  assert.equal(h.host.state.live[1]!.phase, 'inventory')
 })

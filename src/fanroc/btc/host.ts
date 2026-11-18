@@ -1,11 +1,12 @@
 // Bộ điều hành BTC chạy trong trang BTC: nhận thư trọng tài / màn chiếu (qua btc.rs), giữ ghế trọng tài, đồng hồ trận,
 // gọi reduce ⇒ lưu ⇒ gửi lại khung nhìn. Ghế, seq đã nhận, trận vừa chốt chỉ ở bộ nhớ (không vào EventState); khởi động
 // lại thì điện thoại tự nối lại bằng mã máy.
-import { emptySheet, reduce, roundOfMatch, type Action, type EMatch, type EventState, type Live, type Round, type Seat, type Side } from './event.ts'
+import { emptySheet, reduce, roundOfMatch, type Action, type EMatch, type EventState, type HalfSheet, type Live, type Round, type Seat, type Side } from './event.ts'
 import { slotTime } from './schedule.ts'
 import { liveScore, teamPoints } from './sheet.ts'
 import { roundStandings } from './rank.ts'
 import type { BtcView, ClientMsg, RefView, ScreenView } from './proto.ts'
+import { sanitizeSheet } from './validate.ts'
 
 export interface HostDeps { send(to: string, m: BtcView): void; save(s: EventState): void; now(): number /* ms */ }
 
@@ -15,6 +16,14 @@ export const MATCH_SEC = 10 + 180
 type SeatHold = { device: string; peer: string; online: boolean }
 const SIDES: Side[] = ['red', 'blue']
 const key = (field: number, side: Side) => `${field}:${side}`
+/** Giới hạn thư khách: số sân, độ dài mã máy / mã sân. */
+export const MAX_FIELDS = 16
+const MAX_DEVICE = 64
+const MAX_CODE = 8
+const isObj = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x)
+const isField = (x: unknown): x is number => Number.isSafeInteger(x) && (x as number) >= 0 && (x as number) < MAX_FIELDS
+const isSide = (x: unknown): x is Side => x === 'red' || x === 'blue'
+const isDevice = (x: unknown): x is string => typeof x === 'string' && x.length >= 1 && x.length <= MAX_DEVICE
 
 export class BtcHost {
   state: EventState
@@ -27,6 +36,7 @@ export class BtcHost {
   private offset = new Map<number, number>() // sân ⇒ giây dời đồng hồ (skipTo)
   private lastClock = new Map<number, number | null>() // sân ⇒ giây đã gửi gần nhất
   private committed = new Map<number, string>() // sân ⇒ trận vừa chốt (tới live.start kế tiếp)
+  // Ghế / seq / trận vừa chốt chỉ ở bộ nhớ: khởi động lại thì màn chiếu không còn `official` của trận vừa chốt (chấp nhận).
 
   constructor(s: EventState, deps: HostDeps) {
     this.state = s
@@ -34,37 +44,64 @@ export class BtcHost {
   }
 
   onPeer(id: string, on: boolean): void {
-    if (on) {
-      this.online.add(id)
-      return
-    }
-    this.online.delete(id)
-    this.screens.delete(id)
-    this.pending = this.pending.filter((p) => p.peer !== id)
-    for (const [k, h] of this.seats) if (h.peer === id) {
-      h.online = false
-      this.sendField(Number(k.split(':')[0]))
+    try {
+      if (typeof id !== 'string' || typeof on !== 'boolean') return
+      if (on) {
+        this.online.add(id)
+        return
+      }
+      this.online.delete(id)
+      this.screens.delete(id)
+      this.pending = this.pending.filter((p) => p.peer !== id)
+      for (const [k, h] of this.seats) if (h.peer === id) {
+        h.online = false
+        this.sendField(Number(k.split(':')[0]))
+      }
+    } catch (e) {
+      console.warn('BTC: lỗi xử lý vào/ra', id, e)
     }
   }
 
+  /** Thư khách: sai hình / sai kiểu ⇒ bỏ im lặng (riêng mã sân sai kiểu ⇒ deny 'code'). Không bao giờ ném ra ngoài. */
   onMessage(from: string, m: ClientMsg): void {
-    if (!m || typeof m !== 'object') return
-    this.online.add(from)
-    if (m.t === 'join' && m.role === 'screen') {
-      if (!Number.isInteger(m.field)) return
-      this.screens.set(from, m.field)
-      this.deps.send(from, this.screenView(m.field))
-    } else if (m.t === 'join' && m.role === 'ref') {
-      this.joinRef(from, m)
-    } else if (m.t === 'op') {
-      this.op(from, m)
+    try {
+      const x = m as unknown
+      if (!isObj(x) || typeof from !== 'string') return
+      if (x.t === 'join' && x.role === 'screen') {
+        if (!isField(x.field)) return
+        this.online.add(from)
+        const field = x.field
+        this.screens.set(from, field)
+        this.safeSend(from, () => this.screenView(field))
+      } else if (x.t === 'join' && x.role === 'ref') {
+        if (!isField(x.field) || !isSide(x.side) || !isDevice(x.device)) return
+        this.online.add(from)
+        if (typeof x.code !== 'string' || x.code.length > MAX_CODE) {
+          this.deps.send(from, { t: 'deny', reason: 'code' })
+          return
+        }
+        this.joinRef(from, { t: 'join', role: 'ref', field: x.field, side: x.side, code: x.code, device: x.device })
+      } else if (x.t === 'op') {
+        if (!isField(x.field) || !isSide(x.side) || !isDevice(x.device) || !Number.isSafeInteger(x.seq) || (x.seq as number) < 1) return
+        if (typeof x.matchId !== 'string' || typeof x.submit !== 'boolean') return
+        this.online.add(from)
+        this.op(from, x as unknown as Extract<ClientMsg, { t: 'op' }>, sanitizeSheet(x.sheet))
+      }
+    } catch (e) {
+      console.warn('BTC: lỗi xử lý thư của', from, e)
     }
   }
 
   private joinRef(from: string, m: Extract<ClientMsg, { role: 'ref' }>): void {
     const code = this.state.codes[m.field]
-    if (code === undefined || code !== m.code || !SIDES.includes(m.side) || !m.device) {
+    if (code === undefined || code !== m.code) {
       this.deps.send(from, { t: 'deny', reason: 'code' })
+      return
+    }
+    // một máy không giữ cả hai ghế của một sân
+    const other = this.seats.get(key(m.field, m.side === 'red' ? 'blue' : 'red'))
+    if (other && other.device === m.device) {
+      this.deps.send(from, { t: 'deny', reason: 'taken' })
       return
     }
     const k = key(m.field, m.side)
@@ -80,7 +117,8 @@ export class BtcHost {
     this.deps.send(from, { t: 'deny', reason: 'waiting' })
   }
 
-  private op(from: string, m: Extract<ClientMsg, { t: 'op' }>): void {
+  /** `sheet` đã qua sanitizeSheet (null = phiếu hỏng ⇒ bỏ, chỉ trả khung nhìn, không động tới seq). */
+  private op(from: string, m: Extract<ClientMsg, { t: 'op' }>, sheet: HalfSheet | null): void {
     const k = key(m.field, m.side)
     const h = this.seats.get(k)
     if (!h || h.device !== m.device) {
@@ -91,13 +129,21 @@ export class BtcHost {
     h.peer = from
     h.online = true
     const l = this.state.live[m.field]
-    const seen = this.acks.get(m.device) ?? 0
-    if (!l || (l.phase !== 'play' && l.phase !== 'inventory') || !(m.seq > seen) || !m.sheet) {
+    const seen = this.acks.get(m.device)
+    const fresh = m.seq > (seen ?? 0)
+    if (!l || l.matchId !== m.matchId || (l.phase !== 'play' && l.phase !== 'inventory') || !fresh || !sheet) {
       this.deps.send(from, this.refView(m.field, m.side))
       return
     }
+    // ackSeq phải có sẵn trong khung nhìn mà dispatch gửi đi; dispatch lỗi ⇒ trả lại seq cũ (chỉ tính khi đã lưu).
     this.acks.set(m.device, m.seq)
-    this.dispatch({ t: 'live.sheet', field: m.field, side: m.side, sheet: m.sheet, submit: !!m.submit })
+    try {
+      this.dispatch({ t: 'live.sheet', field: m.field, side: m.side, sheet, submit: m.submit })
+    } catch (e) {
+      if (seen === undefined) this.acks.delete(m.device)
+      else this.acks.set(m.device, seen)
+      throw e
+    }
   }
 
   /** Màn BTC gọi: reduce ⇒ lưu đúng một lần ⇒ gửi lại khung nhìn. reduce lỗi ⇒ ném lại, không lưu. */
@@ -145,8 +191,12 @@ export class BtcHost {
     for (const [f, l] of Object.entries(this.state.live)) {
       const field = Number(f)
       if (!l || l.phase !== 'play') continue
-      if (this.elapsed(field, l) >= MATCH_SEC) this.dispatch({ t: 'live.whistle', field })
-      else if (this.clock(field, l) !== this.lastClock.get(field)) this.sendField(field)
+      try { // lỗi một sân không làm dừng đồng hồ sân khác
+        if (this.elapsed(field, l) >= MATCH_SEC) this.dispatch({ t: 'live.whistle', field })
+        else if (this.clock(field, l) !== this.lastClock.get(field)) this.sendField(field)
+      } catch (e) {
+        console.warn(`BTC: lỗi đồng hồ sân ${field + 1}`, e)
+      }
     }
   }
 
@@ -176,12 +226,21 @@ export class BtcHost {
   /** Gửi khung nhìn mới cho trọng tài đang giữ ghế và mọi màn chiếu của sân. */
   private sendField(field: number): void {
     this.lastClock.set(field, this.clock(field, this.state.live[field]))
+    // khung nhìn lỗi (vd. file giải cũ hỏng) chỉ ghi cảnh báo: thay đổi đã lưu, không ném ngược về dispatch / tick
     for (const side of SIDES) {
       const h = this.seats.get(key(field, side))
-      if (h && h.online) this.deps.send(h.peer, this.refView(field, side))
+      if (h && h.online) this.safeSend(h.peer, () => this.refView(field, side))
     }
     let sv: ScreenView | undefined
-    for (const [peer, f] of this.screens) if (f === field) this.deps.send(peer, (sv ??= this.screenView(field)))
+    for (const [peer, f] of this.screens) if (f === field) this.safeSend(peer, () => (sv ??= this.screenView(field)))
+  }
+
+  private safeSend(peer: string, view: () => BtcView): void {
+    try {
+      this.deps.send(peer, view())
+    } catch (e) {
+      console.warn('BTC: không dựng được khung nhìn cho', peer, e)
+    }
   }
 
   private name(id: Seat): string {

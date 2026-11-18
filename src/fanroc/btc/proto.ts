@@ -6,7 +6,7 @@ import type { HalfSheet, Live, Pens, Side } from './event.ts'
 export type ClientMsg =
   | { t: 'join'; role: 'ref'; field: number; side: Side; code: string; device: string }
   | { t: 'join'; role: 'screen'; field: number }
-  | { t: 'op'; device: string; seq: number; field: number; side: Side; sheet: HalfSheet; submit: boolean }
+  | { t: 'op'; device: string; seq: number; field: number; side: Side; matchId: string /* trận đang ghi (RefView.match.id) */; sheet: HalfSheet; submit: boolean }
 
 /** BTC ⇒ trọng tài giữ ghế. `clock` = giây còn lại (chỉ khi đang 'play'); `ackSeq` = seq cuối BTC đã nhận của máy này. */
 export type RefView = {
