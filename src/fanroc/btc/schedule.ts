@@ -91,7 +91,8 @@ function balanceSides(matches: EMatch[], from: number) {
 
 /** Sửa lệch màu còn sót: đổi chỗ một ghế đỏ với một ghế xanh trong cùng lượt (cùng trận hoặc hai sân khác nhau)
  *  nếu bớt lệch và không thêm quá nhiều lặp bạn/đối thủ. */
-function repairSides(fixed: EMatch[], out: EMatch[], rnd: () => number) {
+function repairSides(teamIds: string[], fixed: EMatch[], out: EMatch[], rnd: () => number) {
+  const active = new Set(teamIds)
   const h: Hist = { partner: new Map(), opp: new Map(), diff: new Map() }
   for (const m of [...fixed, ...out]) addMatch(h, m)
   const rep = (m: EMatch) => { // phạt lặp của một cách xếp, tính trên lịch sử đã gỡ trận đó
@@ -141,7 +142,8 @@ function repairSides(fixed: EMatch[], out: EMatch[], rnd: () => number) {
   }
   // còn đội lệch ≥ 2: chuyển phần lệch sang đội khác cùng lượt (bước đi ngẫu nhiên, chỉ nhận nước không làm xấu thêm) tới khi gặp đội lệch ngược
   for (let step = 0; step < 4000; step++) {
-    const viol = [...h.diff].filter(([, v]) => Math.abs(v) > 1)
+    // chỉ xét đội còn thi đấu và có ghế đúng màu lệch trong trận MỚI (trận đã đấu không đổi được)
+    const viol = [...h.diff].filter(([t, v]) => active.has(t) && Math.abs(v) > 1 && out.some((m) => (v > 0 ? m.red : m.blue).includes(t)))
     if (viol.length === 0) break
     const [t, dt] = viol[Math.floor(rnd() * viol.length)]
     const badRed = dt > 0 // lệch đỏ: cần chuyển một ghế đỏ của t sang xanh
@@ -182,7 +184,7 @@ function attempt(o: SchedOpts, fu: number, seed: number): Attempt {
   for (const m of fixed) {
     addMatch(h, m)
     maxSlot = Math.max(maxSlot, m.slot)
-    maxN = Math.max(maxN, Number(m.id.slice(o.roundId.length + 1)) || 0)
+    if (m.id.startsWith(`${o.roundId}-`)) maxN = Math.max(maxN, Number(m.id.slice(o.roundId.length + 1)) || 0)
     for (const t of seatsOf(m)) if (set.has(t)) { played.set(t, played.get(t)! + 1); last.set(t, Math.max(last.get(t) ?? -1, m.slot)) }
   }
   const rem = new Map<string, number>()
@@ -225,7 +227,7 @@ function attempt(o: SchedOpts, fu: number, seed: number): Attempt {
     left -= k; slot++
   }
   balanceSides(out, 0)
-  repairSides(fixed, out, rnd)
+  repairSides(o.teamIds, fixed, out, rnd)
   const q = stats(o.teamIds, [...fixed, ...out])
   penalty = 1000 * q.repeatPartners + 100 * q.repeatOpponents + 10 * q.maxSideDiff
   if (q.minRest < 1) penalty += HARD
@@ -252,6 +254,7 @@ export function makeSchedule(o: SchedOpts): { matches: EMatch[]; quality: SchedQ
   const matches = [...fixed, ...best.matches]
   const q = stats(o.teamIds, matches)
   if (q.minRest < 1) notes.push('Có đội không được nghỉ giữa hai trận')
+  if (q.maxSideDiff > 1) notes.push('Có đội lệch số lần Đỏ / Xanh do các trận đã đấu')
   return { matches, quality: { fieldsUsed: fu, ...q, extra: best.extra }, notes }
 }
 

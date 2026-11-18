@@ -89,9 +89,7 @@ test('fixed giữ nguyên, tính vào số trận, bỏ đội đã rút', () =>
   const played = new Map<string, number>(left.map((t) => [t, 0]))
   for (const m of r.matches) for (const t of seatsOf(m)) if (played.has(t)) played.set(t, played.get(t)! + 1)
   for (const t of left) assert.ok([4, 5].includes(played.get(t)!), `${t}=${played.get(t)}`)
-  const inFixed = new Set(fixed.flatMap(seatsOf))
   for (const m of added) assert.equal(new Set(seatsOf(m)).size, 4)
-  assert.ok(inFixed.size > 0)
 })
 
 test('ít đội: giảm số sân và ghi chú', () => {
@@ -116,4 +114,45 @@ test('slotTime cộng phút', () => {
   assert.equal(slotTime('08:00', 7, 3), '08:21')
   assert.equal(slotTime('08:50', 7, 2), '09:04')
   assert.equal(slotTime('09:05', 10, 0), '09:05')
+})
+
+test('fixed lệch màu không sửa được: không ném, có ghi chú, trận mới vẫn hợp lệ', () => {
+  const teamIds = ids(12)
+  // t1 đỏ ở 3 trận đã đấu
+  const fixed: EMatch[] = [
+    { id: 'r1-1', slot: 0, field: 0, red: ['t1', 't2'], blue: ['t3', 't4'] },
+    { id: 'r1-2', slot: 1, field: 0, red: ['t1', 't5'], blue: ['t6', 't7'] },
+    { id: 'r1-3', slot: 2, field: 0, red: ['t1', 't8'], blue: ['t9', 't10'] },
+  ]
+  const r = makeSchedule({ teamIds, perTeam: 4, fields: 1, seed: 3, roundId: 'r1', fixed })
+  assert.deepEqual(r.matches.slice(0, 3), fixed)
+  assert.ok(r.quality.maxSideDiff > 1)
+  assert.ok(r.notes.includes('Có đội lệch số lần Đỏ / Xanh do các trận đã đấu'))
+  const added = r.matches.slice(3)
+  added.forEach((m, i) => { assert.equal(m.id, `r1-${4 + i}`); assert.ok(m.slot >= 3) })
+  const bySlot = new Map<number, string[]>()
+  const cnt = new Map<string, number>()
+  for (const m of r.matches) {
+    bySlot.set(m.slot, [...(bySlot.get(m.slot) ?? []), ...seatsOf(m)])
+    for (const t of seatsOf(m)) cnt.set(t, (cnt.get(t) ?? 0) + 1)
+  }
+  for (const a of bySlot.values()) assert.equal(new Set(a).size, a.length)
+  for (const t of teamIds) assert.ok([4, 5].includes(cnt.get(t)!), `${t}=${cnt.get(t)}`)
+})
+
+test('fixed có đội đã rút, id vòng khác không ảnh hưởng, ranh giới fixed/mới hợp lệ', () => {
+  const teamIds = ids(16).filter((t) => t !== 't16')
+  const fixed: EMatch[] = [
+    { id: 'r1-1', slot: 0, field: 0, red: ['t1', 't2'], blue: ['t3', 't16'] },
+    { id: 'r1-2', slot: 1, field: 0, red: ['t4', 't5'], blue: ['t6', 't7'] },
+    { id: 'r0-9', slot: 2, field: 0, red: ['t8', 't9'], blue: ['t10', 't11'] },
+  ]
+  const r = makeSchedule({ teamIds, perTeam: 4, fields: 1, seed: 4, roundId: 'r1', fixed })
+  const added = r.matches.slice(3)
+  added.forEach((m, i) => { assert.equal(m.id, `r1-${3 + i}`); assert.ok(m.slot >= 3); assert.ok(!seatsOf(m).includes('t16')) })
+  assert.ok(r.quality.minRest >= 1, `minRest=${r.quality.minRest}`)
+  assert.ok(r.quality.maxSideDiff <= 1, `side=${r.quality.maxSideDiff}`)
+  const bySlot = new Map<number, string[]>()
+  for (const m of r.matches) bySlot.set(m.slot, [...(bySlot.get(m.slot) ?? []), ...seatsOf(m)])
+  for (const a of bySlot.values()) assert.equal(new Set(a).size, a.length)
 })
