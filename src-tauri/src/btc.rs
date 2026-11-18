@@ -10,16 +10,18 @@
 
 use futures_util::{SinkExt, StreamExt};
 use serde_json::value::RawValue;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
-use tokio::sync::watch;
+use tokio::sync::mpsc::{channel, Sender};
+use tokio::sync::{watch, Notify, OwnedSemaphorePermit, Semaphore};
 use tokio::task::JoinHandle;
+use tokio::time::Instant;
+use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::Message;
 
 pub const BTC_PORT: u16 = 47292;
@@ -27,17 +29,61 @@ pub const BTC_PORT: u16 = 47292;
 const BACKUPS: usize = 20;
 /// Đầu yêu cầu HTTP dài quá chừng này thì bỏ.
 const MAX_HEAD: usize = 16 * 1024;
-/// Kết nối loopback chưa gửi gì sau chừng này thì coi là khách (BTC phải xưng ngay khi nối).
-const CLAIM_WAIT: Duration = Duration::from_millis(300);
+
+/// Giới hạn thời gian / số lượng; mặc định cho bản thật, test dùng giá trị nhỏ.
+#[derive(Clone)]
+pub struct Config {
+    /// Từ lúc nối tới khi đọc xong đầu yêu cầu, trả lời HTTP hoặc bắt tay WebSocket xong.
+    pub head_timeout: Duration,
+    /// Chu kỳ gửi ping cho mỗi kết nối WebSocket.
+    pub ping_every: Duration,
+    /// Kết nối WebSocket không có khung nào (kể cả pong) quá chừng này thì đóng.
+    pub idle_timeout: Duration,
+    /// Số kết nối đồng thời tối đa; kết nối thừa bị đóng ngay.
+    pub max_conns: usize,
+    /// Hàng đợi gửi của khách / của BTC; đầy thì kết nối đó bị bỏ.
+    pub client_queue: usize,
+    pub btc_queue: usize,
+    /// Cỡ thư / khung WebSocket tối đa.
+    pub max_message: usize,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            head_timeout: Duration::from_secs(10),
+            ping_every: Duration::from_secs(10),
+            idle_timeout: Duration::from_secs(30),
+            max_conns: 256,
+            client_queue: 512,
+            btc_queue: 4096,
+            max_message: 1 << 20,
+        }
+    }
+}
 
 /// Tra tệp theo đường dẫn tương đối (không `/` đầu) ⇒ (nội dung, kiểu MIME). App: `asset_resolver`; bin: thư mục.
 pub type Files = Arc<dyn Fn(&str) -> Option<(Vec<u8>, String)> + Send + Sync>;
-type Tx = UnboundedSender<Message>;
+
+/// Đầu gửi của một kết nối; hàng đợi đầy (hoặc đã đóng) thì đánh thức kết nối để nó tự ngắt.
+#[derive(Clone)]
+struct Peer {
+    tx: Sender<Message>,
+    kick: Arc<Notify>,
+}
+
+impl Peer {
+    fn push(&self, m: Message) {
+        if self.tx.try_send(m).is_err() {
+            self.kick.notify_one();
+        }
+    }
+}
 
 #[derive(Default)]
 struct Relay {
-    btc: Option<(u64, Tx)>,
-    clients: BTreeMap<u64, Tx>,
+    btc: Option<(u64, Peer)>,
+    clients: BTreeMap<u64, Peer>,
     next: u64,
     /// Số thứ tự các lần xưng BTC (tách khỏi id khách để khách luôn bắt đầu từ c1).
     btc_seq: u64,
@@ -65,17 +111,53 @@ impl Drop for Server {
     }
 }
 
+impl Server {
+    /// Dừng hẳn: huỷ vòng nhận và đợi nó kết thúc để cổng nghe được trả lại (dừng rồi bật lại ngay vẫn bind được).
+    pub async fn shutdown(mut self) {
+        self.task.abort();
+        let _ = (&mut self.task).await;
+    }
+}
+
+/// Khoá tệp của app, bỏ `/` đầu (resolver của Tauri liệt kê khoá dạng `/index.html`).
+pub fn asset_keys<I: IntoIterator<Item = String>>(keys: I) -> HashSet<String> {
+    keys.into_iter().map(|k| k.trim_start_matches('/').to_string()).collect()
+}
+
+/// `rel` có đúng là một tệp thật của app không. `AssetResolver::get` tự lùi về `x.html`, `x/index.html`, `index.html`
+/// khi không có tệp, nên chỉ gọi nó với khoá có thật; còn lại là 404.
+pub fn asset_known(keys: &HashSet<String>, rel: &str) -> bool {
+    keys.contains(rel.trim_start_matches('/'))
+}
+
 pub async fn start_server(bind: SocketAddr, files: Files) -> std::io::Result<Server> {
+    start_server_with(bind, files, Config::default()).await
+}
+
+pub async fn start_server_with(bind: SocketAddr, files: Files, cfg: Config) -> std::io::Result<Server> {
     let listener = TcpListener::bind(bind).await?;
     let addr = listener.local_addr()?;
     let relay: Arc<Mutex<Relay>> = Arc::default();
+    let slots = Arc::new(Semaphore::new(cfg.max_conns));
     let (stop_tx, stop_rx) = watch::channel(false);
     let task = tokio::spawn(async move {
-        while let Ok((stream, peer)) = listener.accept().await {
-            let (relay, files, mut stop) = (relay.clone(), files.clone(), stop_rx.clone());
+        loop {
+            let (stream, peer) = match listener.accept().await {
+                Ok(x) => x,
+                Err(e) => {
+                    // Lỗi nhận tạm thời (hết tệp mở, …) không được làm chết vòng nhận.
+                    eprintln!("btc: accept lỗi: {e}");
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    continue;
+                }
+            };
+            let Ok(permit) = slots.clone().try_acquire_owned() else {
+                continue; // quá số kết nối: đóng ngay
+            };
+            let (relay, files, cfg, mut stop) = (relay.clone(), files.clone(), cfg.clone(), stop_rx.clone());
             tokio::spawn(async move {
                 tokio::select! {
-                    _ = serve(stream, peer, files, relay) => {}
+                    _ = serve(stream, peer, files, relay, cfg, permit) => {}
                     _ = stop.wait_for(|s| *s) => {}
                 }
             });
@@ -88,41 +170,62 @@ fn find_head_end(b: &[u8]) -> Option<usize> {
     b.windows(4).position(|w| w == b"\r\n\r\n").map(|i| i + 4)
 }
 
-/// Đường dẫn trong dòng yêu cầu, bỏ `?query` / `#hash`.
-fn request_path(line: &str) -> Option<(&str, &str)> {
-    let mut it = line.split_whitespace();
-    let (method, target) = (it.next()?, it.next()?);
-    let path = target.split(['?', '#']).next().unwrap_or("");
-    Some((method, path))
+struct Head {
+    method: String,
+    path: String,
+    /// (tên viết thường, giá trị đã cắt khoảng trắng)
+    headers: Vec<(String, String)>,
 }
 
-async fn serve(stream: TcpStream, peer: SocketAddr, files: Files, relay: Arc<Mutex<Relay>>) {
-    let _ = stream.set_nodelay(true);
-    // Nhìn trước (không tiêu thụ) cho tới khi đủ đầu yêu cầu.
+impl Head {
+    fn parse(head: &str) -> Option<Head> {
+        let mut lines = head.split("\r\n");
+        let mut first = lines.next()?.split_whitespace();
+        let (method, target) = (first.next()?, first.next()?);
+        let path = target.split(['?', '#']).next().unwrap_or("").to_string();
+        let headers = lines.filter_map(|l| l.split_once(':')).map(|(k, v)| (k.trim().to_ascii_lowercase(), v.trim().to_string())).collect();
+        Some(Head { method: method.to_string(), path, headers })
+    }
+
+    /// Có tiêu đề `name` mà giá trị (danh sách phân cách dấu phẩy) chứa `token` không phân biệt hoa thường.
+    fn has_token(&self, name: &str, token: &str) -> bool {
+        self.headers.iter().filter(|(k, _)| k == name).any(|(_, v)| v.split(',').any(|t| t.trim().eq_ignore_ascii_case(token)))
+    }
+
+    fn is_ws_upgrade(&self) -> bool {
+        self.path == "/ws" && self.has_token("upgrade", "websocket") && self.has_token("connection", "upgrade")
+    }
+}
+
+/// Nhìn trước (không tiêu thụ) cho tới khi đủ đầu yêu cầu; trả (độ dài đầu, đầu).
+async fn peek_head(stream: &TcpStream) -> Option<(usize, String)> {
     let mut buf = vec![0u8; MAX_HEAD];
-    let mut tries = 0;
-    let head_len = loop {
-        let Ok(n) = stream.peek(&mut buf).await else { return };
+    loop {
+        let n = stream.peek(&mut buf).await.ok()?;
         if n == 0 {
-            return;
+            return None;
         }
         if let Some(end) = find_head_end(&buf[..n]) {
-            break end;
+            return Some((end, String::from_utf8_lossy(&buf[..end]).to_string()));
         }
-        tries += 1;
-        if n == MAX_HEAD || tries > 1000 {
-            return;
+        if n == MAX_HEAD {
+            return None;
         }
         tokio::time::sleep(Duration::from_millis(5)).await;
-    };
-    let head = String::from_utf8_lossy(&buf[..head_len]).to_string();
-    let lower = head.to_lowercase();
-    let first = head.lines().next().unwrap_or("");
-    let is_ws = matches!(request_path(first), Some((_, "/ws"))) && lower.contains("upgrade: websocket");
-    if is_ws {
-        serve_ws(stream, peer, relay).await;
+    }
+}
+
+async fn serve(stream: TcpStream, peer: SocketAddr, files: Files, relay: Arc<Mutex<Relay>>, cfg: Config, _permit: OwnedSemaphorePermit) {
+    let _ = stream.set_nodelay(true);
+    // Mọi bước trước khi biết đây là WebSocket đã bắt tay hay HTTP đã trả lời đều có hạn: ổ cắm rảnh không giữ chỗ mãi.
+    let Ok(Some((head_len, head))) = tokio::time::timeout(cfg.head_timeout, peek_head(&stream)).await else { return };
+    let Some(parsed) = Head::parse(&head) else { return };
+    if parsed.is_ws_upgrade() {
+        let ws_cfg = WebSocketConfig::default().max_message_size(Some(cfg.max_message)).max_frame_size(Some(cfg.max_message));
+        let Ok(Ok(ws)) = tokio::time::timeout(cfg.head_timeout, tokio_tungstenite::accept_async_with_config(stream, Some(ws_cfg))).await else { return };
+        serve_ws(ws, peer, relay, cfg).await;
     } else {
-        serve_http(stream, head_len, first, files).await;
+        let _ = tokio::time::timeout(cfg.head_timeout, serve_http(stream, head_len, parsed, files)).await;
     }
 }
 
@@ -185,19 +288,16 @@ async fn reply(stream: &mut TcpStream, status: &str, ctype: &str, extra: &str, b
     let _ = stream.shutdown().await;
 }
 
-async fn serve_http(mut stream: TcpStream, head_len: usize, first: &str, files: Files) {
+async fn serve_http(mut stream: TcpStream, head_len: usize, head: Head, files: Files) {
     // Tiêu thụ đúng phần đầu đã nhìn thấy.
     let mut sink = vec![0u8; head_len];
     if stream.read_exact(&mut sink).await.is_err() {
         return;
     }
-    let Some((method, path)) = request_path(first) else {
-        return reply(&mut stream, "400 Bad Request", "text/plain; charset=utf-8", "", "Yêu cầu không hợp lệ".as_bytes()).await;
-    };
-    if method != "GET" {
+    if head.method != "GET" {
         return reply(&mut stream, "405 Method Not Allowed", "text/plain; charset=utf-8", "Allow: GET\r\n", "Chỉ hỗ trợ GET".as_bytes()).await;
     }
-    let found = safe_rel(path).and_then(|rel| files(&rel).map(|(body, _)| (body, rel)));
+    let found = safe_rel(&head.path).and_then(|rel| files(&rel).map(|(body, _)| (body, rel)));
     match found {
         Some((body, rel)) => {
             let ctype = mime_of(&rel);
@@ -220,29 +320,25 @@ fn is_claim(m: &Message) -> bool {
 }
 
 /// Đăng ký khách: cấp id, báo BTC `peer on`.
-fn register_client(relay: &Mutex<Relay>, tx: &Tx) -> u64 {
+fn register_client(relay: &Mutex<Relay>, me: &Peer) -> u64 {
     let mut r = relay.lock().unwrap();
     r.next += 1;
     let id = r.next;
-    r.clients.insert(id, tx.clone());
+    r.clients.insert(id, me.clone());
     if let Some((_, b)) = &r.btc {
-        let _ = b.send(text(format!("{{\"peer\":\"{}\",\"on\":true}}", client_name(id))));
+        b.push(text(format!("{{\"peer\":\"{}\",\"on\":true}}", client_name(id))));
     }
     id
 }
 
 /// Gửi thư của khách tới BTC (hoặc `nobtc` về khách). Không phải JSON ⇒ bỏ.
-fn client_message(relay: &Mutex<Relay>, id: u64, tx: &Tx, m: &Message) {
+fn client_message(relay: &Mutex<Relay>, id: u64, me: &Peer, m: &Message) {
     let Message::Text(t) = m else { return };
     let Ok(raw) = serde_json::from_str::<Box<RawValue>>(t.as_str()) else { return };
     let r = relay.lock().unwrap();
     match &r.btc {
-        Some((_, b)) => {
-            let _ = b.send(text(format!("{{\"from\":\"{}\",\"m\":{}}}", client_name(id), raw.get())));
-        }
-        None => {
-            let _ = tx.send(text("{\"t\":\"nobtc\"}".into()));
-        }
+        Some((_, b)) => b.push(text(format!("{{\"from\":\"{}\",\"m\":{}}}", client_name(id), raw.get()))),
+        None => me.push(text("{\"t\":\"nobtc\"}".into())),
     }
 }
 
@@ -258,31 +354,57 @@ fn btc_message(relay: &Mutex<Relay>, m: &Message) {
     let Ok(env) = serde_json::from_str::<ToClient>(t.as_str()) else { return };
     let r = relay.lock().unwrap();
     if env.to == "*" {
-        for tx in r.clients.values() {
-            let _ = tx.send(text(env.m.get().to_string()));
+        for p in r.clients.values() {
+            p.push(text(env.m.get().to_string()));
         }
     } else if let Some(id) = env.to.strip_prefix('c').and_then(|n| n.parse::<u64>().ok()) {
-        if let Some(tx) = r.clients.get(&id) {
-            let _ = tx.send(text(env.m.get().to_string()));
+        if let Some(p) = r.clients.get(&id) {
+            p.push(text(env.m.get().to_string()));
         }
     }
 }
 
-async fn serve_ws(stream: TcpStream, peer: SocketAddr, relay: Arc<Mutex<Relay>>) {
-    let Ok(ws) = tokio_tungstenite::accept_async(stream).await else { return };
+async fn serve_ws<S>(ws: tokio_tungstenite::WebSocketStream<S>, peer: SocketAddr, relay: Arc<Mutex<Relay>>, cfg: Config)
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+{
     let (mut sink, mut source) = ws.split();
-    let (tx, mut rx) = unbounded_channel::<Message>();
-    // Kết nối không phải loopback không thể là BTC ⇒ khách ngay. Loopback: đợi thư đầu để biết có xưng BTC không.
+    // Kết nối không phải loopback không thể là BTC ⇒ khách ngay. Loopback: vai do thư đầu quyết định, bao lâu cũng đợi
+    // (có ping / hạn rảnh): đúng `{"t":"btc"}` ⇒ xưng BTC; thư khác ⇒ khách, thư đó được chuyển như thường.
     let mut pending: Option<Message> = None;
     let mut claim = false;
     if peer.ip().is_loopback() {
-        match tokio::time::timeout(CLAIM_WAIT, source.next()).await {
-            Ok(Some(Ok(m))) if is_claim(&m) => claim = true,
-            Ok(Some(Ok(m))) => pending = Some(m),
-            Ok(_) => return,
-            Err(_) => {}
+        let mut last = Instant::now();
+        let mut tick = tokio::time::interval(cfg.ping_every);
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            tokio::select! {
+                m = source.next() => match m {
+                    Some(Ok(m)) => {
+                        last = Instant::now();
+                        if is_claim(&m) {
+                            claim = true;
+                            break;
+                        } else if m.is_text() || m.is_binary() {
+                            pending = Some(m);
+                            break;
+                        } else if m.is_close() {
+                            return;
+                        }
+                    }
+                    _ => return,
+                },
+                _ = tick.tick() => {
+                    if last.elapsed() > cfg.idle_timeout || sink.send(Message::Ping(Default::default())).await.is_err() {
+                        return;
+                    }
+                }
+            }
         }
     }
+    let kick = Arc::new(Notify::new());
+    let (tx, mut rx) = channel::<Message>(if claim { cfg.btc_queue } else { cfg.client_queue }.max(1));
+    let me = Peer { tx, kick: kick.clone() };
     let role = if claim {
         let claimed = {
             let mut r = relay.lock().unwrap();
@@ -291,10 +413,10 @@ async fn serve_ws(stream: TcpStream, peer: SocketAddr, relay: Arc<Mutex<Relay>>)
             } else {
                 r.btc_seq += 1;
                 let id = r.btc_seq;
-                r.btc = Some((id, tx.clone()));
+                r.btc = Some((id, me.clone()));
                 // BTC mới biết ngay ai đang nối.
                 for c in r.clients.keys() {
-                    let _ = tx.send(text(format!("{{\"peer\":\"{}\",\"on\":true}}", client_name(*c))));
+                    me.push(text(format!("{{\"peer\":\"{}\",\"on\":true}}", client_name(*c))));
                 }
                 Some(id)
             }
@@ -308,7 +430,7 @@ async fn serve_ws(stream: TcpStream, peer: SocketAddr, relay: Arc<Mutex<Relay>>)
             }
         }
     } else {
-        Role::Client(register_client(&relay, &tx))
+        Role::Client(register_client(&relay, &me))
     };
     let writer = tokio::spawn(async move {
         while let Some(m) = rx.recv().await {
@@ -319,15 +441,33 @@ async fn serve_ws(stream: TcpStream, peer: SocketAddr, relay: Arc<Mutex<Relay>>)
         let _ = sink.close().await;
     });
     if let (Role::Client(id), Some(m)) = (&role, &pending) {
-        client_message(&relay, *id, &tx, m);
+        client_message(&relay, *id, &me, m);
     }
-    while let Some(Ok(m)) = source.next().await {
-        if m.is_close() {
-            break;
-        }
-        match &role {
-            Role::Btc(_) => btc_message(&relay, &m),
-            Role::Client(id) => client_message(&relay, *id, &tx, &m),
+    let mut last = Instant::now();
+    let mut tick = tokio::time::interval(cfg.ping_every);
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        tokio::select! {
+            m = source.next() => match m {
+                Some(Ok(m)) => {
+                    last = Instant::now();
+                    if m.is_close() {
+                        break;
+                    }
+                    match &role {
+                        Role::Btc(_) => btc_message(&relay, &m),
+                        Role::Client(id) => client_message(&relay, *id, &me, &m),
+                    }
+                }
+                _ => break,
+            },
+            _ = tick.tick() => {
+                if last.elapsed() > cfg.idle_timeout {
+                    break;
+                }
+                me.push(Message::Ping(Default::default()));
+            }
+            _ = kick.notified() => break, // hàng đợi gửi đầy (khách chậm / chết)
         }
     }
     // Rời đi.
@@ -338,20 +478,20 @@ async fn serve_ws(stream: TcpStream, peer: SocketAddr, relay: Arc<Mutex<Relay>>)
                 if r.btc.as_ref().is_some_and(|b| b.0 == id) {
                     r.btc = None;
                     for c in r.clients.values() {
-                        let _ = c.send(text("{\"t\":\"nobtc\"}".into()));
+                        c.push(text("{\"t\":\"nobtc\"}".into()));
                     }
                 }
             }
             Role::Client(id) => {
                 r.clients.remove(&id);
                 if let Some((_, b)) = &r.btc {
-                    let _ = b.send(text(format!("{{\"peer\":\"{}\",\"on\":false}}", client_name(id))));
+                    b.push(text(format!("{{\"peer\":\"{}\",\"on\":false}}", client_name(id))));
                 }
             }
         }
     }
-    drop(tx);
-    let _ = writer.await;
+    // Bỏ tác vụ ghi (hàng đợi có thể đang kẹt vì ổ cắm chậm): ổ cắm đóng khi `sink` rơi.
+    writer.abort();
 }
 
 // ---------- Tệp tĩnh từ thư mục (bin e2e) ----------
@@ -397,7 +537,8 @@ pub fn load_json(dir: &Path) -> Option<String> {
 
 #[derive(Default)]
 pub struct BtcState {
-    server: Mutex<Option<Server>>,
+    /// Khoá tokio giữ suốt lúc bind/dừng ⇒ hai lệnh start đồng thời không tranh cổng, stop rồi start luôn được.
+    server: tokio::sync::Mutex<Option<Server>>,
 }
 
 #[derive(serde::Serialize)]
@@ -413,37 +554,57 @@ fn giai_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 
 #[tauri::command]
 pub async fn btc_start(app: tauri::AppHandle, state: tauri::State<'_, BtcState>) -> Result<BtcInfo, String> {
-    let port = {
-        let s = state.server.lock().unwrap();
-        s.as_ref().map(|s| s.addr.port())
-    };
-    if let Some(port) = port {
-        return Ok(BtcInfo { port, addrs: crate::lan::local_addrs() });
+    let mut slot = state.server.lock().await;
+    if let Some(s) = slot.as_ref() {
+        return Ok(BtcInfo { port: s.addr.port(), addrs: crate::lan::local_addrs() });
     }
     let resolver = app.asset_resolver();
-    let files: Files = Arc::new(move |rel: &str| resolver.get(rel.to_string()).map(|a| (a.bytes, a.mime_type)));
-    let server = start_server(SocketAddr::from(([0, 0, 0, 0], BTC_PORT)), files)
-        .await
-        .map_err(|e| format!("Không mở được cổng {BTC_PORT}: {e}"))?;
+    // Chỉ phục vụ tệp có thật: resolver tự lùi về index.html cho đường dẫn lạ nên phải lọc trước.
+    let keys = asset_keys(resolver.iter().map(|(k, _)| k.to_string()));
+    let files: Files = Arc::new(move |rel: &str| {
+        if !asset_known(&keys, rel) {
+            return None;
+        }
+        resolver.get(rel.to_string()).map(|a| (a.bytes, a.mime_type))
+    });
+    let bind = SocketAddr::from(([0, 0, 0, 0], BTC_PORT));
+    let mut tries = 0;
+    let server = loop {
+        match start_server(bind, files.clone()).await {
+            Ok(s) => break s,
+            // Cổng vừa được trả lại có thể chưa nhả hẳn: thử lại vài lần.
+            Err(e) if e.kind() == std::io::ErrorKind::AddrInUse && tries < 10 => {
+                tries += 1;
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            Err(e) => return Err(format!("Không mở được cổng {BTC_PORT}: {e}")),
+        }
+    };
     let port = server.addr.port();
-    *state.server.lock().unwrap() = Some(server);
+    *slot = Some(server);
     Ok(BtcInfo { port, addrs: crate::lan::local_addrs() })
 }
 
 #[tauri::command]
-pub fn btc_stop(state: tauri::State<'_, BtcState>) {
-    state.server.lock().unwrap().take();
+pub async fn btc_stop(state: tauri::State<'_, BtcState>) -> Result<(), String> {
+    let server = state.server.lock().await.take();
+    if let Some(s) = server {
+        s.shutdown().await;
+    }
+    Ok(())
 }
 
 #[tauri::command]
-pub fn btc_save(app: tauri::AppHandle, json: String) -> Result<(), String> {
+pub async fn btc_save(app: tauri::AppHandle, json: String) -> Result<(), String> {
+    let dir = giai_dir(&app)?;
     let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_millis();
-    save_at(&giai_dir(&app)?, &json, stamp).map_err(|e| e.to_string())
+    tokio::task::spawn_blocking(move || save_at(&dir, &json, stamp)).await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn btc_load(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    Ok(load_json(&giai_dir(&app)?))
+pub async fn btc_load(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let dir = giai_dir(&app)?;
+    tokio::task::spawn_blocking(move || load_json(&dir)).await.map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -600,6 +761,211 @@ mod tests {
         assert_eq!(recv(&mut again).await, "{\"peer\":\"c1\",\"on\":true}");
         send(&mut c, "{\"a\":3}").await;
         assert_eq!(recv(&mut again).await, "{\"from\":\"c1\",\"m\":{\"a\":3}}");
+    }
+
+    fn small_cfg() -> Config {
+        Config {
+            head_timeout: Duration::from_millis(300),
+            ping_every: Duration::from_millis(50),
+            idle_timeout: Duration::from_millis(400),
+            max_conns: 3,
+            client_queue: 8,
+            btc_queue: 64,
+            max_message: 1 << 20,
+        }
+    }
+
+    async fn start_cfg(cfg: Config) -> Server {
+        start_server_with("127.0.0.1:0".parse().unwrap(), fake_files(), cfg).await.unwrap()
+    }
+
+    /// Đọc tới khi đóng (Ok(0) / lỗi) trong `secs`; trả về true nếu máy chủ đóng.
+    async fn closed_within(s: &mut TcpStream, secs: u64) -> bool {
+        let mut b = [0u8; 64];
+        match tokio::time::timeout(Duration::from_secs(secs), s.read(&mut b)).await {
+            Ok(Ok(0)) | Ok(Err(_)) => true,
+            _ => false,
+        }
+    }
+
+    #[tokio::test]
+    async fn idle_socket_is_closed_by_timeout() {
+        let srv = start_cfg(small_cfg()).await;
+        let mut idle = TcpStream::connect(srv.addr).await.unwrap(); // không gửi gì
+        assert!(closed_within(&mut idle, 3).await, "ổ cắm rảnh phải bị đóng sau head_timeout");
+        // Đầu yêu cầu gửi dở cũng vậy.
+        let mut half = TcpStream::connect(srv.addr).await.unwrap();
+        half.write_all(b"GET / HTTP/1.1\r\nHost: x\r\n").await.unwrap();
+        assert!(closed_within(&mut half, 3).await, "đầu yêu cầu dở phải bị đóng");
+    }
+
+    #[tokio::test]
+    async fn connection_cap_closes_excess_immediately() {
+        let srv = start_cfg(Config { head_timeout: Duration::from_secs(30), ..small_cfg() }).await;
+        let mut held = Vec::new();
+        for _ in 0..3 {
+            held.push(TcpStream::connect(srv.addr).await.unwrap());
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let mut extra = TcpStream::connect(srv.addr).await.unwrap();
+        assert!(closed_within(&mut extra, 2).await, "kết nối thứ 4 phải bị đóng ngay");
+        drop(held);
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(get(srv.addr, "/").await.starts_with("HTTP/1.1 200"), "giải phóng chỗ thì nhận lại được");
+    }
+
+    #[test]
+    fn asset_lookup_only_real_files() {
+        let keys = asset_keys(["/trong-tai.html".to_string(), "assets/a.js".to_string(), "/media/x.png".to_string()]);
+        assert!(asset_known(&keys, "trong-tai.html"));
+        assert!(asset_known(&keys, "assets/a.js"));
+        assert!(asset_known(&keys, "media/x.png"));
+        assert!(!asset_known(&keys, "khong-co"));
+        assert!(!asset_known(&keys, "index.html"));
+        assert!(!asset_known(&keys, "assets"));
+    }
+
+    #[tokio::test]
+    async fn dead_client_is_dropped_by_heartbeat() {
+        let srv = start_cfg(small_cfg()).await;
+        let mut btc = new_btc(srv.addr).await;
+        // Khách này gửi một thư rồi không đọc nữa ⇒ không trả pong ⇒ bị ngắt.
+        let mut dead = ws(srv.addr).await;
+        send(&mut dead, "{\"a\":1}").await;
+        // Khách này liên tục đọc ⇒ vẫn sống.
+        let mut live = ws(srv.addr).await;
+        send(&mut live, "{\"b\":1}").await;
+        let (mut live_tx, mut live_rx) = live.split();
+        tokio::spawn(async move { while live_rx.next().await.is_some() {} });
+        let mut got = Vec::new();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(4);
+        while tokio::time::Instant::now() < deadline {
+            let m = recv(&mut btc).await;
+            got.push(m.clone());
+            if m == "{\"peer\":\"c1\",\"on\":false}" {
+                break;
+            }
+        }
+        assert!(got.contains(&"{\"peer\":\"c1\",\"on\":false}".to_string()), "c1 phải bị ngắt: {got:?}");
+        assert!(!got.contains(&"{\"peer\":\"c2\",\"on\":false}".to_string()), "c2 còn sống: {got:?}");
+        live_tx.send(Message::text("{\"b\":2}")).await.unwrap();
+        assert_eq!(recv(&mut btc).await, "{\"from\":\"c2\",\"m\":{\"b\":2}}");
+        drop(dead);
+    }
+
+    #[tokio::test]
+    async fn slow_client_with_full_queue_is_dropped() {
+        let srv = start_cfg(Config { idle_timeout: Duration::from_secs(60), ping_every: Duration::from_secs(60), client_queue: 4, ..small_cfg() }).await;
+        let mut btc = new_btc(srv.addr).await;
+        let mut slow = ws(srv.addr).await;
+        send(&mut slow, "{\"a\":1}").await;
+        assert_eq!(recv(&mut btc).await, "{\"peer\":\"c1\",\"on\":true}");
+        assert_eq!(recv(&mut btc).await, "{\"from\":\"c1\",\"m\":{\"a\":1}}");
+        // BTC bơm thật nhiều thư vào khách không đọc: hàng đợi 4 đầy ⇒ khách bị bỏ.
+        let big = "x".repeat(200_000);
+        for _ in 0..400 {
+            send(&mut btc, &format!("{{\"to\":\"c1\",\"m\":{{\"p\":\"{big}\"}}}}")).await;
+        }
+        let mut seen_off = false;
+        for _ in 0..50 {
+            if recv(&mut btc).await == "{\"peer\":\"c1\",\"on\":false}" {
+                seen_off = true;
+                break;
+            }
+        }
+        assert!(seen_off, "khách chậm phải bị ngắt");
+    }
+
+    #[tokio::test]
+    async fn oversized_message_closes_connection() {
+        let srv = start().await;
+        let mut c = ws(srv.addr).await;
+        let huge = format!("{{\"p\":\"{}\"}}", "y".repeat(2 << 20));
+        let _ = c.send(Message::text(huge)).await;
+        let mut closed = false;
+        for _ in 0..10 {
+            match tokio::time::timeout(Duration::from_secs(3), c.next()).await {
+                Ok(None) | Ok(Some(Err(_))) => {
+                    closed = true;
+                    break;
+                }
+                Err(_) => break,
+                Ok(Some(Ok(m))) if m.is_close() => {
+                    closed = true;
+                    break;
+                }
+                _ => {}
+            }
+        }
+        assert!(closed, "thư 2 MiB phải làm máy chủ đóng kết nối");
+    }
+
+    #[tokio::test]
+    async fn loopback_role_waits_for_first_message_without_time_limit() {
+        let srv = start().await;
+        let mut slow_btc = ws(srv.addr).await;
+        tokio::time::sleep(Duration::from_millis(700)).await; // lâu hơn khoảng 300 ms cũ
+        send(&mut slow_btc, "{\"t\":\"btc\"}").await;
+        let mut c = ws(srv.addr).await;
+        send(&mut c, "{\"k\":1}").await;
+        assert_eq!(recv(&mut slow_btc).await, "{\"peer\":\"c1\",\"on\":true}");
+        assert_eq!(recv(&mut slow_btc).await, "{\"from\":\"c1\",\"m\":{\"k\":1}}");
+    }
+
+    async fn raw_handshake(addr: SocketAddr, req_parts: &[&str], gap_ms: u64) -> String {
+        let mut s = TcpStream::connect(addr).await.unwrap();
+        for p in req_parts {
+            s.write_all(p.as_bytes()).await.unwrap();
+            s.flush().await.unwrap();
+            tokio::time::sleep(Duration::from_millis(gap_ms)).await;
+        }
+        let mut b = [0u8; 512];
+        let n = tokio::time::timeout(Duration::from_secs(3), s.read(&mut b)).await.expect("hết giờ").unwrap();
+        String::from_utf8_lossy(&b[..n]).into_owned()
+    }
+
+    #[tokio::test]
+    async fn upgrade_header_parsing_is_lenient() {
+        let srv = start().await;
+        let req = "GET /ws HTTP/1.1\r\nhost: x\r\nUPGRADE:websocket\r\nconnection:keep-alive, Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n";
+        let r = raw_handshake(srv.addr, &[req], 0).await;
+        assert!(r.starts_with("HTTP/1.1 101"), "{r}");
+    }
+
+    #[tokio::test]
+    async fn request_split_across_writes_still_upgrades() {
+        let srv = start().await;
+        let a = "GET /ws HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConn";
+        let b = "ection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n";
+        let r = raw_handshake(srv.addr, &[a, b], 150).await;
+        assert!(r.starts_with("HTTP/1.1 101"), "{r}");
+    }
+
+    #[tokio::test]
+    async fn non_loopback_peer_cannot_claim_btc() {
+        let Some(ip) = crate::lan::local_addrs().into_iter().next() else {
+            println!("bỏ qua: máy không có địa chỉ LAN không-loopback");
+            return;
+        };
+        let bind: SocketAddr = format!("{ip}:0").parse().unwrap();
+        let srv = start_server_with(bind, fake_files(), Config::default()).await.unwrap();
+        // Từ địa chỉ LAN, thư xưng BTC chỉ là thư của khách: chưa có BTC ⇒ nobtc.
+        let mut fake = ws(srv.addr).await;
+        send(&mut fake, "{\"t\":\"btc\"}").await;
+        assert_eq!(recv(&mut fake).await, "{\"t\":\"nobtc\"}");
+        // Nối tới địa chỉ LAN nhưng đó vẫn là IP không-loopback ⇒ không chiếm được chỗ BTC.
+        let mut btc_from_lan = ws(srv.addr).await;
+        send(&mut btc_from_lan, "{\"t\":\"btc\"}").await;
+        assert_eq!(recv(&mut btc_from_lan).await, "{\"t\":\"nobtc\"}");
+    }
+
+    #[tokio::test]
+    async fn stop_then_start_same_port() {
+        let srv = start().await;
+        let addr = srv.addr;
+        srv.shutdown().await;
+        let again = start_server_with(addr, fake_files(), Config::default()).await.expect("cổng phải được trả lại sau shutdown");
+        assert!(get(again.addr, "/").await.starts_with("HTTP/1.1 200"));
     }
 
     fn temp_dir(tag: &str) -> PathBuf {
