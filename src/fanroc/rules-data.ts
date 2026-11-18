@@ -7,6 +7,10 @@ import { pctText, scoreTally, teamScore, type FieldTally } from './scoring.ts'
 import { DISPENSER, FIELD, LADDER, LADDERS, MATCH_S, MOUNTAIN_FOOT, MOUNTAINS, PEAK_Y, RELEASE_S, TIER_GROOVE, TIERS, ZONES, type Rect } from './layout.ts'
 import { ladderLen, pointAt, type Climb } from './ladder.ts'
 import { createTournament, TEAM_COUNT } from './tournament.ts'
+import { FAULTS, signed } from './faults.ts'
+
+// Lỗi trọng tài (FAULTS, BLOCK_SECONDS) và signed ở faults.ts: nhẹ, trang trọng tài dùng được mà không kéo game 3D.
+export { BLOCK_SECONDS, FAULTS, signed, type Fault, type PenKind } from './faults.ts'
 
 /** Một thẻ Luật chơi: tiêu đề, một câu dẫn, bảng (nhãn | số) hoặc gạch đầu dòng, và hình SVG (chuỗi). */
 export interface RuleCard {
@@ -22,9 +26,6 @@ export interface RuleCard {
   /** Chữ thay cho hình (đọc màn hình). */
   alt: string
 }
-
-/** Số có dấu: +15, −3 (dấu trừ chuẩn), 0. */
-export const signed = (n: number): string => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0')
 
 // ---------- Điểm: dò từ scoring.ts bằng sân giả, không gõ tay ----------
 const blank = (): FieldTally => ({
@@ -90,28 +91,6 @@ export const PER_TEAM = (() => {
   const all = Array.from({ length: 30 }, (_, k) => k + 1).filter(ok)
   return { min: all[0], max: all[all.length - 1] }
 })()
-
-// ---------- Lỗi trọng tài tự động: đúng các lỗi match.ts bắt ----------
-/**
- * G15: hai robot khác liên minh đứng sát nhau quá chừng này giây. Là hằng riêng `BLOCK_S` của match.ts (không xuất ra
- * được vì lõi trận không sửa); phép thử đọc match.ts để số này không lệch.
- */
-export const BLOCK_SECONDS = 5
-
-export type PenKind = 'warn' | 'minor' | 'yellow'
-export interface Fault { code: string; name: string; text: string; pens: PenKind[] }
-
-const PEN_NAME: Record<PenKind, string> = { warn: 'cảnh cáo', minor: `lỗi nhẹ ${signed(-POINTS.minor)}`, yellow: `thẻ vàng ${signed(-POINTS.yellow)}` }
-
-export const FAULTS: Fault[] = [
-  { code: 'P12', name: 'Leo núi', pens: ['warn', 'minor'], text: `Robot trèo lên núi. Lần đầu: ${PEN_NAME.warn}; các lần sau: ${PEN_NAME.minor}.` },
-  { code: 'S02', name: 'Vươn ra ngoài rào', pens: ['yellow'], text: `Một góc robot thò ra ngoài rào sân: ${PEN_NAME.yellow}.` },
-  { code: 'P10', name: 'Cán cờ trên sàn', pens: ['warn'], text: `Đè lên lá cờ của robot khác đang nằm trên sàn: ${PEN_NAME.warn}.` },
-  {
-    code: 'G15', name: 'Chặn robot đội bạn', pens: ['yellow', 'warn'],
-    text: `Đứng sát, chặn robot liên minh kia hơn ${BLOCK_SECONDS} giây: robot tới sau bị ${PEN_NAME.yellow}; không rõ ai chặn thì cả hai bị ${PEN_NAME.warn}. Đang ở Khu Tiếp Tế của mình hay đang treo trên Thang Cứu Hỏa thì không tính.`,
-  },
-]
 
 // ---------- Hình SVG ----------
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')

@@ -10,7 +10,7 @@ import lessons from './vite.config.ts'
  */
 const OUT = 'dist-game'
 
-/** `fanroc.html` ⇒ `index.html` (máy chủ tĩnh / Tauri mở thẳng thư mục). */
+/** `fanroc.html` ⇒ `index.html` (máy chủ tĩnh / Tauri mở thẳng thư mục); `trong-tai.html` (trang trọng tài) giữ tên. */
 const asIndex = (): Plugin => ({
   name: 'fanroc-as-index',
   enforce: 'post',
@@ -45,7 +45,7 @@ export default defineConfig({
   build: {
     outDir: OUT,
     emptyOutDir: true,
-    rollupOptions: { input: { fanroc: resolve(__dirname, 'fanroc.html') } },
+    rollupOptions: { input: { fanroc: resolve(__dirname, 'fanroc.html'), 'trong-tai': resolve(__dirname, 'trong-tai.html') } },
   },
   // Không có cổng mặc định: `vite preview -c vite.game.config.ts --port <cổng>` (cổng 5190 thuộc checkout khác).
   preview: { strictPort: true },
