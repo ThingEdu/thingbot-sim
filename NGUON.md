@@ -13,7 +13,7 @@ ThingBot FanRoc Challenge (bộ cài TiFa) dùng lại các phần dưới đây
 | Đọc / ghi tệp .tb (JSZip) | https://github.com/Stuk/jszip (`jszip@3.10.1`) | MIT hoặc GPL-3.0 |
 | Số đo sân + lưới núi | CAD "Lắp sân.step" do anh Tuấn (ThingEdu) gửi 03/11/2026 → `src/fanroc/layout.ts`, `src/fanroc/assets/mountain-mesh.json` | của ThingEdu, đồng ý công khai 06/11/2026 |
 | Hình Mẫu Maker và linh kiện 3 mẫu cải tiến | CAD Onshape "Bộ thingbot mới" của anh Tuấn (ThingEdu) → `src/fanroc/assets/robot-maker.json`, `robot-parts.json` (công cụ `scripts/cad/`) | của ThingEdu, đồng ý công khai 06/11/2026 |
-| Logo ThingEdu (bản Bridge) và Maker Việt | Bộ nhận diện ThingEdu-Brand (`01-logo/direction-b-bridge`) và logo Maker Việt của anh Tuấn (ThingEdu), chọn dùng 18/11/2026 → `src/fanroc/assets/brand/` | của ThingEdu / Maker Việt, chỉ dùng để ghi nhận trong game |
+| Logo ThingEdu và Maker Việt | Logo do anh Tuấn (ThingEdu) gửi, dùng từ 18/11/2026 → `src/fanroc/assets/brand/` | của ThingEdu / Maker Việt, chỉ dùng để ghi nhận trong game |
 | Luật chơi | Thể lệ FANROC 2026–2027 của Ban tổ chức FANROC — game tóm tắt bằng lời riêng, không chép văn bản | tên FANROC dùng có xin phép (06/11/2026) |
 
 Mã của game: AGPL-3.0 (`LICENSE`), https://github.com/ThingEdu/thingbot-sim nhánh `feat/fanroc`; mã đúng của từng bản

@@ -44,8 +44,8 @@ export const CREDITS: readonly Credit[] = [
     license: 'của ThingEdu, đồng ý công khai 06/11/2026',
   },
   {
-    name: 'Logo ThingEdu (bản Bridge) và Maker Việt',
-    from: 'Bộ nhận diện ThingEdu-Brand (01-logo/direction-b-bridge) và logo Maker Việt của anh Tuấn (ThingEdu), chọn dùng 18/11/2026',
+    name: 'Logo ThingEdu và Maker Việt',
+    from: 'Logo ThingEdu và Maker Việt do anh Tuấn (ThingEdu) gửi, dùng từ 18/11/2026',
     license: 'của ThingEdu / Maker Việt, chỉ dùng để ghi nhận trong game',
   },
   {

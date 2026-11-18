@@ -293,6 +293,7 @@ và Hệ số nhân; bóng cam ở tầng trang trí bị trừ. Anh chốt 12/1
 | R172 | **Rớt mạng**: im lặng 2 s = rớt ⇒ robot Xanh cổng trung tính, hai máy báo; khách nối lại ≤ 10 s thì dựng lại phiên gương cùng seed và chạy tiếp (máy chủ gửi lại nhật ký từ đầu); quá 10 s robot Xanh đứng yên tới hết trận (không hủy). Máy chủ mất ⇒ máy khách thử nối lại mỗi giây, quá 10 s "Trận bị hủy". Khác `PROTO` ⇒ từ chối "Hai máy phải cùng phiên bản TiFa" | room.test, e2e L3, L4 |
 | R173 | **Màn chính thêm ô «Thi qua mạng LAN»** (hàng dưới cạnh Xưởng); trận hai máy không ⏸ ⏭ ×2 (thanh chạy ẩn), mỗi máy 1–2 bạn theo ⚙ › Hai bạn chơi (hai bạn cùng máy cùng liên minh, chia đôi màn hình), ghế trống là robot máy theo mức ⚙ của máy đó. Hết trận: «Về phòng chờ» để đấu lại | home.test, e2e L1, L2 |
 | R174 | **Logo ThingEdu + Maker Việt** (0.9.2, anh Tuấn 18/11: "nhớ logo Maker Việt và ThingEdu"; chọn bản Bridge của ThingEdu-Brand dù bộ nhận diện còn chờ chốt — đổi sau chỉ thay `src/fanroc/assets/brand/thingedu.svg`): dải nền trắng ở màn chính, ⚙ › Nguồn, màn tải lúc mở app (ui/brand.ts) | brand.test |
+| R175 | **Logo ThingEdu đúng bản chính thức** (anh Tuấn 18/11: "Logo ThingEdu bị sai ko đúng logo tôi gửi"): thay bản Bridge bằng logo khối chữ T màu chuyển + THING EDU, cắt từ dải mẫu anh gửi (`assets/brand/thingedu.png`, 246×56); tỉ lệ hai logo + vạch ngăn theo dải mẫu. Ảnh mẫu chỉ 450×90 ⇒ có tệp gốc nét hơn thì thay đúng tệp này | brand.test |
 
 ### Việc còn chờ anh
 
