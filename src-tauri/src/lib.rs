@@ -1,6 +1,7 @@
 //! Gói desktop của ThingBot FanRoc Game: một cửa sổ mở trang game (`dist-game/`, nhúng trong gói), không máy chủ ngoài,
 //! không sidecar; chỉ Thi qua mạng LAN mở socket trong mạng nội bộ (lan.rs). Plugin opener chỉ để mở link mã nguồn AGPL bằng trình duyệt (quyền ở capabilities/). Toàn bộ game (3D, vật lý Rapier WASM, bo ThingBot ảo trong Worker) chạy trong WebView.
 
+pub mod btc;
 pub mod lan;
 
 use std::path::{Path, PathBuf};
@@ -42,13 +43,18 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(lan::LanState::default())
+        .manage(btc::BtcState::default())
         .invoke_handler(tauri::generate_handler![
             save_tb,
             lan::lan_host_start,
             lan::lan_host_stop,
             lan::lan_rooms,
             lan::lan_connect,
-            lan::lan_disconnect
+            lan::lan_disconnect,
+            btc::btc_start,
+            btc::btc_stop,
+            btc::btc_save,
+            btc::btc_load
         ])
         .setup(|app| {
             // Bản phát hành không có chỗ nào khác để xem lỗi của trang: mở trình kiểm tra khi đặt biến môi trường

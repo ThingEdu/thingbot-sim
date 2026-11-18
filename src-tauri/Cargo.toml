@@ -7,7 +7,7 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/ThingEdu/thingbot-sim"
 edition = "2021"
 rust-version = "1.77.2"
-# Gói còn có bin fanroc-lan-hub (hub LAN cho dev / e2e, cần --features lan-hub); app chính là bin này.
+# Gói còn có bin fanroc-lan-hub (hub LAN cho dev / e2e, cần --features lan-hub) và fanroc-btc-server (cần --features btc-server); app chính là bin này.
 default-run = "thingbot-fanroc-game"
 
 [lib]
@@ -17,11 +17,18 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [features]
 # Hub LAN chạy riêng cho dev / e2e (src/bin/fanroc-lan-hub.rs): chỉ build khi bật, để tauri build không gói nó vào app.
 lan-hub = []
+# Máy chủ BTC (HTTP + WebSocket) chạy riêng cho e2e (src/bin/fanroc-btc-server.rs): cũng chỉ build khi bật.
+btc-server = []
 
 [[bin]]
 name = "fanroc-lan-hub"
 path = "src/bin/fanroc-lan-hub.rs"
 required-features = ["lan-hub"]
+
+[[bin]]
+name = "fanroc-btc-server"
+path = "src/bin/fanroc-btc-server.rs"
+required-features = ["btc-server"]
 
 [build-dependencies]
 tauri-build = { version = "2.6.3", features = [] }
@@ -37,5 +44,5 @@ tokio = { version = "1", features = ["net", "rt-multi-thread", "sync", "time", "
 tokio-tungstenite = "0.26"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 if-addrs = "0.13"
-serde_json = "1"
+serde_json = { version = "1", features = ["raw_value"] }
 serde = { version = "1", features = ["derive"] }
