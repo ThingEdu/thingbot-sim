@@ -17,6 +17,9 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::Message;
 
+/// Việc nền chạy trên runtime của Tauri (đèn hiệu, dò phòng).
+pub type BgTask = tauri::async_runtime::JoinHandle<()>;
+
 pub const HUB_PORT: u16 = 47290;
 pub const BEACON_PORT: u16 = 47291;
 /// Phòng không phát đèn hiệu quá chừng này thì bỏ khỏi danh sách.
@@ -200,8 +203,9 @@ pub fn parse_beacon(data: &[u8], from: IpAddr) -> Option<Room> {
 }
 
 /// Phát đèn hiệu mỗi giây tới mọi địa chỉ broadcast của các card mạng IPv4 (và 255.255.255.255).
-pub fn start_beacon(name: String, port: u16, proto: u32) -> JoinHandle<()> {
-    tokio::spawn(async move {
+/// Chạy trên runtime của Tauri (gọi được cả từ lệnh đồng bộ trên luồng chính, nơi không có runtime tokio).
+pub fn start_beacon(name: String, port: u16, proto: u32) -> BgTask {
+    tauri::async_runtime::spawn(async move {
         let Ok(sock) = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).await else { return };
         let _ = sock.set_broadcast(true);
         let payload = beacon_payload(&name, port, proto);
@@ -241,8 +245,9 @@ impl RoomList {
     }
 }
 
-pub fn start_listener(list: RoomList, port: u16) -> JoinHandle<()> {
-    tokio::spawn(async move {
+/// Như `start_beacon`: lan_rooms là lệnh đồng bộ, gọi tokio::spawn ở đó làm app sập (0.9.2).
+pub fn start_listener(list: RoomList, port: u16) -> BgTask {
+    tauri::async_runtime::spawn(async move {
         let Ok(sock) = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, port)).await else { return };
         let mut buf = [0u8; 512];
         while let Ok((n, from)) = sock.recv_from(&mut buf).await {
@@ -279,9 +284,9 @@ pub fn parse_addr(s: &str) -> Option<SocketAddr> {
 #[derive(Default)]
 pub struct LanState {
     hub: Mutex<Option<Hub>>,
-    beacon: Mutex<Option<JoinHandle<()>>>,
+    beacon: Mutex<Option<BgTask>>,
     proxy: Mutex<Option<Proxy>>,
-    listener: Mutex<Option<JoinHandle<()>>>,
+    listener: Mutex<Option<BgTask>>,
     rooms: RoomList,
 }
 
@@ -345,6 +350,14 @@ mod tests {
     use super::*;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio_tungstenite::connect_async;
+
+    /// Lệnh Tauri đồng bộ (lan_rooms) chạy trên luồng chính, không có runtime tokio: dò phòng / đèn hiệu phải tự
+    /// chạy trên runtime của Tauri, không được panic "no reactor running" (app 0.9.2 sập khi mở màn LAN).
+    #[test]
+    fn listener_and_beacon_start_outside_tokio_runtime() {
+        start_listener(RoomList::default(), 0).abort();
+        start_beacon("thử".into(), 1, 1).abort();
+    }
 
     async fn next_data<S>(s: &mut S) -> Message
     where
