@@ -57,3 +57,13 @@ test('đọc tệp kiểu Excel/LibreOffice: chuỗi rich text, cột cách quã
     [null, null, 7.25, null, ''],
   ])
 })
+
+test('styles.xml có kiểu mặc định Normal (cellStyleXfs + cellStyles) để Excel mở không phải sửa', async () => {
+  const data = await writeXlsx([{ name: 'S', rows: [['a']] }])
+  const xml = await (await JSZip.loadAsync(data)).file('xl/styles.xml')!.async('string')
+  assert.match(xml, /<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"\/><\/cellStyleXfs>/)
+  assert.match(xml, /<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"\/><\/cellStyles>/)
+  // thứ tự phần tử theo lược đồ: fonts, fills, borders, cellStyleXfs, cellXfs, cellStyles
+  const order = ['<fonts', '<fills', '<borders', '<cellStyleXfs', '<cellXfs', '<cellStyles'].map((t) => xml.indexOf(t))
+  assert.ok(order.every((x, i) => x >= 0 && (i === 0 || x > order[i - 1])), String(order))
+})
