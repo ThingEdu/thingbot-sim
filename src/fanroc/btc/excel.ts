@@ -22,6 +22,34 @@ export function templateXlsx(): Promise<Uint8Array> {
   ])
 }
 
+// ---------- dữ liệu mẫu (để BTC tập nhập liệu, sinh lịch) ----------
+// Tên trường / người hướng dẫn là tên đặt chung chung, không phải danh sách thật.
+const SAMPLE_NAMES = [
+  'Kiến Lửa', 'Dế Mèn', 'Ong Vàng', 'Chuồn Chuồn', 'Bọ Rùa', 'Châu Chấu', 'Sên Con', 'Cào Cào', 'Đom Đóm', 'Bươm Bướm',
+  'Sóc Nhanh', 'Cú Đêm', 'Rồng Xanh', 'Hạc Trắng', 'Sao Mai', 'Tia Chớp', 'Mặt Trời', 'Cầu Vồng', 'Lửa Hồng', 'Gió Bấc',
+  'Thuyền Buồm', 'Tên Lửa', 'Bánh Răng', 'Mạch Điện', 'Pin Xanh', 'Ốc Vít', 'Tia Laze', 'Nam Châm', 'Hạt Mầm', 'Đại Dương',
+]
+const SAMPLE_SCHOOLS: [string, string][] = [
+  ['THCS Lê Lợi', 'Thanh Hóa'], ['THCS Trần Phú', 'Thanh Hóa'], ['THCS Nguyễn Du', 'Thanh Hóa'], ['THPT Hàm Rồng', 'Thanh Hóa'],
+  ['THCS Quang Trung', 'Nghệ An'], ['THCS Hưng Dũng', 'Nghệ An'], ['THCS Đinh Tiên Hoàng', 'Ninh Bình'], ['THCS Kim Đồng', 'Hà Nội'],
+  ['THCS Chu Văn An', 'Hà Nội'], ['FPT Schools', 'Hà Nội'],
+]
+const SAMPLE_ADVISORS = ['Cô Lan', 'Thầy Minh', 'Cô Hoa', 'Thầy Nam', 'Cô Thu', 'Thầy Hùng', 'Cô Mai', 'Thầy Long', 'Cô Hà', 'Thầy Sơn']
+
+/** n đội mẫu (1–30), cố định: mã D01…, 3 đội một trường. */
+export function sampleTeams(n: number): Omit<Team, 'id' | 'withdrawn'>[] {
+  if (!Number.isInteger(n) || n < 1 || n > SAMPLE_NAMES.length) throw new Error(`Dữ liệu mẫu có 1–${SAMPLE_NAMES.length} đội`)
+  return SAMPLE_NAMES.slice(0, n).map((name, k) => {
+    const [school, province] = SAMPLE_SCHOOLS[Math.floor(k / 3) % SAMPLE_SCHOOLS.length]
+    return { code: `D${String(k + 1).padStart(2, '0')}`, name, school, province, advisor: SAMPLE_ADVISORS[Math.floor(k / 3) % SAMPLE_ADVISORS.length] }
+  })
+}
+
+/** File Excel theo đúng mẫu, đã điền n đội mẫu. */
+export function sampleXlsx(n: number): Promise<Uint8Array> {
+  return writeXlsx([{ name: 'Đội', rows: [[...TEMPLATE_HEAD], ...sampleTeams(n).map((t) => [t.code, t.name, t.school, t.province, t.advisor])] }])
+}
+
 // ---------- nhập ----------
 export type ImportRow = { line: number; team?: Omit<Team, 'id' | 'withdrawn'>; error?: string }
 

@@ -5,7 +5,7 @@ import { liveScore, teamPoints } from './sheet.ts'
 import { roundStandings } from './rank.ts'
 import { slotTime } from './schedule.ts'
 import { pctText } from '../scoring.ts'
-import { exportEvent, importTeams, templateXlsx, TEMPLATE_HEAD } from './excel.ts'
+import { exportEvent, importTeams, sampleTeams, sampleXlsx, templateXlsx, TEMPLATE_HEAD } from './excel.ts'
 import { readXlsx, writeXlsx, type Cell } from './xlsx.ts'
 
 const enc = (s: string) => new TextEncoder().encode(s)
@@ -138,4 +138,17 @@ test('xuất rồi nhập lại danh sách đội: sheet Đội của exportEven
   assert.equal(out.length, 5)
   assert.ok(out.every((o) => o.team))
   assert.equal(out[2].team?.school, 'Trường 3')
+})
+
+test('dữ liệu mẫu 20 / 30 đội: nhập lại không lỗi, đủ số đội, mã và tên không trùng', async () => {
+  for (const n of [20, 30] as const) {
+    const rows = await importTeams(await sampleXlsx(n), `mau-${n}-doi.xlsx`)
+    assert.equal(rows.filter((r) => r.error).length, 0)
+    const teams = rows.flatMap((r) => (r.team ? [r.team] : []))
+    assert.equal(teams.length, n)
+    assert.equal(new Set(teams.map((t) => t.code)).size, n)
+    assert.equal(new Set(teams.map((t) => t.name)).size, n)
+    assert.ok(teams.every((t) => t.school && t.province && t.advisor))
+  }
+  assert.deepEqual(sampleTeams(20), sampleTeams(30).slice(0, 20))
 })

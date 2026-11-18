@@ -7,7 +7,7 @@ import { emptySheet, newEvent, type Action, type EMatch, type EventState, type H
 import { makeSchedule, slotTime, type SchedQuality } from '../btc/schedule.ts'
 import { halfScore, liveScore, teamPoints } from '../btc/sheet.ts'
 import { roundStandings } from '../btc/rank.ts'
-import { exportEvent, importTeams, templateXlsx, type ImportRow } from '../btc/excel.ts'
+import { exportEvent, importTeams, sampleXlsx, templateXlsx, type ImportRow } from '../btc/excel.ts'
 import { sanitizeSheet, validateEvent } from '../btc/validate.ts'
 import { BtcHost } from '../btc/host.ts'
 import { connectBtc } from '../btc/link.ts'
@@ -625,6 +625,14 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
             teamNote = { ok: false, text: msg(e) }
           }
         }, { key: 'template' }),
+        ...([20, 30] as const).map((n) =>
+          btn(`Tải dữ liệu mẫu ${n} đội`, async () => {
+            try {
+              teamNote = { ok: true, text: `Đã lưu dữ liệu mẫu: ${await backend.saveFile(`mau-${n}-doi.xlsx`, await sampleXlsx(n))} — bấm «Nhập Excel / CSV…» để nhập thử` }
+            } catch (e) {
+              teamNote = { ok: false, text: msg(e) }
+            }
+          }, { key: `sample${n}` })),
         btn('Nhập Excel / CSV…', () => importInput.click(), { key: 'import' })),
       el('div', 'bt-cap', 'Mỗi dòng một đội: Mã đội, Tên đội, Trường, Tỉnh/Thành, Người hướng dẫn. Không ghi số điện thoại hay thông tin cá nhân học sinh.'),
     ]
