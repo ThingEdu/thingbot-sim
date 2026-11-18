@@ -81,6 +81,15 @@ export function randomCode(): string {
   return String(n).padStart(4, '0')
 }
 
+/**
+ * Sự kiện nào nhả «đang nhấn» (hoãn vẽ lại): nhả chuột / huỷ chạm; blur chỉ khi CẢ cửa sổ mất tiêu điểm — blur của ô
+ * nhập (lúc bấm nút ngay sau khi gõ) không được nhả, kẻo vẽ lại thay nút giữa pointerdown và click.
+ */
+export function releasesHold(type: string, target: unknown, win: unknown): boolean {
+  if (type === 'blur') return target === win
+  return type === 'pointerup' || type === 'pointercancel'
+}
+
 const randomSeed = () => Math.floor(Math.random() * 0x7fffffff)
 const msg = (e: unknown) => {
   const t = e instanceof Error ? e.message : String(e)
@@ -237,7 +246,8 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
   let active = false
   let phase: 'loading' | 'ask' | 'loadError' | 'corrupt' | 'main' = 'loading'
   let loadErr = ''
-  let corruptRaw = ''
+  let corruptRaw = '' // nội dung file hỏng (chỉ để biết đã đọc được; sao lưu dùng backend.backupRaw lấy bản gốc)
+  let corruptBusy = false
   let showToken = 0
   let saved: EventState | null = null
   let host: BtcHost | null = null
@@ -298,7 +308,10 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
       if (w.length) renderSoon(w)
     }, 0)
   }
-  for (const ev of ['pointerup', 'pointercancel', 'blur']) window.addEventListener(ev, release, true)
+  for (const ev of ['pointerup', 'pointercancel']) window.addEventListener(ev, release, true)
+  window.addEventListener('blur', (e) => {
+    if (releasesHold(e.type, e.target, window)) release()
+  })
   let queued = false
   const renderSoon = (which: Sec[] = SECS) => {
     for (const s of which) pending.add(s)
@@ -435,16 +448,21 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
       b.append(
         note('File giải không đọc được (hỏng hoặc sai định dạng)', false),
         el('div', 'bt-cap', 'Giải chưa bị ghi đè. Bấm nút dưới để lưu nguyên văn file lỗi ra máy (giai-loi-<ngày giờ>.json, gửi cho người hỗ trợ khôi phục) rồi tạo giải mới.'),
-        box('div', 'bt-row', btn('Sao lưu file lỗi rồi tạo giải mới', async () => {
+        box('div', 'bt-row', btn(corruptBusy ? 'Đang sao lưu…' : 'Sao lưu file lỗi rồi tạo giải mới', async () => {
+          if (corruptBusy) return
+          corruptBusy = true // bấm lần nữa khi đang lưu: không sao lưu / tạo giải hai lần
+          renderGate()
           try {
-            await backend.saveFile(`giai-loi-${stamp(new Date())}.json`, new TextEncoder().encode(corruptRaw))
+            // bản gốc từng byte (app: chép hien-tai.json; trình duyệt: nguyên văn ô lưu)
+            const path = await backend.backupRaw(`giai-loi-${stamp(new Date())}.json`)
+            await newEventFlow(null)
+            eventNote = { ok: true, text: `Đã sao lưu file lỗi (${path}) và tạo giải mới` }
           } catch (e) {
             eventNote = { ok: false, text: `Không sao lưu được file lỗi: ${msg(e)} — chưa tạo giải mới` }
-            return
+          } finally {
+            corruptBusy = false
           }
-          await newEventFlow(null)
-          eventNote = { ok: true, text: 'Đã sao lưu file lỗi và tạo giải mới' }
-        }, { cls: 'warn', key: 'corrupt-new', role: 'corrupt-new' })),
+        }, { cls: 'warn', key: 'corrupt-new', role: 'corrupt-new', disabled: corruptBusy })),
       )
       if (eventNote) b.append(note(eventNote.text, eventNote.ok))
     } else {

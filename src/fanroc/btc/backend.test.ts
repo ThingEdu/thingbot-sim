@@ -84,3 +84,35 @@ test('CSP của app cho trang nối WebSocket tới 127.0.0.1 (hub LAN, ống n�
   const connect: string = conf.app.security.csp['connect-src']
   assert.ok(connect.split(/\s+/).includes('ws://127.0.0.1:*'), connect)
 })
+
+test('backend desktop: btc_load lỗi ⇒ load() reject (màn báo lỗi, không tạo giải mới); sao lưu file lỗi bằng btc_backup_raw', async () => {
+  const calls: [string, unknown][] = []
+  const invoke = async (cmd: string, args: unknown) => {
+    calls.push([cmd, args])
+    if (cmd === 'btc_load') throw 'Không đọc được file giải: Permission denied'
+    if (cmd === 'btc_backup_raw') return '/Users/a/Downloads/giai-loi-x.json'
+    return null
+  }
+  const b = btcBackend({ __TAURI_INTERNALS__: { invoke } } as never)
+  await assert.rejects(b.load(), (e) => String(e).includes('Permission denied'))
+  assert.equal(await b.backupRaw('giai-loi-x.json'), '/Users/a/Downloads/giai-loi-x.json')
+  assert.deepEqual(calls.at(-1), ['btc_backup_raw', { name: 'giai-loi-x.json' }])
+})
+
+test('backend trình duyệt: sao lưu file lỗi = tải nguyên văn ô fanroc.v1.btc.event', async () => {
+  const st = fakeStorage()
+  st.setItem(EVENT_KEY, '{hỏng')
+  const got: { name: string; size: number }[] = []
+  const doc = {
+    body: { append: () => {} },
+    createElement: () => {
+      const a = { href: '', download: '', click: async () => got.push({ name: a.download, size: (await (await fetch(a.href)).arrayBuffer()).byteLength }), remove: () => {} }
+      return a
+    },
+  }
+  const b = btcBackend({ location: { search: '' }, localStorage: st, document: doc as never })
+  assert.equal(await b.backupRaw('giai-loi-x.json'), 'giai-loi-x.json')
+  await new Promise((r) => setTimeout(r, 50))
+  assert.deepEqual(got, [{ name: 'giai-loi-x.json', size: new TextEncoder().encode('{hỏng').length }])
+  await assert.rejects(btcBackend({ location: { search: '' }, localStorage: fakeStorage() }).backupRaw('x.json'), /Không có/)
+})

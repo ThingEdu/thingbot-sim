@@ -19,6 +19,8 @@ export interface BtcBackend {
   load(): Promise<string | null>
   /** Lưu tệp cho người dùng (Excel, sao lưu JSON); trả đường tệp đã lưu (trình duyệt: tên tệp tải về). */
   saveFile(name: string, data: Uint8Array): Promise<string>
+  /** File giải hỏng: lưu NGUYÊN BẢN file giải đã lưu (từng byte) ra `name` trước khi tạo giải mới; trả đường tệp. */
+  backupRaw(name: string): Promise<string>
 }
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>
@@ -73,6 +75,12 @@ export function btcBackend(w: Env = globalThis as never): BtcBackend {
         download(w.document, name, data)
         return name
       },
+      async backupRaw(name) {
+        const raw = store()?.getItem(EVENT_KEY)
+        if (raw === null || raw === undefined) throw new Error('Không có file giải để sao lưu')
+        download(w.document, name, new TextEncoder().encode(raw))
+        return name
+      },
     }
   }
   return {
@@ -85,6 +93,7 @@ export function btcBackend(w: Env = globalThis as never): BtcBackend {
     save: async (json) => void (await invoke('btc_save', { json })),
     load: async () => ((await invoke('btc_load', {})) as string | null) ?? null,
     saveFile: async (name, data) => String(await invoke('save_file', { name, data: Array.from(data) })),
+    backupRaw: async (name) => String(await invoke('btc_backup_raw', { name })),
   }
 }
 

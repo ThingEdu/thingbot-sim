@@ -16,7 +16,7 @@ fn safe_tb_name(name: &str) -> String {
 }
 
 /// Đường chưa có tệp trong `dir`, giữ đuôi của `name`: `ten.tb`, `ten (2).tb`, `ten (3).tb`, …
-fn free_path(dir: &Path, name: &str) -> PathBuf {
+pub(crate) fn free_path(dir: &Path, name: &str) -> PathBuf {
     let (stem, ext) = match name.rfind('.') {
         Some(i) if i > 0 => (&name[..i], &name[i..]),
         _ => (name, ""),
@@ -31,7 +31,7 @@ fn free_path(dir: &Path, name: &str) -> PathBuf {
 }
 
 /// Tên tệp an toàn cho save_file: chỉ phần tên, bỏ ký tự cấm; chỉ nhận đuôi `.xlsx` / `.json` (không phân biệt hoa thường).
-fn safe_file_name(name: &str) -> Option<String> {
+pub(crate) fn safe_file_name(name: &str) -> Option<String> {
     let base = Path::new(name).file_name().and_then(|n| n.to_str()).unwrap_or("");
     let clean: String = base.chars().filter(|c| !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') && !c.is_control()).collect();
     let clean = clean.trim();
@@ -84,7 +84,8 @@ pub fn run() {
             btc::btc_start,
             btc::btc_stop,
             btc::btc_save,
-            btc::btc_load
+            btc::btc_load,
+            btc::btc_backup_raw
         ])
         .setup(|app| {
             // Bản phát hành không có chỗ nào khác để xem lỗi của trang: mở trình kiểm tra khi đặt biến môi trường

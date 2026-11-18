@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { backupName, fieldsOf, nextMatch, parseEvent, randomCode, scheduleRows, startupAction } from './btc.ts'
+import { backupName, fieldsOf, nextMatch, parseEvent, randomCode, releasesHold, scheduleRows, startupAction } from './btc.ts'
 import { qrSvg } from '../btc/qr.ts'
 import { emptySheet, newEvent, type Round, type Team } from '../btc/event.ts'
 
@@ -65,4 +65,13 @@ test('startupAction: lỗi đọc ⇒ báo, không tự tạo; file hỏng ⇒ b
   deep.rounds = [{ id: 'r1', matches: [{}], results: {}, edits: [] }]
   assert.equal(startupAction({ ok: true, raw: JSON.stringify(deep) }).t, 'corrupt', 'hỏng sâu bên trong cũng là file hỏng')
   assert.equal(parseEvent(JSON.stringify(deep)), null)
+})
+
+test('releasesHold: blur của ô nhập không nhả (cú bấm nút sau khi gõ không bị vẽ lại nuốt); blur cửa sổ / nhả chuột thì nhả', () => {
+  const win = {}, input = {}
+  assert.equal(releasesHold('blur', input, win), false)
+  assert.equal(releasesHold('blur', win, win), true)
+  assert.equal(releasesHold('pointerup', input, win), true)
+  assert.equal(releasesHold('pointercancel', win, win), true)
+  assert.equal(releasesHold('focus', win, win), false)
 })

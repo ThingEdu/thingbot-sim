@@ -529,8 +529,23 @@ pub fn save_at(dir: &Path, json: &str, stamp: u128) -> std::io::Result<()> {
     Ok(())
 }
 
-pub fn load_json(dir: &Path) -> Option<String> {
-    std::fs::read_to_string(dir.join("hien-tai.json")).ok()
+/// Đọc `hien-tai.json`. Chưa có tệp ⇒ Ok(None); lỗi đọc khác (quyền, ổ đĩa…) ⇒ Err (trang báo lỗi, KHÔNG tạo giải
+/// mới ghi đè); UTF-8 hỏng ⇒ nội dung thay ký tự hỏng (trang báo «file hỏng» rồi cho sao lưu bản gốc bằng `backup_raw`).
+pub fn load_json(dir: &Path) -> std::io::Result<Option<String>> {
+    match std::fs::read(dir.join("hien-tai.json")) {
+        Ok(b) => Ok(Some(String::from_utf8_lossy(&b).into_owned())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// Chép nguyên từng byte `hien-tai.json` sang `out/name` (không ghi đè: `name (2).json`…); trả đường tệp đã lưu.
+pub fn backup_raw(dir: &Path, out: &Path, name: &str) -> std::io::Result<PathBuf> {
+    let bytes = std::fs::read(dir.join("hien-tai.json"))?;
+    std::fs::create_dir_all(out)?;
+    let path = crate::free_path(out, name);
+    std::fs::write(&path, bytes)?;
+    Ok(path)
 }
 
 // ---------- Lệnh Tauri ----------
@@ -604,7 +619,25 @@ pub async fn btc_save(app: tauri::AppHandle, json: String) -> Result<(), String>
 #[tauri::command]
 pub async fn btc_load(app: tauri::AppHandle) -> Result<Option<String>, String> {
     let dir = giai_dir(&app)?;
-    tokio::task::spawn_blocking(move || load_json(&dir)).await.map_err(|e| e.to_string())
+    tokio::task::spawn_blocking(move || load_json(&dir))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("Không đọc được file giải: {e}"))
+}
+
+/// File giải không đọc được: chép nguyên bản `hien-tai.json` vào Downloads (`giai-loi-<ngày giờ>.json`) trước khi tạo
+/// giải mới. Chỉ nhận tên .json an toàn.
+#[tauri::command]
+pub async fn btc_backup_raw(app: tauri::AppHandle, name: String) -> Result<String, String> {
+    use tauri::Manager;
+    let name = crate::safe_file_name(&name).filter(|n| n.ends_with(".json")).ok_or_else(|| "Tên tệp sao lưu phải là .json".to_string())?;
+    let dir = giai_dir(&app)?;
+    let out = app.path().download_dir().map_err(|e| e.to_string())?;
+    tokio::task::spawn_blocking(move || backup_raw(&dir, &out, &name))
+        .await
+        .map_err(|e| e.to_string())?
+        .map(|p| p.to_string_lossy().into_owned())
+        .map_err(|e| format!("Không sao lưu được file giải: {e}"))
 }
 
 #[cfg(test)]
@@ -977,10 +1010,10 @@ mod tests {
     #[test]
     fn save_then_load_roundtrip() {
         let d = temp_dir("rt");
-        assert_eq!(load_json(&d), None);
+        assert_eq!(load_json(&d).unwrap(), None, "chưa có tệp ⇒ Ok(None)");
         save_at(&d, "{\"giai\":\"một\"}", 1).unwrap();
         save_at(&d, "{\"giai\":\"hai\"}", 2).unwrap();
-        assert_eq!(load_json(&d).as_deref(), Some("{\"giai\":\"hai\"}"));
+        assert_eq!(load_json(&d).unwrap().as_deref(), Some("{\"giai\":\"hai\"}"));
         assert!(!d.join("hien-tai.json.tmp").exists());
         std::fs::remove_dir_all(&d).unwrap();
     }
@@ -996,7 +1029,61 @@ mod tests {
         assert_eq!(names.len(), 20);
         assert!(!names.contains(&"sao-luu-1.json".to_string()), "{names:?}");
         assert!(names.contains(&"sao-luu-2.json".to_string()) && names.contains(&"sao-luu-21.json".to_string()));
-        assert_eq!(load_json(&d).as_deref(), Some("{\"i\":21}"));
+        assert_eq!(load_json(&d).unwrap().as_deref(), Some("{\"i\":21}"));
         std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    /// Đọc lỗi (không phải «chưa có tệp») ⇒ Err, để trang báo lỗi thay vì tạo giải mới ghi đè.
+    #[cfg(unix)]
+    #[test]
+    fn load_unreadable_is_error() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = temp_dir("perm");
+        save_at(&d, "{}", 1).unwrap();
+        let f = d.join("hien-tai.json");
+        std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let r = load_json(&d);
+        std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(r.is_err(), "{r:?}");
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    /// Thư mục giải là tệp (lỗi khác NotFound) ⇒ Err (chạy cả Windows).
+    #[test]
+    fn load_other_error_is_error() {
+        let d = temp_dir("notdir");
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::create_dir_all(d.join("hien-tai.json")).unwrap(); // là thư mục, đọc như tệp thì lỗi
+        assert!(load_json(&d).is_err());
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    /// UTF-8 hỏng ⇒ vẫn trả nội dung (thay ký tự hỏng) để trang báo «file hỏng» và cho sao lưu bản gốc.
+    #[test]
+    fn load_invalid_utf8_is_lossy() {
+        let d = temp_dir("utf8");
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join("hien-tai.json"), b"{\"a\":\"\xff\xfe\"}").unwrap();
+        assert_eq!(load_json(&d).unwrap().as_deref(), Some("{\"a\":\"\u{fffd}\u{fffd}\"}"));
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    /// Sao lưu file giải lỗi: chép nguyên từng byte, không ghi đè tệp có sẵn.
+    #[test]
+    fn backup_raw_copies_identical_bytes() {
+        let d = temp_dir("raw");
+        let out = temp_dir("raw-out");
+        std::fs::create_dir_all(&d).unwrap();
+        let bytes: &[u8] = b"{\"hong\":\xff\x00\x01 ";
+        std::fs::write(d.join("hien-tai.json"), bytes).unwrap();
+        let p1 = backup_raw(&d, &out, "giai-loi-x.json").unwrap();
+        let p2 = backup_raw(&d, &out, "giai-loi-x.json").unwrap();
+        assert_eq!(p1, out.join("giai-loi-x.json"));
+        assert_eq!(p2, out.join("giai-loi-x (2).json"));
+        assert_eq!(std::fs::read(&p1).unwrap(), bytes);
+        assert_eq!(std::fs::read(&p2).unwrap(), bytes);
+        assert!(backup_raw(&temp_dir("raw-none"), &out, "a.json").is_err(), "không có tệp ⇒ lỗi");
+        std::fs::remove_dir_all(&d).unwrap();
+        std::fs::remove_dir_all(&out).unwrap();
     }
 }
