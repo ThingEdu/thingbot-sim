@@ -1,4 +1,4 @@
-//! Hub LAN chạy riêng (không cửa sổ) cho dev / e2e trên trình duyệt: `cargo run --bin fanroc-lan-hub [cổng]`.
+//! Hub LAN chạy riêng (không cửa sổ) cho dev / e2e trên trình duyệt: `cargo run --features lan-hub --bin fanroc-lan-hub [cổng]`.
 //! Cùng mã với hub trong app (lan.rs); in "hub <địa chỉ>" khi đã nghe.
 
 fn main() {

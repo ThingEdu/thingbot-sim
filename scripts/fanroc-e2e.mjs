@@ -6,7 +6,7 @@
  *     N3–N6, N6b–N6d, N2c (màn chính / ⚙ / Xưởng, Task 13) · N11, N11b, N11c (Luật chơi + Robot mẫu, Task 17) ·
  *     N7, N7b, N8 (nhiệm vụ, Task 14) · N8c (nhiệm vụ 11 Leo Thang Cứu Hỏa, luật V4) · N9, N9b–N9i, N10 (giải đấu, Task 15; N9i luật V4) · N1, N1b, N1c (vỏ, Task 11) ·
  *     N2, N2b (bảng điểm, Task 12) · E1–E4, E6–E11 (ý cũ của sân, viết lại theo giao diện mới ở Task 16; E5 Human
- *     Player bấm phím đã xoá cùng tính năng) · L1–L4 (Thi qua mạng LAN: hai trang + hub Rust; cần `cargo build --bin fanroc-lan-hub` trong src-tauri)
+ *     Player bấm phím đã xoá cùng tính năng) · L1–L4 (Thi qua mạng LAN: hai trang + hub Rust; cần `cargo build --features lan-hub --bin fanroc-lan-hub` trong src-tauri)
  *   FANROC_URL=http://localhost:5191/mo-phong/fanroc.html npm run e2e:fanroc   # dùng trang đang chạy sẵn
  *   npm run e2e:fanroc -- E3 E5        # chỉ chạy các phép thử có tên bắt đầu như vậy
  *
@@ -2133,7 +2133,7 @@ async function startHub() {
   await new Promise((ok, fail) => {
     let out = ''
     hub.stdout.on('data', (d) => ((out += d), out.includes('hub ') && ok()))
-    hub.once('exit', (c) => fail(new Error(`hub thoát (${c}): ${out} — chạy: cd src-tauri && cargo build --bin fanroc-lan-hub`)))
+    hub.once('exit', (c) => fail(new Error(`hub thoát (${c}): ${out} — chạy: cd src-tauri && cargo build --features lan-hub --bin fanroc-lan-hub`)))
     hub.once('error', fail)
   })
   return { port, stop: () => hub.kill('SIGTERM') }

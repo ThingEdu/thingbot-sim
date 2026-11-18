@@ -64,7 +64,7 @@ chuyện WKWebView chặn `ws://` ra IP khác. Phần Rust của app Tauri lo m�
 - **Ống nối** (máy khách): mở 127.0.0.1:cổng-ngẫu-nhiên, chuyển thẳng TCP sang `ip:47290` của máy chủ.
 - Lệnh Tauri: `lan_host_start(name) -> {port, addrs}`, `lan_host_stop()`, `lan_rooms() -> [{name, addr, proto}]`,
   `lan_connect(addr) -> localPort`, `lan_disconnect()`.
-- Trình duyệt (dev / e2e): chạy hub bằng `cargo run --bin fanroc-lan-hub` (cùng mã Rust); trang nối thẳng
+- Trình duyệt (dev / e2e): chạy hub bằng `cargo run --features lan-hub --bin fanroc-lan-hub` (cùng mã Rust); trang nối thẳng
   `ws://127.0.0.1:47290`, không có dò phòng / ống nối (ô nhập địa chỉ bỏ qua).
 
 ### Giao thức (JSON, trừ ảnh chụp nhị phân)

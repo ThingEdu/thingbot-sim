@@ -1,5 +1,5 @@
 // Đường truyền của Thi qua mạng LAN: một kênh thư hai chiều (chữ JSON hoặc nhị phân). Trang luôn nối WebSocket tới
-// 127.0.0.1 (hub của app Tauri, hay `cargo run --bin fanroc-lan-hub` khi chạy trên trình duyệt). `pair()` là cặp giả
+// 127.0.0.1 (hub của app Tauri, hay `cargo run --features lan-hub --bin fanroc-lan-hub` khi chạy trên trình duyệt). `pair()` là cặp giả
 // trong bộ nhớ cho phép thử (thư tới ở microtask sau, như mạng).
 
 export type Data = string | ArrayBuffer

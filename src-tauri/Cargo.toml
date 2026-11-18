@@ -7,12 +7,21 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/ThingEdu/thingbot-sim"
 edition = "2021"
 rust-version = "1.77.2"
-# Gói còn có bin fanroc-lan-hub (hub LAN cho dev / e2e); app chính là bin này.
+# Gói còn có bin fanroc-lan-hub (hub LAN cho dev / e2e, cần --features lan-hub); app chính là bin này.
 default-run = "thingbot-fanroc-game"
 
 [lib]
 name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+# Hub LAN chạy riêng cho dev / e2e (src/bin/fanroc-lan-hub.rs): chỉ build khi bật, để tauri build không gói nó vào app.
+lan-hub = []
+
+[[bin]]
+name = "fanroc-lan-hub"
+path = "src/bin/fanroc-lan-hub.rs"
+required-features = ["lan-hub"]
 
 [build-dependencies]
 tauri-build = { version = "2.6.3", features = [] }

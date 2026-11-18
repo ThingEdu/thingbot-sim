@@ -1,6 +1,6 @@
 // Nối trang với mạng LAN. App desktop: các lệnh lan_* của src-tauri/src/lan.rs (hub 47290, đèn hiệu, ống nối) — trang
 // chỉ mở WebSocket tới 127.0.0.1. Trình duyệt (dev / e2e): không mở cổng được, nên nối thẳng hub chạy riêng
-// (`cargo run --bin fanroc-lan-hub`) ở `ws://127.0.0.1:47290` hoặc địa chỉ trong tham số trang `?lanhub=ws://…`.
+// (`cargo run --features lan-hub --bin fanroc-lan-hub`) ở `ws://127.0.0.1:47290` hoặc địa chỉ trong tham số trang `?lanhub=ws://…`.
 import { tauriInvoke } from '../ui/external.ts'
 import { PROTO } from './room.ts'
 
