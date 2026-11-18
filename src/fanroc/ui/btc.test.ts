@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { backupName, fieldsOf, nextMatch, parseEvent, randomCode, releasesHold, scheduleRows, startupAction } from './btc.ts'
+import { backupName, fieldsOf, nextMatch, parseEvent, randomCode, releasesHold, scheduleRows, startClashes, startupAction } from './btc.ts'
 import { qrSvg } from '../btc/qr.ts'
 import { emptySheet, newEvent, type Round, type Team } from '../btc/event.ts'
 
@@ -74,4 +74,16 @@ test('releasesHold: blur của ô nhập không nhả (cú bấm nút sau khi g�
   assert.equal(releasesHold('pointerup', input, win), true)
   assert.equal(releasesHold('pointercancel', win, win), true)
   assert.equal(releasesHold('focus', win, win), false)
+})
+
+test('startClashes: đội của trận kế đang đấu ở sân khác ⇒ liệt kê (đội, sân); sân của chính trận / ghế trống không tính', () => {
+  const s = newEvent('Giải A', 1)
+  s.rounds.push(round())
+  const r1_3 = s.rounds[0].matches[2] // sân 1: t3 t4 | t5 t9
+  assert.deepEqual(startClashes(s, r1_3, 1), [])
+  s.live[0] = { matchId: 'r1-1', phase: 'play', startedAt: 1, sheets: {}, submitted: {} } // sân 0: t1 t2 | t3 t4
+  assert.deepEqual(startClashes(s, r1_3, 1), [{ id: 't3', field: 0 }, { id: 't4', field: 0 }])
+  assert.deepEqual(startClashes(s, r1_3, 0), [], 'trận đang đấu trên chính sân này không tính')
+  const r1_2 = s.rounds[0].matches[1] // t5 null | t2 t1
+  assert.deepEqual(startClashes(s, r1_2, 1).map((x) => x.id).sort(), ['t1', 't2'])
 })

@@ -10,7 +10,8 @@ import { roundStandings } from '../btc/rank.ts'
 import { exportEvent, importTeams, templateXlsx, type ImportRow } from '../btc/excel.ts'
 import { sanitizeSheet, validateEvent } from '../btc/validate.ts'
 import { BtcHost } from '../btc/host.ts'
-import { connectBtc, type BtcLink } from '../btc/link.ts'
+import { connectBtc } from '../btc/link.ts'
+import { BtcKeeper } from '../btc/keeper.ts'
 import { btcBackend, serialSaver, type BtcBackend } from '../btc/backend.ts'
 import { qrSvg } from '../btc/qr.ts'
 import { MTN_NAME } from '../btc/halfmap.ts'
@@ -33,6 +34,18 @@ export function scheduleRows(round: Round, teams: Team[]): ScheduleRow[] {
 /** Trận kế của sân: trận chưa có kết quả, không đang đấu (`busy`), lượt sớm nhất. */
 export function nextMatch(round: Round, field: number, busy: Set<string>): EMatch | undefined {
   return round.matches.filter((m) => m.field === field && !round.results[m.id] && !busy.has(m.id)).sort((a, b) => a.slot - b.slot)[0]
+}
+
+/** Đội của trận `m` đang đấu ở sân khác (≠ `field`): Bắt đầu trận cảnh báo, bấm hai lần. */
+export function startClashes(s: EventState, m: EMatch, field: number): { id: string; field: number }[] {
+  const out: { id: string; field: number }[] = []
+  const ids = new Set([...m.red, ...m.blue].filter((x): x is string => x !== null))
+  for (const [k, l] of Object.entries(s.live)) {
+    if (!l || Number(k) === field) continue
+    const lm = s.rounds.flatMap((x) => x.matches).find((x) => x.id === l.matchId)
+    for (const id of lm ? [...lm.red, ...lm.blue] : []) if (id !== null && ids.has(id)) out.push({ id, field: Number(k) })
+  }
+  return out
 }
 
 /** Các sân có trận trong vòng (tăng dần). */
@@ -251,11 +264,9 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
   let showToken = 0
   let saved: EventState | null = null
   let host: BtcHost | null = null
-  let link: BtcLink | null = null
-  let server: { url: string; addrs: string[]; port: number } | null = null
-  let connNote: string | null = null
   let tickTimer: ReturnType<typeof setInterval> | null = null
-  let retryTimer: ReturnType<typeof setTimeout> | null = null
+  /** BTC bấm «Dừng máy chủ giải»: vào lại màn không tự mở lại (chỉ nút «Mở lại máy chủ giải»). */
+  let userStopped = false
   let saveNote: { ok: boolean; text: string } | null = null
   let eventNote: { ok: boolean; text: string } | null = null
   let teamNote: { ok: boolean; text: string } | null = null
@@ -524,8 +535,8 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
     const sv = el('span', undefined, saveNote ? saveNote.text : 'Chưa có thay đổi')
     sv.dataset.ok = String(saveNote?.ok ?? true)
     sv.dataset.role = 'save-status'
-    const cn = el('span', undefined, link ? 'Máy chủ BTC: đang chạy' : connNote ? `Máy chủ BTC: ${connNote}` : 'Máy chủ BTC: đang nối…')
-    cn.dataset.ok = String(!!link)
+    const cn = el('span', undefined, keeper.link ? 'Máy chủ BTC: đang chạy' : !keeper.running ? 'Máy chủ BTC: đã dừng' : keeper.note ? `Máy chủ BTC: ${keeper.note}` : 'Máy chủ BTC: đang nối…')
+    cn.dataset.ok = String(!!keeper.link)
     cn.dataset.role = 'conn-status'
     out.push(sv, cn)
     return out
@@ -545,7 +556,7 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
     }
     resetUi()
     startEvent(ev) // bộ điều hành mới: ghế, seq, đồng hồ, chất lượng lịch của giải cũ không lẫn sang
-    eventNote = { ok: true, text: `Đã mở «${ev.name}» (giải cũ đã sao lưu). Trọng tài đang chấm cần vào lại bằng mã sân.` }
+    eventNote = { ok: true, text: `Đã mở «${ev.name}» (giải cũ đã sao lưu). Màn chiếu tự vào lại; trọng tài vào lại bằng mã sân của giải này.` }
   })
 
   const secEvent = (): El[] => {
@@ -897,6 +908,12 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
     card.append(title)
     const sv = h.screenView(f)
     card.append(el('div', 'bt-cap', `Trọng tài Đỏ: ${REF_TEXT[sv.refs.red]} · Trọng tài Xanh: ${REF_TEXT[sv.refs.blue]}`))
+    const wrong = h.wrongCodes(f)
+    if (wrong) {
+      const w = note(`${wrong} lần nhập sai mã`, false)
+      w.dataset.role = 'wrong-codes'
+      card.append(w)
+    }
     for (const p of h.pending.filter((x) => x.field === f)) {
       card.append(box('div', 'bt-row', note(`Máy khác xin vào ghế trọng tài ${SIDE_NAME[p.side]}`, false),
         btn('Cho thay', () => h.allow(f, p.side), { cls: 'main', key: `allow-${f}-${p.side}`, role: 'allow' })))
@@ -942,12 +959,21 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
       const nm = r ? nextMatch(r, f, busy()) : undefined
       if (nm) {
         card.append(el('div', 'bt-cap', 'Trận kế'), matchLine(nm, r))
-        card.append(box('div', 'bt-row', btn('Bắt đầu trận', () => {
+        const start = () => {
           if (act({ t: 'live.start', field: f, matchId: nm.id, now: Date.now() }, f)) {
             lastPhase.set(f, 'play')
             deps.sound.whistle()
           }
-        }, { cls: 'main', key: `start-${f}`, role: 'start' })))
+        }
+        const clash = startClashes(S(), nm, f)
+        if (clash.length) {
+          // đội của trận này đang đấu ở sân khác: cảnh báo, bấm hai lần mới bắt đầu
+          const w = note(`${clash.map((c) => `${teamName(c.id)} đang đấu ở Sân ${c.field + 1}`).join(' · ')}`, false)
+          w.dataset.role = 'start-clash'
+          const b = btn2(`start-${f}`, 'Bắt đầu trận', 'Bấm lần nữa: vẫn bắt đầu', start, 'main')
+          b.dataset.role = 'start'
+          card.append(w, box('div', 'bt-row', b))
+        } else card.append(box('div', 'bt-row', btn('Bắt đầu trận', start, { cls: 'main', key: `start-${f}`, role: 'start' })))
       } else card.append(el('div', 'bt-cap', r ? 'Hết trận của vòng này trên sân.' : 'Chưa có vòng thi.'))
     }
     const err = fieldErr.get(f)
@@ -1100,12 +1126,21 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
   }
   const secConn = (): El[] => {
     const out: El[] = [el('h2', undefined, 'Kết nối')]
+    const server = keeper.server
+    if (!keeper.running) {
+      out.push(el('div', 'bt-cap', 'Máy chủ giải đã dừng: điện thoại trọng tài và màn chiếu không nối được.'),
+        box('div', 'bt-row', btn('Mở lại máy chủ giải', () => {
+          userStopped = false
+          keeper.ensure()
+        }, { cls: 'main', key: 'server-start', role: 'server-start' })))
+      return out
+    }
     if (!server) {
-      out.push(el('div', 'bt-cap', connNote ? `Chưa mở được máy chủ BTC: ${connNote}. Đang thử lại…` : 'Đang mở máy chủ BTC…'))
+      out.push(el('div', 'bt-cap', keeper.note ? `Chưa mở được máy chủ BTC: ${keeper.note}. Đang thử lại…` : 'Đang mở máy chủ BTC…'))
       return out
     }
     const [ip, ...others] = server.addrs.length ? server.addrs : ['127.0.0.1']
-    const base = (a: string) => `http://${a}:${server!.port}`
+    const base = (a: string) => `http://${a}:${server.port}`
     out.push(
       box('div', 'bt-qrs',
         qrBox(`${base(ip)}/`, 'Trang trọng tài (điện thoại)', 'qr-ref'),
@@ -1115,6 +1150,18 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
     if (others.length) out.push(el('div', 'bt-cap', `Máy này còn các địa chỉ khác (nếu điện thoại không mở được, thử): ${others.map((a) => `${base(a)}/`).join(' · ')}`))
     if (!backend.desktop) out.push(el('div', 'bt-cap', 'Đang chạy trong trình duyệt (thử nghiệm): chỉ máy này mở được các địa chỉ trên.'))
     out.push(el('div', 'bt-cap', 'Lần đầu mở, máy có thể hỏi cho phép mạng. Windows: bấm «Cho phép truy cập» ở hộp thoại Tường lửa (chọn cả mạng riêng). macOS: bấm «Cho phép». Điện thoại phải vào cùng mạng Wi-Fi với máy này; Wi-Fi khách có «cách ly thiết bị» sẽ chặn kết nối.'))
+    // Rời màn Ban tổ chức không dừng máy chủ (trận vẫn chạy, điện thoại vẫn chấm); chỉ nút này mới dừng.
+    const stop = async () => {
+      userStopped = true
+      await keeper.stop()
+    }
+    const anyLive = Object.values(S().live).some((l) => !!l)
+    const sb = anyLive
+      ? btn2('server-stop', 'Dừng máy chủ giải', 'Đang có trận đấu — bấm lần nữa để vẫn dừng', stop)
+      : btn('Dừng máy chủ giải', stop, { cls: 'warn', key: 'server-stop' })
+    sb.dataset.role = 'server-stop'
+    out.push(box('div', 'bt-row', sb),
+    el('div', 'bt-cap', 'Rời màn này máy chủ vẫn chạy. Dừng máy chủ: điện thoại và màn chiếu mất kết nối tới khi mở lại.'))
     return out
   }
 
@@ -1171,34 +1218,12 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
     }
   }
 
-  const retry = () => {
-    if (!active || retryTimer) return
-    retryTimer = setTimeout(() => {
-      retryTimer = null
-      void connect()
-    }, 2000)
-  }
-  let connecting = false
-  const connect = async () => {
-    if (!active || link || connecting) return
-    connecting = true
-    try {
-      if (!server) {
-        const sv = await backend.start()
-        if (!active) {
-          // rời màn trong lúc đang mở máy chủ: tắt luôn
-          void backend.stop().catch(() => {})
-          return
-        }
-        server = sv
-      }
-      const l = await connectBtc(server.url)
-      if (!active) {
-        l.close()
-        return
-      }
-      link = l
-      connNote = null
+  // máy chủ + đường nối sống độc lập với việc màn đang hiện (keeper.ts)
+  const keeper = new BtcKeeper({
+    start: () => backend.start(),
+    stop: () => backend.stop().catch((e) => console.warn('BTC: dừng máy chủ lỗi', e)),
+    connect: (url) => connectBtc(url),
+    wire: (l) => {
       l.onMessage = (from, m) => {
         host?.onMessage(from, m)
         renderSoon(['run'])
@@ -1207,22 +1232,11 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
         host?.onPeer(id, on)
         renderSoon(['run'])
       }
-      l.onReject = () => void (connNote = 'đã có máy Ban tổ chức khác đang điều hành (chỉ một máy được điều hành)')
-      l.onClose = () => {
-        if (link !== l) return
-        link = null
-        connNote ??= 'mất kết nối, đang nối lại…'
-        renderSoon(['status', 'conn'])
-        retry()
-      }
-    } catch (e) {
-      connNote = msg(e)
-      retry()
-    } finally {
-      connecting = false
-      renderSoon(['status', 'conn'])
-    }
-  }
+    },
+    changed: () => renderSoon(['status', 'conn']),
+    later: (fn, ms) => setTimeout(fn, ms),
+    cancel: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
+  })
 
   /** Bỏ trạng thái màn của giải trước (form, chất lượng lịch, lỗi sân…). */
   const resetUi = () => {
@@ -1239,8 +1253,9 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
   }
   /** Mở giải `s` làm giải đang điều hành. */
   const startEvent = (s: EventState) => {
+    const had = host !== null
     host = new BtcHost(s, {
-      send: (to, m) => link?.send(to, m),
+      send: (to, m) => keeper.link?.send(to, m),
       save: (st) => {
         void saver(JSON.stringify(st))
         renderSoon(['run'])
@@ -1251,6 +1266,9 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
     eventNote = null
     curRound = s.rounds.at(-1)?.id ?? null
     for (const [f, l] of Object.entries(s.live)) lastPhase.set(Number(f), l?.phase ?? null)
+    // đổi giải (Mở file / Giải mới) hoặc có khách nối trước khi mở giải: nối lại để bộ chuyển báo nobtc ⇒ mọi điện
+    // thoại / màn chiếu tự vào lại đúng giải này
+    if (had || keeper.link) keeper.reconnect()
     persist()
     secs.clear()
     renderSoon()
@@ -1302,26 +1320,17 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
       screen.hidden = false
       secs.clear()
       const tok = ++showToken
+      // đồng hồ trận + máy chủ mở một lần rồi chạy suốt (kể cả khi rời màn); vào lại dùng đúng bộ điều hành đang chạy
       tickTimer ??= setInterval(tick, 250)
-      void connect()
+      if (!userStopped) keeper.ensure()
       if (!host) await boot(tok)
       else render(SECS)
     },
+    /** Chỉ ẩn giao diện: KHÔNG dừng máy chủ, bộ điều hành, đường nối hay đồng hồ (trận đang đấu vẫn chạy). */
     hide() {
       active = false
       screen.hidden = true
       armed = null
-      if (tickTimer) clearInterval(tickTimer)
-      tickTimer = null
-      if (retryTimer) clearTimeout(retryTimer)
-      retryTimer = null
-      const l = link
-      link = null
-      l?.close()
-      if (server) {
-        server = null
-        void backend.stop().catch(() => {})
-      }
     },
   }
 }
