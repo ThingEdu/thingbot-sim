@@ -66,3 +66,16 @@ test('vòng chưa xong ⇒ provisional; trận chỉ còn đội rút lui không
   const wd = [M('a1', 0, ['t1', 't2'], ['t3', 't4']), M('a2', 1, ['t8', null], [null, null])]
   assert.ok(roundStandings(ev(wd, { a1: res(2) }, ['t8']), 'r1').every((r) => !r.provisional))
 })
+
+test('đội trong vòng mà chưa có trận nào (0 trận): số trận chuẩn tính từ các đội đã đấu, không kéo cả bảng về 0', () => {
+  // t1..t4 đấu 2 trận (đã chốt hết); t5..t8 ở trong vòng nhưng không có trận (thêm muộn, chưa sinh lại lịch)
+  const matches = [M('a1', 0, ['t1', 't2'], ['t3', 't4']), M('a2', 1, ['t1', 't3'], ['t2', 't4'])]
+  const st = roundStandings(ev(matches, { a1: res(2), a2: res(4) }), 'r1')
+  assert.equal(st[0].provisional, false)
+  const t1 = st.find((x) => x.id === 't1')!
+  assert.equal(t1.counted.length, 2, 'đội đã đấu 2 trận tính đủ 2 trận')
+  assert.ok(t1.total > 0)
+  const t5 = st.find((x) => x.id === 't5')!
+  assert.deepEqual(t5.counted, [])
+  assert.equal(t5.total, 0)
+})

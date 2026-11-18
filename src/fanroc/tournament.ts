@@ -87,7 +87,9 @@ export function rankCore(seed: number, ids: string[], results: (Played | null)[]
       a.penalty += t.penalty
     }
   }
-  const standard = provisional ? 0 : Math.min(...[...per.values()].map((a) => a.scores.length))
+  // số trận chuẩn: ít nhất trong các đội đã có ≥ 1 trận (đội 0 trận không kéo cả bảng về 0); chưa ai đấu ⇒ 0
+  const played = [...per.values()].map((a) => a.scores.length).filter((n) => n > 0)
+  const standard = provisional || !played.length ? 0 : Math.min(...played)
   const draw = mulberry32((seed ^ 0x9e3779b9) >>> 0)
   const rows = ids.map((id) => {
     const a = per.get(id)!
