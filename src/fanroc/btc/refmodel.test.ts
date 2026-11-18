@@ -5,10 +5,10 @@ import { addFault, bump, reconcile, removeFault } from './refmodel.ts'
 import { sanitizeSheet } from './validate.ts'
 
 const sheetFire = (o: number): HalfSheet => ({ ...emptySheet(), fire: { o, g: 0 } })
-const view = (id: string | null, sheet: HalfSheet, ackSeq: number) => ({ match: id ? { id } : null, sheet, ackSeq })
+const view = (id: string | null, sheet: HalfSheet, ackSeq: number, event = 'e1') => ({ event, match: id ? { id } : null, sheet, ackSeq })
 
 test('reconcile: trận khác ⇒ lấy phiếu BTC, bỏ bản chờ', () => {
-  const r = reconcile({ matchId: 'm1', sheet: sheetFire(5) }, { seq: 4, matchId: 'm1' }, view('m2', sheetFire(0), 0))
+  const r = reconcile({ matchId: 'm1', sheet: sheetFire(5) }, { seq: 4, matchId: 'm1', event: 'e1' }, view('m2', sheetFire(0), 0))
   assert.deepEqual(r, { matchId: 'm2', sheet: sheetFire(0), drop: true, ack: null, resend: false })
 })
 
@@ -18,19 +18,24 @@ test('reconcile: cùng trận, không có bản chờ ⇒ lấy phiếu BTC', ()
 })
 
 test('reconcile: BTC đã nhận seq chờ (ackSeq ≥ seq) ⇒ lấy phiếu BTC và ack', () => {
-  const r = reconcile({ matchId: 'm1', sheet: sheetFire(5) }, { seq: 4, matchId: 'm1' }, view('m1', sheetFire(5), 4))
+  const r = reconcile({ matchId: 'm1', sheet: sheetFire(5) }, { seq: 4, matchId: 'm1', event: 'e1' }, view('m1', sheetFire(5), 4))
   assert.deepEqual(r, { matchId: 'm1', sheet: sheetFire(5), drop: false, ack: 4, resend: false })
 })
 
 test('reconcile: BTC chưa nhận bản chờ ⇒ giữ phiếu máy, gửi lại', () => {
   const local = { matchId: 'm1', sheet: sheetFire(5) }
-  const r = reconcile(local, { seq: 4, matchId: 'm1' }, view('m1', sheetFire(2), 3))
+  const r = reconcile(local, { seq: 4, matchId: 'm1', event: 'e1' }, view('m1', sheetFire(2), 3))
   assert.deepEqual(r, { matchId: 'm1', sheet: sheetFire(5), drop: false, ack: null, resend: true })
 })
 
 test('reconcile: chưa có trận (idle) ⇒ phiếu rỗng của BTC, bỏ bản chờ', () => {
-  const r = reconcile({ matchId: 'm1', sheet: sheetFire(5) }, { seq: 4, matchId: 'm1' }, view(null, emptySheet(), 0))
+  const r = reconcile({ matchId: 'm1', sheet: sheetFire(5) }, { seq: 4, matchId: 'm1', event: 'e1' }, view(null, emptySheet(), 0))
   assert.deepEqual(r, { matchId: null, sheet: emptySheet(), drop: true, ack: null, resend: false })
+})
+
+test('reconcile: bản chờ của giải khác (cùng mã trận) ⇒ lấy phiếu BTC, bỏ bản chờ, không gửi lại', () => {
+  const r = reconcile({ matchId: 'm1', sheet: sheetFire(5) }, { seq: 4, matchId: 'm1', event: 'cu' }, view('m1', sheetFire(0), 0, 'moi'))
+  assert.deepEqual(r, { matchId: 'm1', sheet: sheetFire(0), drop: true, ack: null, resend: false })
 })
 
 test('bump: kẹp trong 0..300', () => {

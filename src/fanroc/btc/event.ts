@@ -19,7 +19,7 @@ export type Result = { red: HalfSheet; blue: HalfSheet; committedAt: number }
 export type Edit = { matchId: string; at: number; before: Result | null; after: Result }
 export type Round = { id: string; name: string; teamIds: string[]; perTeam: number; fields: number; slotMin: number; startAt: string; seed: number; matches: EMatch[]; results: Record<string, Result>; edits: Edit[] }
 export type Live = { matchId: string; phase: 'ready' | 'play' | 'inventory' | 'done'; startedAt: number | null; sheets: Partial<Record<Side, HalfSheet>>; submitted: Partial<Record<Side, boolean>> }
-export interface EventState { version: 1; name: string; teams: Team[]; rounds: Round[]; live: Record<number, Live | null>; codes: Record<number, string> }
+export interface EventState { version: 1; id: string /* ngẫu nhiên mỗi giải: điện thoại bỏ phiếu chờ của giải khác */; name: string; teams: Team[]; rounds: Round[]; live: Record<number, Live | null>; codes: Record<number, string> }
 
 const emptyMtn = () => [0, 1, 2].map(() => ({ g: 0, o: 0 }))
 const emptyPens = (): Pens => ({ minor: 0, yellow: 0, red: false, warn: 0 })
@@ -34,8 +34,17 @@ export const emptySheet = (): HalfSheet => ({
   faults: [],
 })
 
+/** Id giải ngẫu nhiên (16 chữ số hex). */
+function eventId(): string {
+  const c = (globalThis as { crypto?: Crypto }).crypto
+  const b = new Uint8Array(8)
+  if (c?.getRandomValues) c.getRandomValues(b)
+  else for (let i = 0; i < b.length; i++) b[i] = Math.floor(Math.random() * 256)
+  return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
+}
+
 export function newEvent(name: string, _seed: number): EventState {
-  return { version: 1, name, teams: [], rounds: [], live: {}, codes: {} }
+  return { version: 1, id: eventId(), name, teams: [], rounds: [], live: {}, codes: {} }
 }
 
 export type Action =
@@ -96,8 +105,9 @@ export function reduce(s0: EventState, a: Action): EventState {
       const t = s.teams.find((x) => x.id === a.id)
       if (!t) throw new Error(`Không có đội ${a.id}`)
       t.withdrawn = true
+      const playing = new Set(Object.values(s.live).filter((l): l is Live => !!l).map((l) => l.matchId))
       for (const r of s.rounds) for (const m of r.matches) {
-        if (r.results[m.id]) continue // trận đã đấu giữ nguyên
+        if (r.results[m.id] || playing.has(m.id)) continue // trận đã đấu / đang đấu giữ nguyên
         for (const side of [m.red, m.blue]) for (let i = 0; i < 2; i++) if (side[i] === a.id) side[i] = null
       }
       break
@@ -112,6 +122,11 @@ export function reduce(s0: EventState, a: Action): EventState {
       const r = round(a.roundId)
       const kept = r.matches.filter((m) => r.results[m.id])
       const fresh = a.matches.filter((m) => !r.results[m.id])
+      const ids = new Set<string>()
+      for (const m of a.matches) {
+        if (ids.has(m.id)) throw new Error(`Lịch có mã trận trùng: ${m.id}`)
+        ids.add(m.id)
+      }
       r.matches = [...kept, ...fresh].sort((x, y) => x.slot - y.slot || x.field - y.field)
       break
     }

@@ -107,7 +107,7 @@ export function statusText(conn: Conn, pending: boolean): { text: string; bad: b
 
 export function topHtml(field: number, side: Side, conn: Conn, view: RefView | null, pending: boolean): string {
   const st = statusText(conn, pending)
-  const m = view?.match ? ` · ${matchName(view.match.id)}` : ''
+  const m = view?.match ? ` · ${esc(matchName(view.match.id))}` : ''
   return `<div class="rf-top ${side}"><span>Trọng tài ${SIDE_NAME[side].toUpperCase()} · ${fieldName(field)}${m}</span>`
     + `<small><span class="rf-clock" id="rf-clock">${clockText(view?.clock ?? null)}</span>${view?.clock !== null && view?.clock !== undefined ? ' · ' : ''}`
     + `<span class="${st.bad ? 'rf-st-bad' : ''}" id="rf-st">${st.text}</span></small></div>`

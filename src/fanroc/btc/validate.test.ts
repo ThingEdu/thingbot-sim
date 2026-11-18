@@ -48,12 +48,17 @@ test('validateEvent: giải thật lưu ra JSON đọc lại y nguyên', () => {
   const s = realEvent()
   const back = validateEvent(JSON.parse(JSON.stringify(s)))
   assert.deepEqual(back, s)
-  assert.deepEqual(validateEvent(JSON.parse(JSON.stringify(newEvent('Trống', 1)))), newEvent('Trống', 1))
+  const empty = newEvent('Trống', 1)
+  assert.deepEqual(validateEvent(JSON.parse(JSON.stringify(empty))), empty)
 })
 
 test('validateEvent: file hỏng ở bất cứ tầng nào ⇒ null', () => {
   const bad: [string, (s: any) => void][] = [
     ['version lạ', (s) => (s.version = 2)],
+    ['thiếu id giải', (s) => delete s.id],
+    ['id giải rỗng', (s) => (s.id = '')],
+    ['id giải quá dài', (s) => (s.id = 'x'.repeat(65))],
+    ['id giải không phải chuỗi', (s) => (s.id = 5)],
     ['trận rỗng', (s) => (s.rounds[0].matches = [{}])],
     ['vòng thiếu teamIds', (s) => delete s.rounds[0].teamIds],
     ['teamIds không phải chuỗi', (s) => (s.rounds[0].teamIds = [1])],

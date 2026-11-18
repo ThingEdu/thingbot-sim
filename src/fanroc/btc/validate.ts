@@ -148,7 +148,7 @@ const fieldKey = (k: string) => /^\d+$/.test(k) && Number(k) < MAX_FIELD
  * trận đang đấu trỏ tới trận không có). Dùng khi mở lại giải đã lưu và khi «Mở file giải».
  */
 export function validateEvent(x: unknown): EventState | null {
-  if (!obj(x) || x.version !== 1 || !str(x.name) || !Array.isArray(x.teams) || !Array.isArray(x.rounds) || !obj(x.live) || !obj(x.codes)) return null
+  if (!obj(x) || x.version !== 1 || !str(x.id) || x.id.length < 1 || x.id.length > 64 || !str(x.name) || !Array.isArray(x.teams) || !Array.isArray(x.rounds) || !obj(x.live) || !obj(x.codes)) return null
   const teams = x.teams.map(team)
   if (teams.some((t) => t === null)) return null
   const rounds = x.rounds.map(round)
@@ -173,5 +173,5 @@ export function validateEvent(x: unknown): EventState | null {
     if (!fieldKey(k) || !str(v) || !/^\d{4}$/.test(v)) return null
     codes[Number(k)] = v
   }
-  return { version: 1, name: x.name, teams: teams as Team[], rounds: rounds as Round[], live: lv, codes }
+  return { version: 1, id: x.id, name: x.name, teams: teams as Team[], rounds: rounds as Round[], live: lv, codes }
 }

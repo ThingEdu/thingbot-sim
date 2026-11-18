@@ -243,7 +243,7 @@ class Referee {
     const had = this.debounce !== null
     this.debounce = null
     if (!this.queue || this.matchId === null || (!had && !submit)) return
-    this.queue.push(this.matchId, this.sheet, submit)
+    this.queue.push(this.matchId, this.sheet, submit, this.view?.event ?? '')
     if (submit || this.submit === 'sending') this.submit = 'sending'
     this.sendPending()
     this.render()
@@ -252,7 +252,7 @@ class Referee {
   private sendPending(): void {
     const p = this.queue?.pending()
     if (!p || !this.link) return
-    this.link.send({ t: 'op', device: this.device, seq: p.seq, field: this.entry.field, side: this.entry.side, matchId: p.matchId, sheet: p.sheet, submit: p.submit })
+    this.link.send({ t: 'op', device: this.device, seq: p.seq, field: this.entry.field, side: this.entry.side, event: p.event, matchId: p.matchId, sheet: p.sheet, submit: p.submit })
   }
 
   // ---------- sự kiện ----------

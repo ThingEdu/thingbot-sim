@@ -12,10 +12,16 @@ export interface HostDeps { send(to: string, m: BtcView): void; save(s: EventSta
 
 /** 10 s xả bóng + 180 s trận. */
 export const MATCH_SEC = 10 + 180
+/** Màn chiếu hiện điểm chính thức chừng này sau khi chốt, rồi về màn chờ (trận kế + xếp hạng). */
+export const OFFICIAL_MS = 45_000
+/** Sai mã sân chừng này lần ⇒ lờ thư vào ghế của máy đó trong LOCK_MS. */
+export const MAX_WRONG = 5
+export const LOCK_MS = 60_000
 
 type SeatHold = { device: string; peer: string; online: boolean }
 const SIDES: Side[] = ['red', 'blue']
 const key = (field: number, side: Side) => `${field}:${side}`
+const ackKey = (device: string, field: number, side: Side) => `${device}:${field}:${side}`
 /** Giới hạn thư khách: số sân, độ dài mã máy / mã sân. */
 export const MAX_FIELDS = 16
 const MAX_DEVICE = 64
@@ -32,10 +38,12 @@ export class BtcHost {
   private seats = new Map<string, SeatHold>()
   private screens = new Map<string, number>() // peer ⇒ sân
   private online = new Set<string>()
-  private acks = new Map<string, number>() // device ⇒ seq cuối đã nhận
+  private acks = new Map<string, number>() // `${device}:${sân}:${bên}` ⇒ seq cuối đã nhận (RefQueue đếm seq theo ghế)
   private offset = new Map<number, number>() // sân ⇒ giây dời đồng hồ (skipTo)
   private lastClock = new Map<number, number | null>() // sân ⇒ giây đã gửi gần nhất
-  private committed = new Map<number, string>() // sân ⇒ trận vừa chốt (tới live.start kế tiếp)
+  private committed = new Map<number, { id: string; at: number }>() // sân ⇒ trận vừa chốt + lúc chốt (deps.now), hiện OFFICIAL_MS
+  private wrong = new Map<string, { n: number; until: number }>() // peer ⇒ số lần sai mã, khoá tới (ms)
+  private wrongByField = new Map<number, number>() // sân ⇒ số lần sai mã (tới khi đổi mã)
   // Ghế / seq / trận vừa chốt chỉ ở bộ nhớ: khởi động lại thì màn chiếu không còn `official` của trận vừa chốt (chấp nhận).
 
   constructor(s: EventState, deps: HostDeps) {
@@ -76,14 +84,15 @@ export class BtcHost {
       } else if (x.t === 'join' && x.role === 'ref') {
         if (!isField(x.field) || !isSide(x.side) || !isDevice(x.device)) return
         this.online.add(from)
+        if (this.locked(from)) return // sai mã quá nhiều: lờ đi
         if (typeof x.code !== 'string' || x.code.length > MAX_CODE) {
-          this.deps.send(from, { t: 'deny', reason: 'code' })
+          this.wrongCode(from, x.field)
           return
         }
         this.joinRef(from, { t: 'join', role: 'ref', field: x.field, side: x.side, code: x.code, device: x.device })
       } else if (x.t === 'op') {
         if (!isField(x.field) || !isSide(x.side) || !isDevice(x.device) || !Number.isSafeInteger(x.seq) || (x.seq as number) < 1) return
-        if (typeof x.matchId !== 'string' || typeof x.submit !== 'boolean') return
+        if (typeof x.matchId !== 'string' || typeof x.submit !== 'boolean' || typeof x.event !== 'string') return
         this.online.add(from)
         this.op(from, x as unknown as Extract<ClientMsg, { t: 'op' }>, sanitizeSheet(x.sheet))
       }
@@ -95,7 +104,7 @@ export class BtcHost {
   private joinRef(from: string, m: Extract<ClientMsg, { role: 'ref' }>): void {
     const code = this.state.codes[m.field]
     if (code === undefined || code !== m.code) {
-      this.deps.send(from, { t: 'deny', reason: 'code' })
+      this.wrongCode(from, m.field)
       return
     }
     // một máy không giữ cả hai ghế của một sân
@@ -117,6 +126,28 @@ export class BtcHost {
     this.deps.send(from, { t: 'deny', reason: 'waiting' })
   }
 
+  private locked(peer: string): boolean {
+    const w = this.wrong.get(peer)
+    if (!w || w.n < MAX_WRONG) return false
+    if (this.deps.now() < w.until) return true
+    this.wrong.delete(peer) // hết khoá: đếm lại từ đầu
+    return false
+  }
+
+  private wrongCode(peer: string, field: number): void {
+    const w = this.wrong.get(peer) ?? { n: 0, until: 0 }
+    w.n += 1
+    if (w.n >= MAX_WRONG) w.until = this.deps.now() + LOCK_MS
+    this.wrong.set(peer, w)
+    this.wrongByField.set(field, (this.wrongByField.get(field) ?? 0) + 1)
+    this.deps.send(peer, { t: 'deny', reason: 'code' })
+  }
+
+  /** Số lần nhập sai mã của sân (từ lần đổi mã gần nhất), để thẻ sân trên màn BTC cảnh báo. */
+  wrongCodes(field: number): number {
+    return this.wrongByField.get(field) ?? 0
+  }
+
   /** `sheet` đã qua sanitizeSheet (null = phiếu hỏng ⇒ bỏ, chỉ trả khung nhìn, không động tới seq). */
   private op(from: string, m: Extract<ClientMsg, { t: 'op' }>, sheet: HalfSheet | null): void {
     const k = key(m.field, m.side)
@@ -129,19 +160,21 @@ export class BtcHost {
     h.peer = from
     h.online = true
     const l = this.state.live[m.field]
-    const seen = this.acks.get(m.device)
+    const ak = ackKey(m.device, m.field, m.side)
+    const seen = this.acks.get(ak)
     const fresh = m.seq > (seen ?? 0)
-    if (!l || l.matchId !== m.matchId || (l.phase !== 'play' && l.phase !== 'inventory') || !fresh || !sheet) {
+    // phiếu của giải khác (mở file / giải mới, cùng mã trận) ⇒ bỏ, chỉ trả khung nhìn
+    if (!l || m.event !== this.state.id || l.matchId !== m.matchId || (l.phase !== 'play' && l.phase !== 'inventory') || !fresh || !sheet) {
       this.deps.send(from, this.refView(m.field, m.side))
       return
     }
     // ackSeq phải có sẵn trong khung nhìn mà dispatch gửi đi; dispatch lỗi ⇒ trả lại seq cũ (chỉ tính khi đã lưu).
-    this.acks.set(m.device, m.seq)
+    this.acks.set(ak, m.seq)
     try {
       this.dispatch({ t: 'live.sheet', field: m.field, side: m.side, sheet, submit: m.submit })
     } catch (e) {
-      if (seen === undefined) this.acks.delete(m.device)
-      else this.acks.set(m.device, seen)
+      if (seen === undefined) this.acks.delete(ak)
+      else this.acks.set(ak, seen)
       throw e
     }
   }
@@ -156,9 +189,15 @@ export class BtcHost {
       this.offset.set(a.field, 0)
       this.committed.delete(a.field)
     } else if (a.t === 'live.commit') {
-      this.committed.set(a.field, before.live[a.field]!.matchId)
+      this.committed.set(a.field, { id: before.live[a.field]!.matchId, at: this.deps.now() })
     } else if (a.t === 'live.abort') {
       this.offset.delete(a.field)
+      this.committed.delete(a.field)
+    } else if (a.t === 'code.new') {
+      // mã mới: mọi người vào lại bằng mã mới (giữ ghế cũ thì người biết mã cũ vẫn chấm được)
+      this.wrongByField.delete(a.field)
+      this.pending = this.pending.filter((p) => p.field !== a.field)
+      for (const side of SIDES) this.release(a.field, side, false)
     }
     if ('field' in a) this.sendField(a.field)
     else for (const f of this.fieldsInUse()) this.sendField(f)
@@ -177,17 +216,26 @@ export class BtcHost {
   }
 
   /** Giải phóng ghế (mất điện thoại). */
-  release(field: number, side: Side): void {
+  release(field: number, side: Side, send = true): void {
     const k = key(field, side)
     const old = this.seats.get(k)
     if (!old) return
     this.seats.delete(k)
     if (old.online && this.online.has(old.peer)) this.deps.send(old.peer, { t: 'deny', reason: 'taken' })
-    this.sendField(field)
+    if (send) this.sendField(field)
   }
 
-  /** Mỗi 250 ms: hết giờ ⇒ còi; còn giờ ⇒ gửi khi giây hiển thị đổi. */
+  /** Mỗi 250 ms: hết giờ ⇒ còi; còn giờ ⇒ gửi khi giây hiển thị đổi; official quá OFFICIAL_MS ⇒ về màn chờ. */
   tick(): void {
+    for (const [field, c] of [...this.committed]) {
+      if (this.deps.now() - c.at < OFFICIAL_MS) continue
+      this.committed.delete(field)
+      try {
+        this.sendField(field)
+      } catch (e) {
+        console.warn(`BTC: lỗi gửi màn chờ sân ${field + 1}`, e)
+      }
+    }
     for (const [f, l] of Object.entries(this.state.live)) {
       const field = Number(f)
       if (!l || l.phase !== 'play') continue
@@ -262,12 +310,12 @@ export class BtcHost {
     const m = l ? this.match(l.matchId) : undefined
     const h = this.seats.get(key(field, side))
     return {
-      t: 'ref', field, side,
+      t: 'ref', event: this.state.id, field, side,
       match: l && m ? { id: m.id, teams: [this.name(m[side][0]), this.name(m[side][1])] } : null,
       phase: l ? l.phase : 'idle',
       clock: this.clock(field, l),
       sheet: structuredClone(l?.sheets[side] ?? emptySheet()),
-      ackSeq: h ? this.acks.get(h.device) ?? 0 : 0,
+      ackSeq: h ? this.acks.get(ackKey(h.device, field, side)) ?? 0 : 0,
     }
   }
 
@@ -275,7 +323,7 @@ export class BtcHost {
   private roundFor(field: number): Round | undefined {
     const l = this.state.live[field]
     if (l) return roundOfMatch(this.state, l.matchId)
-    const c = this.committed.get(field)
+    const c = this.committed.get(field)?.id
     const r = c ? roundOfMatch(this.state, c) : undefined
     if (r) return r
     return this.state.rounds.find((x) => x.matches.some((m) => m.field === field && !x.results[m.id])) ?? this.state.rounds.at(-1)
@@ -290,7 +338,7 @@ export class BtcHost {
       refs[side] = l?.submitted[side] ? 'sent' : h && h.online ? 'on' : 'off'
     }
     let official: ScreenView['official'] = null
-    const cid = this.committed.get(field)
+    const cid = this.committed.get(field)?.id
     const cr = cid ? roundOfMatch(this.state, cid) : undefined
     const cm = cid ? this.match(cid) : undefined
     if (!l && cid && cr?.results[cid] && cm) {

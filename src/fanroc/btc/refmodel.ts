@@ -6,16 +6,16 @@ import { MAX_BALLS, MAX_FAULT_CODE, MAX_FAULTS, MAX_PENS } from './validate.ts'
 export type FaultKind = HalfSheet['faults'][number]['kind']
 
 /**
- * Khung nhìn BTC tới: trận khác (hoặc hết trận) ⇒ lấy phiếu BTC, bỏ bản chờ; cùng trận mà không có bản chờ hoặc BTC đã
+ * Khung nhìn BTC tới: giải khác / trận khác (hoặc hết trận) ⇒ lấy phiếu BTC, bỏ bản chờ; cùng trận mà không có bản chờ hoặc BTC đã
  * nhận bản chờ (ackSeq ≥ seq) ⇒ lấy phiếu BTC (ack nếu có bản chờ); còn lại giữ phiếu máy và gửi lại bản chờ.
  */
 export function reconcile(
   local: { matchId: string | null; sheet: HalfSheet },
-  pending: { seq: number; matchId: string } | null,
-  view: { match: { id: string } | null; sheet: HalfSheet; ackSeq: number },
+  pending: { seq: number; matchId: string; event: string } | null,
+  view: { event: string; match: { id: string } | null; sheet: HalfSheet; ackSeq: number },
 ): { matchId: string | null; sheet: HalfSheet; drop: boolean; ack: number | null; resend: boolean } {
   const id = view.match?.id ?? null
-  if (id !== local.matchId || (pending && pending.matchId !== id)) {
+  if (id !== local.matchId || (pending && (pending.matchId !== id || pending.event !== view.event))) {
     return { matchId: id, sheet: view.sheet, drop: pending !== null, ack: null, resend: false }
   }
   if (!pending) return { matchId: id, sheet: view.sheet, drop: false, ack: null, resend: false }

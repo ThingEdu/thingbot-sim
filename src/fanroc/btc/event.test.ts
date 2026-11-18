@@ -38,6 +38,30 @@ test('newEvent: version 1, chưa có vòng, mã sân/live rỗng', () => {
   assert.deepEqual(s.live, {})
 })
 
+test('newEvent: id ngẫu nhiên (chuỗi 1..64), mỗi giải một id', () => {
+  const a = newEvent('A', 1), b = newEvent('A', 1)
+  assert.equal(typeof a.id, 'string')
+  assert.ok(a.id.length >= 1 && a.id.length <= 64)
+  assert.notEqual(a.id, b.id)
+})
+
+test('team.withdraw: trận đang đấu của đội giữ nguyên ghế', () => {
+  const s = reduce(base(), { t: 'live.start', field: 0, matchId: 'r1-1', now: 1 })
+  const w = reduce(s, { t: 'team.withdraw', id: 't1' })
+  assert.deepEqual(w.rounds[0].matches.find((m) => m.id === 'r1-1')!.red, ['t1', 't2'], 'trận đang đấu giữ ghế')
+  assert.deepEqual(w.rounds[0].matches.find((m) => m.id === 'r1-2')!.red, [null, 't3'])
+})
+
+test('round.schedule: lịch gửi vào có id trận trùng ⇒ lỗi, không đổi', () => {
+  const s = base()
+  const dup: EMatch[] = [
+    { id: 'r1-1', slot: 0, field: 0, red: ['t1', 't2'], blue: ['t3', 't4'] },
+    { id: 'r1-1', slot: 1, field: 0, red: ['t1', 't3'], blue: ['t2', 't4'] },
+  ]
+  assert.throws(() => reduce(s, { t: 'round.schedule', roundId: 'r1', matches: dup }), /trùng/)
+  assert.deepEqual(s.rounds[0].matches.map((m) => m.id), ['r1-1', 'r1-2'])
+})
+
 test('teams/team.add: id t<n> tăng dần, withdrawn=false', () => {
   const s = run(newEvent('x', 1), { t: 'teams', teams: [T('A'), T('B')] }, { t: 'team.add', team: T('C') })
   assert.deepEqual(s.teams.map((t) => t.id), ['t1', 't2', 't3'])
