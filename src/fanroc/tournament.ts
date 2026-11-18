@@ -70,9 +70,14 @@ export function isOldRules(s: TournamentState): boolean {
  * Hoà điểm xếp hạng (luật V4): tổng Hệ số nhân của các trận được tính (cao trước) → trận cao nhất → ít phạt → bốc thăm
  * (thay cho "Ban Tổ chức quyết định"). multSum tính bằng phần trăm (515 = 5,15). */
 export function standings(s: TournamentState): Standing[] {
+  return rankCore(s.seed, s.entrants.map((e) => e.id), s.results, s.results.some((r) => r === null))
+}
+
+/** Lõi xếp hạng mục E dùng chung cho giải mô phỏng và giải thật: id lạ trong kết quả bị bỏ qua. */
+export function rankCore(seed: number, ids: string[], results: (Played | null)[], provisional: boolean): Standing[] {
   const per = new Map<string, { scores: number[]; mults: number[]; penalty: number }>()
-  s.entrants.forEach((e) => per.set(e.id, { scores: [], mults: [], penalty: 0 }))
-  for (const r of s.results) {
+  ids.forEach((id) => per.set(id, { scores: [], mults: [], penalty: 0 }))
+  for (const r of results) {
     if (!r) continue
     for (const [id, t] of Object.entries(r.teams)) {
       const a = per.get(id)
@@ -82,11 +87,10 @@ export function standings(s: TournamentState): Standing[] {
       a.penalty += t.penalty
     }
   }
-  const provisional = s.results.some((r) => r === null)
   const standard = provisional ? 0 : Math.min(...[...per.values()].map((a) => a.scores.length))
-  const draw = mulberry32((s.seed ^ 0x9e3779b9) >>> 0)
-  const rows = s.entrants.map((e) => {
-    const a = per.get(e.id)!
+  const draw = mulberry32((seed ^ 0x9e3779b9) >>> 0)
+  const rows = ids.map((id) => {
+    const a = per.get(id)!
     const best = a.scores.length ? Math.max(...a.scores) : 0
     // bỏ các trận thấp nhất cho đủ số chuẩn; giữ thứ tự thi đấu của phần còn lại
     const drop = provisional ? 0 : a.scores.length - standard
@@ -94,7 +98,7 @@ export function standings(s: TournamentState): Standing[] {
     const dropped = new Set(idx.slice(0, drop))
     const counted = a.scores.filter((_, k) => !dropped.has(k))
     const multSum = a.mults.filter((_, k) => !dropped.has(k)).reduce((x, y) => x + y, 0)
-    return { id: e.id, total: counted.reduce((x, y) => x + y, 0), multSum, best, penalty: a.penalty, counted, key: draw() }
+    return { id, total: counted.reduce((x, y) => x + y, 0), multSum, best, penalty: a.penalty, counted, key: draw() }
   })
   rows.sort((x, y) => y.total - x.total || y.multSum - x.multSum || y.best - x.best || x.penalty - y.penalty || x.key - y.key)
   const same = (x: (typeof rows)[0], y: (typeof rows)[0]) => x.total === y.total && x.multSum === y.multSum && x.best === y.best && x.penalty === y.penalty
