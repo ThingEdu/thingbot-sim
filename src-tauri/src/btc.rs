@@ -6,7 +6,7 @@
 //! - Chuyển thư: kết nối WS đầu tiên từ loopback gửi đúng `{"t":"btc"}` là BTC (chỉ một). Mọi kết nối khác là khách
 //!   `c1`, `c2`, …. Khách ⇒ BTC: `{"from":"cN","m":<thư gốc>}`; BTC ⇒ khách: `{"to":"cN"|"*","m":…}` rồi khách nhận
 //!   `m`. Khách vào / ra ⇒ BTC nhận `{"peer":"cN","on":bool}`. Chưa có BTC ⇒ khách nhận `{"t":"nobtc"}`.
-//! - Lưu giải đấu: `hien-tai.json` (tệp tạm + rename) và tối đa 20 bản `sao-luu-<ms>.json`.
+//! - Lưu giải đấu: `hien-tai.json` (tệp tạm + rename) và tối đa 20 bản `sao-luu-<ms>.json` (cách nhau ≥ 60 s).
 
 use futures_util::{SinkExt, StreamExt};
 use serde_json::value::RawValue;
@@ -27,6 +27,8 @@ use tokio_tungstenite::tungstenite::Message;
 pub const BTC_PORT: u16 = 47292;
 /// Số bản sao lưu giữ lại.
 const BACKUPS: usize = 20;
+/// Hai bản sao lưu cách nhau ít nhất chừng này (ms).
+const BACKUP_EVERY_MS: u128 = 60_000;
 /// Đầu yêu cầu HTTP dài quá chừng này thì bỏ.
 const MAX_HEAD: usize = 16 * 1024;
 
@@ -44,8 +46,13 @@ pub struct Config {
     /// Hàng đợi gửi của khách / của BTC; đầy thì kết nối đó bị bỏ.
     pub client_queue: usize,
     pub btc_queue: usize,
-    /// Cỡ thư / khung WebSocket tối đa.
+    /// Cỡ thư / khung WebSocket tối đa của BTC (máy loopback).
     pub max_message: usize,
+    /// Cỡ thư / khung tối đa của khách (điện thoại, màn chiếu): phiếu nửa sân chỉ vài KB.
+    pub client_max_message: usize,
+    /// Giới hạn tốc độ mỗi khách (thùng token): `client_rate` thư/giây, dồn tối đa `client_burst`; vượt ⇒ ngắt khách.
+    pub client_rate: f64,
+    pub client_burst: f64,
 }
 
 impl Default for Config {
@@ -58,6 +65,9 @@ impl Default for Config {
             client_queue: 512,
             btc_queue: 4096,
             max_message: 1 << 20,
+            client_max_message: 64 << 10,
+            client_rate: 20.0,
+            client_burst: 40.0,
         }
     }
 }
@@ -73,10 +83,46 @@ struct Peer {
 }
 
 impl Peer {
+    /// Gửi cho khách: hàng đợi đầy ⇒ ngắt chính khách đó (khách chậm / chết).
     fn push(&self, m: Message) {
         if self.tx.try_send(m).is_err() {
             self.kick.notify_one();
         }
+    }
+
+    /// Gửi cho BTC: hàng đợi đầy ⇒ chỉ bỏ thư (trả false), KHÔNG ngắt BTC — người gửi tự chịu.
+    fn offer(&self, m: Message) -> bool {
+        self.tx.try_send(m).is_ok()
+    }
+
+    fn kick(&self) {
+        self.kick.notify_one();
+    }
+}
+
+/// Thùng token giới hạn tốc độ thư của một khách.
+struct Bucket {
+    tokens: f64,
+    at: Instant,
+    rate: f64,
+    burst: f64,
+}
+
+impl Bucket {
+    fn new(rate: f64, burst: f64) -> Bucket {
+        Bucket { tokens: burst, at: Instant::now(), rate, burst }
+    }
+
+    /// Lấy một token; hết ⇒ false.
+    fn take(&mut self) -> bool {
+        let now = Instant::now();
+        self.tokens = (self.tokens + now.duration_since(self.at).as_secs_f64() * self.rate).min(self.burst);
+        self.at = now;
+        if self.tokens < 1.0 {
+            return false;
+        }
+        self.tokens -= 1.0;
+        true
     }
 }
 
@@ -221,7 +267,9 @@ async fn serve(stream: TcpStream, peer: SocketAddr, files: Files, relay: Arc<Mut
     let Ok(Some((head_len, head))) = tokio::time::timeout(cfg.head_timeout, peek_head(&stream)).await else { return };
     let Some(parsed) = Head::parse(&head) else { return };
     if parsed.is_ws_upgrade() {
-        let ws_cfg = WebSocketConfig::default().max_message_size(Some(cfg.max_message)).max_frame_size(Some(cfg.max_message));
+        // Chỉ loopback mới có thể là BTC (1 MiB); máy khác chắc chắn là khách ⇒ giới hạn khách ngay từ bắt tay.
+        let max = if peer.ip().is_loopback() { cfg.max_message } else { cfg.client_max_message };
+        let ws_cfg = WebSocketConfig::default().max_message_size(Some(max)).max_frame_size(Some(max));
         let Ok(Ok(ws)) = tokio::time::timeout(cfg.head_timeout, tokio_tungstenite::accept_async_with_config(stream, Some(ws_cfg))).await else { return };
         serve_ws(ws, peer, relay, cfg).await;
     } else {
@@ -326,18 +374,23 @@ fn register_client(relay: &Mutex<Relay>, me: &Peer) -> u64 {
     let id = r.next;
     r.clients.insert(id, me.clone());
     if let Some((_, b)) = &r.btc {
-        b.push(text(format!("{{\"peer\":\"{}\",\"on\":true}}", client_name(id))));
+        let _ = b.offer(text(format!("{{\"peer\":\"{}\",\"on\":true}}", client_name(id))));
     }
     id
 }
 
-/// Gửi thư của khách tới BTC (hoặc `nobtc` về khách). Không phải JSON ⇒ bỏ.
+/// Gửi thư của khách tới BTC (hoặc `nobtc` về khách). Không phải JSON ⇒ bỏ. Hàng đợi BTC đầy ⇒ bỏ thư và ngắt khách
+/// gửi (không bao giờ ngắt BTC vì một khách bơm thư).
 fn client_message(relay: &Mutex<Relay>, id: u64, me: &Peer, m: &Message) {
     let Message::Text(t) = m else { return };
     let Ok(raw) = serde_json::from_str::<Box<RawValue>>(t.as_str()) else { return };
     let r = relay.lock().unwrap();
     match &r.btc {
-        Some((_, b)) => b.push(text(format!("{{\"from\":\"{}\",\"m\":{}}}", client_name(id), raw.get()))),
+        Some((_, b)) => {
+            if !b.offer(text(format!("{{\"from\":\"{}\",\"m\":{}}}", client_name(id), raw.get()))) {
+                me.kick();
+            }
+        }
         None => me.push(text("{\"t\":\"nobtc\"}".into())),
     }
 }
@@ -416,7 +469,7 @@ where
                 r.btc = Some((id, me.clone()));
                 // BTC mới biết ngay ai đang nối.
                 for c in r.clients.keys() {
-                    me.push(text(format!("{{\"peer\":\"{}\",\"on\":true}}", client_name(*c))));
+                    let _ = me.offer(text(format!("{{\"peer\":\"{}\",\"on\":true}}", client_name(*c))));
                 }
                 Some(id)
             }
@@ -440,7 +493,20 @@ where
         }
         let _ = sink.close().await;
     });
+    let mut bucket = Bucket::new(cfg.client_rate, cfg.client_burst);
+    // Khách (kể cả khách loopback được nhận 1 MiB lúc bắt tay): thư quá cỡ hoặc quá nhanh ⇒ ngắt.
+    let client_ok = |m: &Message, bucket: &mut Bucket| -> bool {
+        if !(m.is_text() || m.is_binary()) {
+            return true;
+        }
+        m.len() <= cfg.client_max_message && bucket.take()
+    };
     if let (Role::Client(id), Some(m)) = (&role, &pending) {
+        if !client_ok(m, &mut bucket) {
+            writer.abort();
+            leave(&relay, &role);
+            return;
+        }
         client_message(&relay, *id, &me, m);
     }
     let mut last = Instant::now();
@@ -456,7 +522,12 @@ where
                     }
                     match &role {
                         Role::Btc(_) => btc_message(&relay, &m),
-                        Role::Client(id) => client_message(&relay, *id, &me, &m),
+                        Role::Client(id) => {
+                            if !client_ok(&m, &mut bucket) {
+                                break;
+                            }
+                            client_message(&relay, *id, &me, &m)
+                        }
                     }
                 }
                 _ => break,
@@ -465,15 +536,27 @@ where
                 if last.elapsed() > cfg.idle_timeout {
                     break;
                 }
-                me.push(Message::Ping(Default::default()));
+                match role {
+                    // BTC: hàng đợi đầy thì bỏ ping (BTC chết thật sẽ hết hạn rảnh vì không có pong).
+                    Role::Btc(_) => {
+                        let _ = me.offer(Message::Ping(Default::default()));
+                    }
+                    Role::Client(_) => me.push(Message::Ping(Default::default())),
+                }
             }
-            _ = kick.notified() => break, // hàng đợi gửi đầy (khách chậm / chết)
+            _ = kick.notified() => break, // khách: hàng đợi gửi đầy (chậm / chết) hoặc bơm thư làm đầy hàng đợi BTC
         }
     }
-    // Rời đi.
+    leave(&relay, &role);
+    // Bỏ tác vụ ghi (hàng đợi có thể đang kẹt vì ổ cắm chậm): ổ cắm đóng khi `sink` rơi.
+    writer.abort();
+}
+
+/// Rời đi: gỡ khỏi bộ chuyển thư, báo BTC / khách.
+fn leave(relay: &Mutex<Relay>, role: &Role) {
     {
         let mut r = relay.lock().unwrap();
-        match role {
+        match *role {
             Role::Btc(id) => {
                 if r.btc.as_ref().is_some_and(|b| b.0 == id) {
                     r.btc = None;
@@ -485,13 +568,11 @@ where
             Role::Client(id) => {
                 r.clients.remove(&id);
                 if let Some((_, b)) = &r.btc {
-                    b.push(text(format!("{{\"peer\":\"{}\",\"on\":false}}", client_name(id))));
+                    let _ = b.offer(text(format!("{{\"peer\":\"{}\",\"on\":false}}", client_name(id))));
                 }
             }
         }
     }
-    // Bỏ tác vụ ghi (hàng đợi có thể đang kẹt vì ổ cắm chậm): ổ cắm đóng khi `sink` rơi.
-    writer.abort();
 }
 
 // ---------- Tệp tĩnh từ thư mục (bin e2e) ----------
@@ -510,18 +591,27 @@ fn backup_stamp(name: &str) -> Option<u128> {
     name.strip_prefix("sao-luu-")?.strip_suffix(".json")?.parse().ok()
 }
 
-/// Ghi `hien-tai.json` (tệp tạm + rename) và bản `sao-luu-<stamp>.json`; chỉ giữ `BACKUPS` bản mới nhất.
+/// Ghi `hien-tai.json` (tệp tạm + rename) mỗi lần; bản `sao-luu-<stamp>.json` chỉ khi đã ≥ `BACKUP_EVERY_MS` từ bản
+/// mới nhất (lưu sau mỗi thay đổi nên 20 bản không bị dồn hết trong một phút); chỉ giữ `BACKUPS` bản mới nhất.
 pub fn save_at(dir: &Path, json: &str, stamp: u128) -> std::io::Result<()> {
     std::fs::create_dir_all(dir)?;
     let tmp = dir.join("hien-tai.json.tmp");
     std::fs::write(&tmp, json)?;
     std::fs::rename(&tmp, dir.join("hien-tai.json"))?;
+    let list = |dir: &Path| -> std::io::Result<Vec<(u128, PathBuf)>> {
+        let mut all: Vec<(u128, PathBuf)> = std::fs::read_dir(dir)?
+            .filter_map(|e| e.ok())
+            .filter_map(|e| backup_stamp(e.file_name().to_str()?).map(|s| (s, e.path())))
+            .collect();
+        all.sort();
+        Ok(all)
+    };
+    let newest = list(dir)?.last().map(|(s, _)| *s);
+    if newest.is_some_and(|n| stamp < n.saturating_add(BACKUP_EVERY_MS)) {
+        return Ok(());
+    }
     std::fs::write(dir.join(format!("sao-luu-{stamp}.json")), json)?;
-    let mut all: Vec<(u128, PathBuf)> = std::fs::read_dir(dir)?
-        .filter_map(|e| e.ok())
-        .filter_map(|e| backup_stamp(e.file_name().to_str()?).map(|s| (s, e.path())))
-        .collect();
-    all.sort();
+    let all = list(dir)?;
     let extra = all.len().saturating_sub(BACKUPS);
     for (_, p) in all.into_iter().take(extra) {
         let _ = std::fs::remove_file(p);
@@ -679,7 +769,7 @@ mod tests {
 
     async fn recv(s: &mut Ws) -> String {
         loop {
-            let m = tokio::time::timeout(Duration::from_secs(3), s.next()).await.expect("hết giờ").expect("đóng").unwrap();
+            let m = tokio::time::timeout(Duration::from_secs(3), s.next()).await.expect("hết giờ").expect("đóng").map_err(|e| e.to_string()).unwrap();
             if m.is_text() {
                 return m.into_text().unwrap().to_string();
             }
@@ -805,6 +895,9 @@ mod tests {
             client_queue: 8,
             btc_queue: 64,
             max_message: 1 << 20,
+            client_max_message: 64 << 10,
+            client_rate: 20.0,
+            client_burst: 40.0,
         }
     }
 
@@ -933,6 +1026,102 @@ mod tests {
         assert!(closed, "thư 2 MiB phải làm máy chủ đóng kết nối");
     }
 
+    /// BTC không đọc (hàng đợi BTC đầy) ⇒ thư của khách bị bỏ và KHÁCH gửi bị ngắt; BTC vẫn còn nối.
+    #[tokio::test]
+    async fn btc_queue_full_kicks_sender_not_btc() {
+        let srv = start_cfg(Config { idle_timeout: Duration::from_secs(60), ping_every: Duration::from_secs(60), btc_queue: 4, client_rate: 1e9, client_burst: 1e9, max_conns: 10, ..small_cfg() }).await;
+        let mut btc = new_btc(srv.addr).await;
+        let mut flood = ws(srv.addr).await;
+        // BTC không đọc gì: khách bơm thư 60 KB tới khi bị ngắt.
+        let big = "z".repeat(60_000);
+        let mut kicked = false;
+        for _ in 0..2000 {
+            if flood.send(Message::text(format!("{{\"p\":\"{big}\"}}"))).await.is_err() {
+                kicked = true;
+                break;
+            }
+        }
+        if !kicked {
+            // máy chủ đã đóng phía mình: đọc thấy đóng
+            for _ in 0..50 {
+                match tokio::time::timeout(Duration::from_secs(3), flood.next()).await {
+                    Ok(None) | Ok(Some(Err(_))) => { kicked = true; break; }
+                    Ok(Some(Ok(m))) if m.is_close() => { kicked = true; break; }
+                    Err(_) => break,
+                    _ => {}
+                }
+            }
+        }
+        assert!(kicked, "khách bơm thư phải bị ngắt");
+        // BTC còn sống: đọc hết thư tồn rồi khách mới vẫn tới được.
+        let mut c = ws(srv.addr).await;
+        send(&mut c, "{\"song\":1}").await;
+        let mut ok = false;
+        for _ in 0..200 {
+            let m = recv(&mut btc).await;
+            assert_ne!(m, "<close>", "BTC không được bị ngắt");
+            if m == "{\"from\":\"c2\",\"m\":{\"song\":1}}" {
+                ok = true;
+                break;
+            }
+        }
+        assert!(ok, "BTC phải còn nhận được thư");
+    }
+
+    /// Khách gửi quá ~20 thư/giây ⇒ khách bị ngắt, BTC vẫn chạy.
+    #[tokio::test]
+    async fn flooding_client_is_rate_limited() {
+        let srv = start_cfg(Config { idle_timeout: Duration::from_secs(60), ping_every: Duration::from_secs(60), ..small_cfg() }).await;
+        let mut btc = new_btc(srv.addr).await;
+        let mut flood = ws(srv.addr).await;
+        for i in 0..300 {
+            if flood.send(Message::text(format!("{{\"i\":{i}}}"))).await.is_err() {
+                break;
+            }
+        }
+        let mut n = 0;
+        let mut off = false;
+        for _ in 0..400 {
+            let m = recv(&mut btc).await;
+            assert_ne!(m, "<close>");
+            if m.starts_with("{\"from\":\"c1\"") {
+                n += 1;
+            }
+            if m == "{\"peer\":\"c1\",\"on\":false}" {
+                off = true;
+                break;
+            }
+        }
+        assert!(off, "khách bơm thư phải bị ngắt");
+        assert!(n < 100, "chỉ một phần thư được chuyển: {n}");
+        let mut c = ws(srv.addr).await;
+        send(&mut c, "{\"k\":1}").await;
+        assert_eq!(recv(&mut btc).await, "{\"peer\":\"c2\",\"on\":true}");
+        assert_eq!(recv(&mut btc).await, "{\"from\":\"c2\",\"m\":{\"k\":1}}");
+    }
+
+    /// Thư khách > 64 KiB ⇒ đóng khách (BTC vẫn được 1 MiB).
+    #[tokio::test]
+    async fn oversize_client_message_closes_client() {
+        let srv = start().await;
+        let mut btc = new_btc(srv.addr).await;
+        let mut c = ws(srv.addr).await;
+        send(&mut c, "{\"a\":1}").await;
+        assert_eq!(recv(&mut btc).await, "{\"peer\":\"c1\",\"on\":true}");
+        assert_eq!(recv(&mut btc).await, "{\"from\":\"c1\",\"m\":{\"a\":1}}");
+        let _ = c.send(Message::text(format!("{{\"p\":\"{}\"}}", "y".repeat(70 * 1024)))).await;
+        let m = recv(&mut btc).await;
+        assert!(m == "{\"peer\":\"c1\",\"on\":false}", "thư 70 KiB phải làm khách bị đóng: {}", &m[..m.len().min(60)]);
+        // BTC gửi thư lớn (200 KB) vẫn được.
+        let mut d = ws(srv.addr).await;
+        send(&mut d, "{\"b\":1}").await;
+        recv(&mut btc).await;
+        recv(&mut btc).await;
+        let big = "x".repeat(200_000);
+        send(&mut btc, &format!("{{\"to\":\"c2\",\"m\":{{\"p\":\"{big}\"}}}}")).await;
+        assert!(recv(&mut d).await.len() > 200_000);
+    }
+
     #[tokio::test]
     async fn loopback_role_waits_for_first_message_without_time_limit() {
         let srv = start().await;
@@ -1022,14 +1211,30 @@ mod tests {
     fn backup_keeps_twenty_newest() {
         let d = temp_dir("bk");
         for i in 1..=21u128 {
-            save_at(&d, &format!("{{\"i\":{i}}}"), i).unwrap();
+            save_at(&d, &format!("{{\"i\":{i}}}"), i * 60_000).unwrap();
         }
         let mut names: Vec<String> = std::fs::read_dir(&d).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).filter(|n| n.starts_with("sao-luu-")).collect();
         names.sort();
         assert_eq!(names.len(), 20);
-        assert!(!names.contains(&"sao-luu-1.json".to_string()), "{names:?}");
-        assert!(names.contains(&"sao-luu-2.json".to_string()) && names.contains(&"sao-luu-21.json".to_string()));
+        assert!(!names.contains(&"sao-luu-60000.json".to_string()), "{names:?}");
+        assert!(names.contains(&"sao-luu-120000.json".to_string()) && names.contains(&"sao-luu-1260000.json".to_string()));
         assert_eq!(load_json(&d).unwrap().as_deref(), Some("{\"i\":21}"));
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    /// Bản sao lưu chỉ ghi khi đã ≥ 60 s từ bản mới nhất; `hien-tai.json` luôn ghi.
+    #[test]
+    fn backup_at_most_once_a_minute() {
+        let d = temp_dir("min");
+        save_at(&d, "{\"i\":1}", 1_000_000).unwrap();
+        save_at(&d, "{\"i\":2}", 1_001_000).unwrap();
+        save_at(&d, "{\"i\":3}", 1_059_999).unwrap();
+        let count = || std::fs::read_dir(&d).unwrap().filter(|e| e.as_ref().unwrap().file_name().to_str().unwrap().starts_with("sao-luu-")).count();
+        assert_eq!(count(), 1, "trong 60 s chỉ một bản sao lưu");
+        assert_eq!(load_json(&d).unwrap().as_deref(), Some("{\"i\":3}"), "hien-tai luôn là bản mới nhất");
+        save_at(&d, "{\"i\":4}", 1_060_000).unwrap();
+        assert_eq!(count(), 2);
+        assert!(d.join("sao-luu-1060000.json").exists());
         std::fs::remove_dir_all(&d).unwrap();
     }
 
