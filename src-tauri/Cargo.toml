@@ -46,3 +46,4 @@ futures-util = { version = "0.3", default-features = false, features = ["sink", 
 if-addrs = "0.13"
 serde_json = { version = "1", features = ["raw_value"] }
 serde = { version = "1", features = ["derive"] }
+tauri-plugin-dialog = "=2.4.2"

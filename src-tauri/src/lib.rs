@@ -67,15 +67,59 @@ fn save_file(app: tauri::AppHandle, name: String, data: Vec<u8>) -> Result<Strin
     Ok(path.to_string_lossy().into_owned())
 }
 
+/// Tệp người dùng chọn để nhập (danh sách đội, file giải).
+#[derive(serde::Serialize)]
+struct Picked {
+    name: String,
+    data: Vec<u8>,
+}
+
+/// Cỡ tối đa của tệp nhập (danh sách đội / file giải chỉ vài trăm KB).
+const PICK_MAX: u64 = 10 * 1024 * 1024;
+
+/// Đọc tệp đã chọn: chỉ nhận đúng đuôi cho phép và không quá PICK_MAX.
+fn read_picked(path: &Path, exts: &[&str]) -> Result<Picked, String> {
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    if !exts.contains(&ext.as_str()) {
+        return Err(format!("Chỉ nhận tệp {}", exts.iter().map(|e| format!(".{e}")).collect::<Vec<_>>().join(", ")));
+    }
+    let len = std::fs::metadata(path).map_err(|e| format!("Không đọc được tệp: {e}"))?.len();
+    if len > PICK_MAX {
+        return Err("Tệp quá lớn (tối đa 10 MB)".into());
+    }
+    let data = std::fs::read(path).map_err(|e| format!("Không đọc được tệp: {e}"))?;
+    Ok(Picked { name, data })
+}
+
+/// Hộp chọn tệp của hệ điều hành, chỉ hiện đúng loại tệp cần (WKWebView đọc <input type=file> không ổn định trong app).
+/// `kind`: "teams" (Excel / CSV; .xls để báo lời dặn lưu lại) hoặc "event" (file giải .json). Bỏ chọn ⇒ None.
+#[tauri::command]
+async fn pick_open(app: tauri::AppHandle, kind: String) -> Result<Option<Picked>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let (label, exts): (&str, &[&str]) = match kind.as_str() {
+        "teams" => ("Danh sách đội (Excel / CSV)", &["xlsx", "csv", "xls"]),
+        "event" => ("File giải TiFa (.json)", &["json"]),
+        _ => return Err(format!("Loại tệp không hỗ trợ: {kind}")),
+    };
+    let Some(fp) = app.dialog().file().add_filter(label, exts).blocking_pick_file() else {
+        return Ok(None);
+    };
+    let path = fp.into_path().map_err(|e| e.to_string())?;
+    read_picked(&path, exts).map(Some)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(lan::LanState::default())
         .manage(btc::BtcState::default())
         .invoke_handler(tauri::generate_handler![
             save_tb,
             save_file,
+            pick_open,
             lan::lan_host_start,
             lan::lan_host_stop,
             lan::lan_rooms,
@@ -104,6 +148,23 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn read_picked_checks_extension_and_size() {
+        let dir = std::env::temp_dir().join(format!("tifa-pick-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let ok = dir.join("Danh Sach.XLSX");
+        std::fs::write(&ok, b"PK\x03\x04").unwrap();
+        let p = read_picked(&ok, &["xlsx", "csv"]).unwrap();
+        assert_eq!((p.name.as_str(), p.data.as_slice()), ("Danh Sach.XLSX", &b"PK\x03\x04"[..]));
+        let pdf = dir.join("a.pdf");
+        std::fs::write(&pdf, b"x").unwrap();
+        assert_eq!(read_picked(&pdf, &["xlsx", "csv"]).err().unwrap(), "Chỉ nhận tệp .xlsx, .csv");
+        let big = dir.join("lon.csv");
+        std::fs::File::create(&big).unwrap().set_len(PICK_MAX + 1).unwrap();
+        assert!(read_picked(&big, &["csv"]).err().unwrap().contains("quá lớn"));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn safe_tb_name_keeps_only_a_plain_file_name() {

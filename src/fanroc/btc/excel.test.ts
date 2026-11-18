@@ -65,7 +65,7 @@ test('importTeams csv chấm phẩy, có BOM, trường trong ngoặc kép chứ
 test('importTeams csv dấu phẩy, không BOM; đuôi lạ ⇒ ném lỗi', async () => {
   const out = await importTeams(enc('Tên đội,Mã đội\nLửa,A\n'), 'x.csv')
   assert.equal(out[0].team?.code, 'A')
-  await assert.rejects(importTeams(enc(''), 'x.xls'), { message: 'Chỉ nhận tệp .xlsx hoặc .csv' })
+  await assert.rejects(importTeams(enc(''), 'x.pdf'), { message: 'Chỉ nhận tệp .xlsx hoặc .csv' })
   await assert.rejects(importTeams(enc(''), 'x'), { message: 'Chỉ nhận tệp .xlsx hoặc .csv' })
 })
 
@@ -151,4 +151,13 @@ test('dữ liệu mẫu 20 / 30 đội: nhập lại không lỗi, đủ số đ
     assert.ok(teams.every((t) => t.school && t.province && t.advisor))
   }
   assert.deepEqual(sampleTeams(20), sampleTeams(30).slice(0, 20))
+})
+
+test('nhập .xls (Excel cũ) ⇒ lời dặn lưu lại thành .xlsx; CSV không phải UTF-8 (Windows-1258) vẫn đọc được', async () => {
+  await assert.rejects(importTeams(new Uint8Array([0xd0, 0xcf, 0x11, 0xe0]), 'ds.xls'), /Lưu thành.*\.xlsx/)
+  // "Tên đội\nDế" ở bảng mã Windows-1258: ê = 0xEA, đ = 0xF0, ộ = ô (0xF4) + dấu nặng (0xF2), ế = ê (0xEA) + dấu sắc (0xEC)
+  const cp = new Uint8Array([0x54, 0xea, 0x6e, 0x20, 0xf0, 0xf4, 0xf2, 0x69, 0x0a, 0x44, 0xea, 0xec])
+  const rows = await importTeams(cp, 'ds.csv')
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0].team?.name, 'Dế')
 })

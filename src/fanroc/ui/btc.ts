@@ -512,7 +512,7 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
 
   // ---------- Giải ----------
   /** Ô chọn tệp ẩn, tạo một lần (không nằm trong phần được vẽ lại, hộp chọn tệp đang mở không mất ô). */
-  const fileInput = (role: string, accept: string, onFile: (f: File) => Promise<void>) => {
+  const fileInput = (role: string, accept: string, kind: 'teams' | 'event', onFile: (f: File) => Promise<void>) => {
     const i = el('input', 'bt-file')
     i.type = 'file'
     i.accept = accept
@@ -521,11 +521,19 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
     i.setAttribute('aria-hidden', 'true')
     i.onchange = () => {
       const f = i.files?.[0]
-      i.value = ''
-      if (f) void onFile(f).catch((e) => console.warn('BTC:', e)).finally(() => renderSoon())
+      // đọc xong mới xoá value (xoá trước, WebKit có thể không cho đọc tệp nữa)
+      if (f) void onFile(f).catch((e) => console.warn('BTC:', e)).finally(() => ((i.value = ''), renderSoon()))
     }
     screen.append(i)
-    return i
+    // App desktop: hộp chọn tệp của hệ điều hành (lọc đúng loại tệp), không dùng <input type=file> của WebView.
+    const open = () => {
+      if (!backend.pickFile) return i.click()
+      void backend.pickFile(kind)
+        .then((r) => (r ? onFile(new File([r.data as BlobPart], r.name)) : undefined))
+        .catch((e) => { teamNote = { ok: false, text: msg(e) } })
+        .finally(() => renderSoon())
+    }
+    return { click: open }
   }
   const backup = async (s: EventState): Promise<string> =>
     backend.saveFile(backupName(s.name, new Date()), new TextEncoder().encode(JSON.stringify(s, null, 1)))
@@ -542,7 +550,7 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
     return out
   }
 
-  const openInput = fileInput('open-file', '.json,application/json', async (f) => {
+  const openInput = fileInput('open-file', '.json,application/json', 'event', async (f) => {
     const ev = parseEvent(await f.text())
     if (!ev) {
       eventNote = { ok: false, text: `«${f.name}» không phải file giải TiFa` }
@@ -604,7 +612,7 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
     input(`${prefix}-advisor`, d.advisor, (v) => (d.advisor = v), { label: 'Người hướng dẫn', cls: 'mid' }),
   ]
 
-  const importInput = fileInput('import-file', '.xlsx,.csv', async (f) => {
+  const importInput = fileInput('import-file', '.xlsx,.csv,.xls', 'teams', async (f) => {
     try {
       preview = { rows: await importTeams(new Uint8Array(await f.arrayBuffer()), f.name), file: f.name }
       teamNote = null

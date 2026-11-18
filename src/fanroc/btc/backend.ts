@@ -21,6 +21,9 @@ export interface BtcBackend {
   saveFile(name: string, data: Uint8Array): Promise<string>
   /** File giải hỏng: lưu NGUYÊN BẢN file giải đã lưu (từng byte) ra `name` trước khi tạo giải mới; trả đường tệp. */
   backupRaw(name: string): Promise<string>
+  /** Chỉ app desktop: hộp chọn tệp của hệ điều hành, lọc đúng loại tệp ('teams': .xlsx/.csv/.xls; 'event': .json).
+   *  Bỏ chọn ⇒ null. Trình duyệt không có (dùng <input type=file>). */
+  pickFile?(kind: 'teams' | 'event'): Promise<{ name: string; data: Uint8Array } | null>
 }
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>
@@ -94,6 +97,10 @@ export function btcBackend(w: Env = globalThis as never): BtcBackend {
     load: async () => ((await invoke('btc_load', {})) as string | null) ?? null,
     saveFile: async (name, data) => String(await invoke('save_file', { name, data: Array.from(data) })),
     backupRaw: async (name) => String(await invoke('btc_backup_raw', { name })),
+    async pickFile(kind) {
+      const r = (await invoke('pick_open', { kind })) as { name: string; data: number[] } | null
+      return r ? { name: r.name, data: Uint8Array.from(r.data) } : null
+    },
   }
 }
 

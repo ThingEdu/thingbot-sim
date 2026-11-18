@@ -32,6 +32,11 @@ export const CREDITS: readonly Credit[] = [
     from: 'https://github.com/snapview/tokio-tungstenite (tokio-tungstenite@0.26.2), https://github.com/tokio-rs/tokio (tokio@1.52.3), https://github.com/messense/if-addrs (if-addrs@0.13.4)',
     license: 'MIT (if-addrs: MIT hoặc BSD-3-Clause)',
   },
+  {
+    name: 'Hộp chọn tệp của app desktop (tauri-plugin-dialog, tauri-plugin-fs, rfd)',
+    from: 'https://github.com/tauri-apps/plugins-workspace (tauri-plugin-dialog@2.4.2, tauri-plugin-fs@2.5.2), https://github.com/PolyMeilex/rfd (rfd@0.15.4)',
+    license: 'MIT hoặc Apache-2.0 (rfd: MIT)',
+  },
   { name: 'Đọc / ghi tệp .tb (JSZip)', from: 'https://github.com/Stuk/jszip (jszip@3.10.1)', license: 'MIT hoặc GPL-3.0' },
   {
     name: 'Mã QR địa chỉ trọng tài / màn chiếu (qrcode-generator)',

@@ -84,11 +84,21 @@ function parseCsv(src: string): string[][] {
   return rows
 }
 
+/** CSV: UTF-8 (có / không BOM); không phải UTF-8 hợp lệ thì coi là Windows-1258 (Excel tiếng Việt trên Windows lưu kiểu này). */
+function decodeCsv(data: Uint8Array): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(data)
+  } catch {
+    return new TextDecoder('windows-1258').decode(data).normalize('NFC')
+  }
+}
+
 export async function importTeams(data: Uint8Array, fileName: string): Promise<ImportRow[]> {
   const ext = /\.([^.]+)$/.exec(fileName.trim())?.[1]?.toLowerCase()
   let tables: Cell[][][]
   if (ext === 'xlsx') tables = (await readXlsx(data)).map((s) => s.rows)
-  else if (ext === 'csv') tables = [parseCsv(new TextDecoder('utf-8').decode(data))]
+  else if (ext === 'csv') tables = [parseCsv(decodeCsv(data))]
+  else if (ext === 'xls') throw new Error('Tệp .xls (Excel đời cũ) chưa đọc được: mở bằng Excel, chọn Lưu thành (Save As) «Sổ làm việc Excel (.xlsx)» rồi nhập lại')
   else throw new Error('Chỉ nhận tệp .xlsx hoặc .csv')
 
   const want = { code: norm(TEMPLATE_HEAD[0]), name: norm(TEMPLATE_HEAD[1]), school: norm(TEMPLATE_HEAD[2]), province: norm(TEMPLATE_HEAD[3]), advisor: norm(TEMPLATE_HEAD[4]) }
