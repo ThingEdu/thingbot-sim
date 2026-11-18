@@ -8,7 +8,7 @@ import { makeSchedule, slotTime, type SchedQuality } from '../btc/schedule.ts'
 import { halfScore, liveScore, teamPoints } from '../btc/sheet.ts'
 import { roundStandings } from '../btc/rank.ts'
 import { exportEvent, importTeams, templateXlsx, type ImportRow } from '../btc/excel.ts'
-import { sanitizeSheet } from '../btc/validate.ts'
+import { sanitizeSheet, validateEvent } from '../btc/validate.ts'
 import { BtcHost } from '../btc/host.ts'
 import { connectBtc, type BtcLink } from '../btc/link.ts'
 import { btcBackend, serialSaver, type BtcBackend } from '../btc/backend.ts'
@@ -38,20 +38,27 @@ export function nextMatch(round: Round, field: number, busy: Set<string>): EMatc
 /** Các sân có trận trong vòng (tăng dần). */
 export const fieldsOf = (round: Round): number[] => [...new Set(round.matches.map((m) => m.field))].sort((a, b) => a - b)
 
-const isObj = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x)
-
-/** Đọc file giải (JSON) đã lưu / sao lưu; sai hình ⇒ null. */
+/** Đọc file giải (JSON) đã lưu / sao lưu; sai hình ở bất cứ tầng nào ⇒ null (validateEvent). */
 export function parseEvent(json: string): EventState | null {
-  let o: unknown
   try {
-    o = JSON.parse(json)
+    return validateEvent(JSON.parse(json))
   } catch {
     return null
   }
-  if (!isObj(o) || o.version !== 1 || typeof o.name !== 'string' || !Array.isArray(o.teams) || !Array.isArray(o.rounds) || !isObj(o.live) || !isObj(o.codes)) return null
-  if (!o.rounds.every((r) => isObj(r) && typeof r.id === 'string' && Array.isArray(r.matches) && isObj(r.results) && Array.isArray(r.edits))) return null
-  if (!o.teams.every((t) => isObj(t) && typeof t.id === 'string' && typeof t.name === 'string')) return null
-  return o as unknown as EventState
+}
+
+export type LoadResult = { ok: true; raw: string | null } | { ok: false; error: unknown }
+export type Startup = { t: 'new' } | { t: 'ask'; event: EventState } | { t: 'loadError'; msg: string } | { t: 'corrupt'; raw: string }
+
+/**
+ * Mở màn khi chưa có giải trong bộ nhớ: đọc lỗi ⇒ báo + Thử lại (không bao giờ tự tạo giải mới: sẽ ghi đè file giải
+ * cũ); có file nhưng hỏng ⇒ báo, giữ nguyên văn để sao lưu trước khi tạo giải mới; chưa có ⇒ giải mới; đúng ⇒ hỏi tiếp tục.
+ */
+export function startupAction(r: LoadResult): Startup {
+  if (!r.ok) return { t: 'loadError', msg: msg(r.error) }
+  if (r.raw === null) return { t: 'new' }
+  const event = parseEvent(r.raw)
+  return event ? { t: 'ask', event } : { t: 'corrupt', raw: r.raw }
 }
 
 /** Tên giải ⇒ phần tên tệp: bỏ dấu, chữ thường, gạch nối. */
@@ -228,7 +235,10 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
 
   // ---- trạng thái màn (không lưu) ----
   let active = false
-  let phase: 'loading' | 'ask' | 'main' = 'loading'
+  let phase: 'loading' | 'ask' | 'loadError' | 'corrupt' | 'main' = 'loading'
+  let loadErr = ''
+  let corruptRaw = ''
+  let showToken = 0
   let saved: EventState | null = null
   let host: BtcHost | null = null
   let link: BtcLink | null = null
@@ -288,7 +298,7 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
       if (w.length) renderSoon(w)
     }, 0)
   }
-  for (const ev of ['pointerup', 'pointercancel']) window.addEventListener(ev, release, true)
+  for (const ev of ['pointerup', 'pointercancel', 'blur']) window.addEventListener(ev, release, true)
   let queued = false
   const renderSoon = (which: Sec[] = SECS) => {
     for (const s of which) pending.add(s)
@@ -413,7 +423,31 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
     secs.clear()
     const b = el('div', 'bt-box')
     if (phase === 'loading') b.append(el('div', 'bt-cap', 'Đang mở giải đã lưu…'))
-    else {
+    else if (phase === 'loadError') {
+      b.dataset.role = 'load-error'
+      b.append(
+        note(`Không đọc được dữ liệu giải: ${loadErr}`, false),
+        el('div', 'bt-cap', 'Dữ liệu giải cũ chưa bị đụng tới. Thử lại; nếu vẫn lỗi, kiểm tra ổ đĩa / quyền thư mục dữ liệu của app.'),
+        box('div', 'bt-row', btn('Thử lại', () => boot(showToken), { cls: 'main', key: 'retry-load', role: 'retry-load' })),
+      )
+    } else if (phase === 'corrupt') {
+      b.dataset.role = 'corrupt'
+      b.append(
+        note('File giải không đọc được (hỏng hoặc sai định dạng)', false),
+        el('div', 'bt-cap', 'Giải chưa bị ghi đè. Bấm nút dưới để lưu nguyên văn file lỗi ra máy (giai-loi-<ngày giờ>.json, gửi cho người hỗ trợ khôi phục) rồi tạo giải mới.'),
+        box('div', 'bt-row', btn('Sao lưu file lỗi rồi tạo giải mới', async () => {
+          try {
+            await backend.saveFile(`giai-loi-${stamp(new Date())}.json`, new TextEncoder().encode(corruptRaw))
+          } catch (e) {
+            eventNote = { ok: false, text: `Không sao lưu được file lỗi: ${msg(e)} — chưa tạo giải mới` }
+            return
+          }
+          await newEventFlow(null)
+          eventNote = { ok: true, text: 'Đã sao lưu file lỗi và tạo giải mới' }
+        }, { cls: 'warn', key: 'corrupt-new', role: 'corrupt-new' })),
+      )
+      if (eventNote) b.append(note(eventNote.text, eventNote.ok))
+    } else {
       b.dataset.role = 'resume'
       b.append(
         el('h2', undefined, `Tiếp tục giải «${saved?.name ?? ''}»?`),
@@ -491,12 +525,9 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
       eventNote = { ok: false, text: `Không sao lưu được giải đang mở: ${msg(e)} — chưa mở file mới` }
       return
     }
-    host!.state = ev
-    curRound = null
-    editor = null
-    late = null
-    persist()
-    eventNote = { ok: true, text: `Đã mở «${ev.name}» (giải cũ đã sao lưu)` }
+    resetUi()
+    startEvent(ev) // bộ điều hành mới: ghế, seq, đồng hồ, chất lượng lịch của giải cũ không lẫn sang
+    eventNote = { ok: true, text: `Đã mở «${ev.name}» (giải cũ đã sao lưu). Trọng tài đang chấm cần vào lại bằng mã sân.` }
   })
 
   const secEvent = (): El[] => {
@@ -1134,7 +1165,15 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
     if (!active || link || connecting) return
     connecting = true
     try {
-      server ??= await backend.start()
+      if (!server) {
+        const sv = await backend.start()
+        if (!active) {
+          // rời màn trong lúc đang mở máy chủ: tắt luôn
+          void backend.stop().catch(() => {})
+          return
+        }
+        server = sv
+      }
       const l = await connectBtc(server.url)
       if (!active) {
         l.close()
@@ -1167,6 +1206,19 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
     }
   }
 
+  /** Bỏ trạng thái màn của giải trước (form, chất lượng lịch, lỗi sân…). */
+  const resetUi = () => {
+    quality.clear()
+    editor = null
+    late = null
+    preview = null
+    creating = false
+    teamEdit = null
+    fieldErr.clear()
+    lastPhase.clear()
+    runSig = ''
+    armed = null
+  }
   /** Mở giải `s` làm giải đang điều hành. */
   const startEvent = (s: EventState) => {
     host = new BtcHost(s, {
@@ -1195,13 +1247,29 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
         return
       }
     }
-    quality.clear()
-    editor = null
-    late = null
-    preview = null
-    creating = false
+    resetUi()
     startEvent(newEvent(`Giải FANROC ${new Date().getFullYear()}`, randomSeed()))
     eventNote = { ok: true, text: old ? `Đã sao lưu «${old.name}» và tạo giải mới` : 'Đã tạo giải mới' }
+  }
+
+  /** Đọc giải đã lưu và quyết định màn chờ (startupAction). Lần đọc của một lần mở màn cũ hơn ⇒ bỏ. */
+  const boot = async (tok: number) => {
+    phase = 'loading'
+    eventNote = null
+    render(SECS)
+    let r: LoadResult
+    try {
+      r = { ok: true, raw: await backend.load() }
+    } catch (error) {
+      r = { ok: false, error }
+    }
+    if (tok !== showToken || !active || host) return
+    const a = startupAction(r)
+    if (a.t === 'new') return newEventFlow(null)
+    if (a.t === 'ask') ((saved = a.event), (phase = 'ask'))
+    else if (a.t === 'loadError') ((loadErr = a.msg), (phase = 'loadError'))
+    else ((corruptRaw = a.raw), (phase = 'corrupt'))
+    render(SECS)
   }
 
   return {
@@ -1215,20 +1283,11 @@ export function createBtcScreen(root: HTMLElement, deps: BtcDeps): BtcScreen {
       active = true
       screen.hidden = false
       secs.clear()
-      if (!host) {
-        phase = 'loading'
-        render(SECS)
-        const raw = await backend.load().catch(() => null)
-        if (!active) return
-        const s = raw ? parseEvent(raw) : null
-        if (s) {
-          saved = s
-          phase = 'ask'
-          render(SECS)
-        } else await newEventFlow(null)
-      } else render(SECS)
+      const tok = ++showToken
       tickTimer ??= setInterval(tick, 250)
       void connect()
+      if (!host) await boot(tok)
+      else render(SECS)
     },
     hide() {
       active = false

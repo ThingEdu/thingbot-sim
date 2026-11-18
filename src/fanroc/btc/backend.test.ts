@@ -20,6 +20,8 @@ test('backend trình duyệt: lưu / đọc file giải ở fanroc.v1.btc.event;
   assert.equal((await d.start()).port, 47292)
   const full = btcBackend({ location: { search: '' }, localStorage: { getItem: () => null, setItem: () => { throw new Error('đầy') } } })
   await assert.rejects(full.save('x'), /đầy/)
+  const locked = btcBackend({ location: { search: '' }, localStorage: { getItem: () => { throw new Error('bị chặn') }, setItem: () => {} } })
+  await assert.rejects(locked.load(), /bị chặn/, 'lỗi đọc không được coi là chưa có giải')
 })
 
 test('backend desktop: lệnh btc_* và save_file', async () => {

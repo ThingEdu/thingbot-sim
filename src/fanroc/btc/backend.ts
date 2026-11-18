@@ -64,11 +64,10 @@ export function btcBackend(w: Env = globalThis as never): BtcBackend {
         s.setItem(EVENT_KEY, json) // đầy / bị chặn ⇒ ném, màn BTC báo đỏ
       },
       async load() {
-        try {
-          return store()?.getItem(EVENT_KEY) ?? null
-        } catch {
-          return null
-        }
+        // lỗi đọc ⇒ ném (màn BTC báo + Thử lại), không coi là «chưa có giải» kẻo tạo giải mới ghi đè
+        const s = store()
+        if (!s) throw new Error('Trình duyệt chặn đọc dữ liệu')
+        return s.getItem(EVENT_KEY)
       },
       async saveFile(name, data) {
         download(w.document, name, data)

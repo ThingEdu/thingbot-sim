@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { backupName, fieldsOf, nextMatch, parseEvent, randomCode, scheduleRows } from './btc.ts'
+import { backupName, fieldsOf, nextMatch, parseEvent, randomCode, scheduleRows, startupAction } from './btc.ts'
 import { qrSvg } from '../btc/qr.ts'
 import { emptySheet, newEvent, type Round, type Team } from '../btc/event.ts'
 
@@ -53,4 +53,16 @@ test('backupName / randomCode', () => {
   assert.equal(backupName('Vòng khu vực Đà Nẵng', new Date(2026, 10, 19, 8, 5)), 'giai-vong-khu-vuc-da-nang-2026-11-19-0805.json')
   assert.equal(backupName('', new Date(2026, 0, 2, 3, 4)), 'giai-2026-01-02-0304.json')
   for (let i = 0; i < 50; i++) assert.match(randomCode(), /^\d{4}$/)
+})
+
+test('startupAction: lỗi đọc ⇒ báo, không tự tạo; file hỏng ⇒ báo (giữ nguyên văn để sao lưu); không có ⇒ giải mới; đúng ⇒ hỏi', () => {
+  const s = newEvent('Giải A', 1)
+  assert.deepEqual(startupAction({ ok: false, error: new Error('đĩa hỏng') }), { t: 'loadError', msg: 'Đĩa hỏng' })
+  assert.deepEqual(startupAction({ ok: true, raw: null }), { t: 'new' })
+  assert.deepEqual(startupAction({ ok: true, raw: JSON.stringify(s) }), { t: 'ask', event: s })
+  assert.deepEqual(startupAction({ ok: true, raw: '{hỏng' }), { t: 'corrupt', raw: '{hỏng' })
+  const deep = JSON.parse(JSON.stringify(s))
+  deep.rounds = [{ id: 'r1', matches: [{}], results: {}, edits: [] }]
+  assert.equal(startupAction({ ok: true, raw: JSON.stringify(deep) }).t, 'corrupt', 'hỏng sâu bên trong cũng là file hỏng')
+  assert.equal(parseEvent(JSON.stringify(deep)), null)
 })
