@@ -6,7 +6,8 @@
  *     N3–N6, N6b–N6d, N2c (màn chính / ⚙ / Xưởng, Task 13) · N11, N11b, N11c (Luật chơi + Robot mẫu, Task 17) ·
  *     N7, N7b, N8 (nhiệm vụ, Task 14) · N8c (nhiệm vụ 11 Leo Thang Cứu Hỏa, luật V4) · N9, N9b–N9i, N10 (giải đấu, Task 15; N9i luật V4) · N1, N1b, N1c (vỏ, Task 11) ·
  *     N2, N2b (bảng điểm, Task 12) · E1–E4, E6–E11 (ý cũ của sân, viết lại theo giao diện mới ở Task 16; E5 Human
- *     Player bấm phím đã xoá cùng tính năng) · L1–L4 (Thi qua mạng LAN: hai trang + hub Rust; cần `cargo build --features lan-hub --bin fanroc-lan-hub` trong src-tauri)
+ *     Player bấm phím đã xoá cùng tính năng) · L1–L4 (Thi qua mạng LAN: hai trang + hub Rust; cần `cargo build --features lan-hub --bin fanroc-lan-hub` trong src-tauri) ·
+ *     B1–B3 (Ban tổ chức + điện thoại trọng tài + màn chiếu: máy chủ Rust, cần `cargo build --features btc-server --bin fanroc-btc-server` trong src-tauri)
  *   FANROC_URL=http://localhost:5191/mo-phong/fanroc.html npm run e2e:fanroc   # dùng trang đang chạy sẵn
  *   npm run e2e:fanroc -- E3 E5        # chỉ chạy các phép thử có tên bắt đầu như vậy
  *
@@ -17,13 +18,14 @@ import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
-import { mkdtemp, readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { barYaw, pointAt } from '../src/fanroc/ladder.ts'
 import { climb, straight, turtle } from '../src/fanroc/missions/solutions.ts'
 import { MISSIONS } from '../src/fanroc/missions/data.ts'
 import { newTournament, playersIn, played, seatIds } from '../src/fanroc/ui/tournament.ts'
 import { record } from '../src/fanroc/tournament.ts'
+import { writeXlsx, readXlsx } from '../src/fanroc/btc/xlsx.ts'
 
 const ROOT = resolve(import.meta.dirname, '..')
 const THINGBLOCK = resolve(process.env.THINGBLOCK_EDITOR ?? resolve(ROOT, '../thingblock-editor-sim'))
@@ -243,6 +245,7 @@ async function main() {
   await tournamentTests()
   await shellTests()
   await lanTests()
+  await btcTests()
 
   await test('E1 trang tải, không lỗi console, tiêu đề và chữ bảng điểm tiếng Việt', async (page) => {
     await open(page)
@@ -2298,6 +2301,204 @@ async function lanTests() {
       hub.stop()
     }
   })
+}
+
+// ---------- Ban tổ chức + trọng tài điện thoại (spec 2026-11-18-fanroc-btc-trong-tai-design.md) ----------
+// Trang BTC (fanroc.html?btc=…), trang trọng tài (trong-tai.html) và màn chiếu (man-chieu.html?san=N) nối máy chủ Rust thật
+// `fanroc-btc-server` (cùng mã với app). Mỗi phép thử một máy chủ + thư mục rỗng riêng.
+const BTC_BIN = resolve(ROOT, 'src-tauri/target/debug/fanroc-btc-server')
+async function startBtc() {
+  const port = await freePort()
+  const dir = await mkdtemp(resolve(tmpdir(), 'fanroc-btc-'))
+  const srv = spawn(BTC_BIN, [String(port), dir], { stdio: ['ignore', 'pipe', 'pipe'] })
+  await new Promise((ok, fail) => {
+    let out = ''
+    srv.stdout.on('data', (d) => ((out += d), out.includes('btc ') && ok()))
+    srv.once('exit', (c) => fail(new Error(`máy chủ BTC thoát (${c}): ${out} — chạy: cd src-tauri && cargo build --features btc-server --bin fanroc-btc-server`)))
+    srv.once('error', fail)
+  })
+  return { port, ws: `ws://127.0.0.1:${port}/ws`, stop: () => srv.kill('SIGTERM') }
+}
+const pageUrl = (name, btc, extra = '') => `${URL_.replace('fanroc.html', name)}?${extra}btc=${encodeURIComponent(btc.ws)}`
+const BTC_SIDE = { red: 'Đỏ', blue: 'Xanh' }
+/** Danh sách 12 đội (sheet «Đội») ghi bằng writeXlsx ⇒ file tạm. */
+async function teamsFile() {
+  const rows = [['Mã đội', 'Tên đội', 'Trường', 'Tỉnh/Thành', 'Người hướng dẫn']]
+  for (let i = 1; i <= 12; i++) rows.push([`D${String(i).padStart(2, '0')}`, `Đội ${i}`, `THCS số ${i}`, 'Hà Nội', `Cô ${i}`])
+  const path = resolve(await mkdtemp(resolve(tmpdir(), 'fanroc-btc-doi-')), 'doi-12.xlsx')
+  await writeFile(path, await writeXlsx([{ name: 'Đội', rows }]))
+  return path
+}
+/** Trang BTC: vào màn Ban tổ chức qua Giải đấu, nhập 12 đội, sinh lịch 5 trận × 2 sân; trả số trận trong bảng lịch. */
+async function btcSetup(page, btc) {
+  await page.goto(pageUrl('fanroc.html', btc))
+  await page.waitForSelector('.hm-tile[data-tile="tournament"]', { timeout: 60000 })
+  await page.click('.hm-tile[data-tile="tournament"]')
+  await page.click('[data-role="btc"]')
+  await page.waitForSelector('[data-sec="teams"]')
+  await page.waitForFunction(() => document.querySelector('[data-role="conn-status"]')?.textContent?.includes('đang chạy'), null, { timeout: 10000 })
+  await page.setInputFiles('[data-role="import-file"]', await teamsFile())
+  await page.waitForSelector('[data-role="preview"]')
+  await page.click('[data-role="accept"]')
+  await page.waitForFunction(() => document.querySelectorAll('[data-role="teams"] tr').length === 13)
+  await page.selectOption('[data-key="rf-fields"]', '2')
+  await page.selectOption('[data-key="rf-per"]', '5')
+  await page.click('[data-role="make-schedule"]')
+  await page.waitForSelector('[data-role="schedule"]')
+  return (await page.locator('[data-role="schedule"] tr').count()) - 1
+}
+const fieldCard = (n) => `[data-sec="run"] [data-field="${n}"]`
+const fieldCode = async (page, n) => (await page.textContent(`${fieldCard(n)} [data-role="code"]`)).trim()
+/** Điện thoại trọng tài (375 × 667) vào sân `field` (0 = sân 1) bằng mã; trả {page, context}. */
+async function phoneJoin(btc, field, side, code, errors) {
+  const context = await browser.newContext({ viewport: { width: 375, height: 667 }, isMobile: true, hasTouch: true })
+  // ghi lại mọi khung `op` điện thoại gửi đi (B3 phát lại một khung cũ)
+  await context.addInitScript(() => {
+    window.__ops = []
+    const send = WebSocket.prototype.send
+    WebSocket.prototype.send = function (d) {
+      if (typeof d === 'string' && d.includes('"t":"op"')) window.__ops.push(d)
+      return send.call(this, d)
+    }
+  })
+  const page = await context.newPage()
+  page.on('pageerror', (e) => errors.push(`điện thoại ${BTC_SIDE[side]}: ${e.message}`))
+  page.on('console', (m) => m.type() === 'error' && !/WebSocket/.test(m.text()) && errors.push(`điện thoại ${BTC_SIDE[side]}: ${m.text()}`))
+  await page.goto(pageUrl('trong-tai.html', btc))
+  await page.click(`[data-act="e-field"][data-v="${field}"]`)
+  await page.click(`[data-act="e-side"][data-v="${side}"]`)
+  await page.fill('#rf-code', code)
+  await page.click('[data-act="e-join"]')
+  await page.waitForSelector('#rf-map', { timeout: 10000 })
+  return { page, context }
+}
+/** Rãnh 1 Núi A (chọn sẵn): một lần «+» Mầm Cây ⇒ +5 điểm. */
+const addSeed = (phone) => phone.click('[data-act="n-g"][data-d="1"]')
+const liveRed = (page, field = 0) => page.evaluate((f) => window.__fanroc.btc.host.state.live[f]?.sheets.red?.mtn[0][0].g ?? null, field)
+/** Tua đồng hồ tới hết giờ ⇒ kiểm kê; hai bên gửi; BTC Chốt ⇒ bảng kết quả có trận. */
+async function finishMatch(page, phones, field = 0) {
+  await page.evaluate((f) => window.__fanroc.btc.setClock(f, 189.5), field)
+  await page.waitForSelector(`${fieldCard(field)}[data-phase="inventory"]`, { timeout: 5000 })
+  for (const p of phones) {
+    await p.click('[data-act="tab"][data-v="inv"]')
+    await p.waitForSelector('[data-act="submit"]:not([disabled])', { timeout: 5000 })
+    await p.click('[data-act="submit"]')
+  }
+  await page.waitForSelector(`${fieldCard(field)} [data-role="commit"]:not([disabled])`, { timeout: 5000 })
+  await page.click(`${fieldCard(field)} [data-role="commit"]`)
+  await page.waitForSelector('[data-role="results"] [data-match]', { timeout: 5000 })
+}
+
+async function btcTests() {
+  await test('B1 BTC: nhập 12 đội từ Excel, sinh lịch 5 trận × 2 sân ⇒ bảng 15 trận', async (page) => {
+    const btc = await startBtc()
+    try {
+      const n = await btcSetup(page, btc)
+      expect(n === 15, `lịch có ${n} trận, cần 15`)
+      const c1 = await fieldCode(page, 0)
+      const c2 = await fieldCode(page, 1)
+      expect(/^\d{4}$/.test(c1) && /^\d{4}$/.test(c2) && c1 !== c2, `mã sân: ${c1} / ${c2}`)
+      return `12 đội · 15 trận · mã sân ${c1}, ${c2}`
+    } finally {
+      btc.stop()
+    }
+  })
+
+  await test('B2 BTC: hai trọng tài điện thoại chấm, màn chiếu hiện điểm tạm 15, hết giờ ⇒ kiểm kê ⇒ Chốt ⇒ xếp hạng có điểm', async (page, errors) => {
+    const btc = await startBtc()
+    const phones = []
+    let screen
+    try {
+      await btcSetup(page, btc)
+      const code = await fieldCode(page, 0)
+      await page.click(`${fieldCard(0)} [data-role="start"]`)
+      await page.waitForSelector(`${fieldCard(0)}[data-phase="play"]`)
+      for (const side of ['red', 'blue']) phones.push(await phoneJoin(btc, 0, side, code, errors))
+      await page.waitForFunction((t) => document.querySelector(t)?.textContent?.includes('Trọng tài Đỏ: đã nối · Trọng tài Xanh: đã nối'), fieldCard(0), { timeout: 10000 })
+      screen = await browser.newContext({ viewport: { width: 1920, height: 1080 } })
+      const sp = await screen.newPage()
+      sp.on('pageerror', (e) => errors.push(`màn chiếu: ${e.message}`))
+      sp.on('console', (m) => m.type() === 'error' && !/WebSocket/.test(m.text()) && errors.push(`màn chiếu: ${m.text()}`))
+      await sp.goto(pageUrl('man-chieu.html', btc, 'san=1&'))
+      await sp.waitForSelector('#sc-total', { timeout: 10000 })
+      for (let i = 0; i < 3; i++) await addSeed(phones[0].page) // Đỏ: 3 bóng Rãnh 1 Núi A
+      await sp.waitForFunction(() => document.querySelector('#sc-total')?.textContent?.trim() === '15', null, { timeout: 2000 })
+      await finishMatch(page, phones.map((p) => p.page))
+      const res = await page.textContent('[data-role="results"]')
+      expect(/điểm trận 15\b/.test(res), `kết quả: ${res.slice(0, 160)}`)
+      const rows = await page.locator('[data-role="standings"] tr').allInnerTexts()
+      expect(rows.slice(1).some((r) => /\b15\b/.test(r)), `bảng xếp hạng chưa có điểm: ${rows.slice(0, 3).join(' | ')}`)
+      await sp.waitForFunction(() => document.body.textContent.includes('ĐIỂM CHÍNH THỨC'), null, { timeout: 5000 })
+      return 'màn chiếu 15 trong 2 s · chốt điểm trận 15 · xếp hạng có điểm · màn chiếu báo chính thức'
+    } finally {
+      for (const p of phones) await p.context.close()
+      await screen?.close()
+      btc.stop()
+    }
+  }, { width: 1440, height: 900 })
+
+  await test('B3 BTC: điện thoại rớt mạng + sửa 2 lần ⇒ nối lại BTC khớp (không cộng đôi, khung cũ bị bỏ); tải lại trang BTC còn trận; Excel có «Kết quả»', async (page, errors) => {
+    const btc = await startBtc()
+    const phones = []
+    try {
+      await btcSetup(page, btc)
+      const code = await fieldCode(page, 0)
+      await page.click(`${fieldCard(0)} [data-role="start"]`)
+      await page.waitForSelector(`${fieldCard(0)}[data-phase="play"]`)
+      for (const side of ['red', 'blue']) phones.push(await phoneJoin(btc, 0, side, code, errors))
+      const red = phones[0].page
+      await addSeed(red) // trực tuyến: 1 bóng ⇒ khung op seq nhỏ
+      await page.waitForFunction(() => window.__fanroc.btc.host.state.live[0]?.sheets.red?.mtn[0][0].g === 1, null, { timeout: 5000 })
+      // rớt mạng: ống nối đóng, điện thoại vẫn bấm (hàng chờ giữ bản mới nhất)
+      await red.evaluate(() => window.__fanroc_ref.drop())
+      await addSeed(red)
+      await red.waitForTimeout(300)
+      await addSeed(red)
+      await red.waitForTimeout(300)
+      // tự nối lại (≤ 2 s) ⇒ bản mới nhất lên BTC: 3 bóng, đúng một lần
+      await page.waitForFunction(() => window.__fanroc.btc.host.state.live[0]?.sheets.red?.mtn[0][0].g === 3, null, { timeout: 10000 })
+      await page.waitForTimeout(500)
+      expect((await liveRed(page)) === 3, `sau nối lại BTC có ${await liveRed(page)} bóng, cần 3`)
+      // khung `op` cũ (seq 1, 1 bóng) tới muộn qua ống khác ⇒ BTC phải bỏ (seq đã nhận lớn hơn)
+      const ops = await red.evaluate(() => window.__ops)
+      expect(ops.length >= 2, `điện thoại gửi ${ops.length} khung op`)
+      await red.evaluate(
+        ([frame, url]) =>
+          new Promise((ok) => {
+            const w = new WebSocket(url)
+            w.onopen = () => (w.send(frame), setTimeout(() => (w.close(), ok()), 400))
+          }),
+        [ops[0], btc.ws],
+      )
+      expect((await liveRed(page)) === 3, `khung cũ ghi đè: BTC có ${await liveRed(page)} bóng, cần 3`)
+      const tam = (await page.textContent(fieldCard(0))).replace(/\s+/g, ' ')
+      expect(/Điểm tạm[^0-9]*15(?!\d)/.test(tam), `thẻ sân: ${tam.slice(0, 200)}`)
+      // ống phụ đã làm BTC nhớ nhầm nơi gửi khung nhìn: điện thoại nối lại cho đúng chỗ
+      await red.evaluate(() => window.__fanroc_ref.drop())
+      await page.waitForFunction((t) => document.querySelector(t)?.textContent?.includes('Trọng tài Đỏ: đã nối'), fieldCard(0), { timeout: 10000 })
+      await finishMatch(page, phones.map((p) => p.page))
+      expect(/điểm trận 15\b/.test(await page.textContent('[data-role="results"]')), 'điểm trận chốt khác 15')
+      // tải lại trang BTC (máy chủ vẫn chạy): trận đã chốt còn
+      await page.reload()
+      await page.waitForFunction(() => window.__fanroc?.go, null, { timeout: 60000 })
+      await page.evaluate(() => window.__fanroc.go('btc'))
+      await page.waitForSelector('[data-role="resume"]')
+      await page.click('[data-key="resume"]')
+      await page.waitForSelector('[data-role="results"] [data-match]', { timeout: 5000 })
+      expect(/điểm trận 15\b/.test(await page.textContent('[data-role="results"]')), 'sau tải lại mất trận đã chốt')
+      // xuất Excel ⇒ sheet «Kết quả» có trận
+      const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-role="export"]')])
+      const out = resolve(await mkdtemp(resolve(tmpdir(), 'fanroc-btc-xlsx-')), 'giai.xlsx')
+      await dl.saveAs(out)
+      const sheets = await readXlsx(new Uint8Array(await readFile(out)))
+      const kq = sheets.find((x) => x.name === 'Kết quả')?.rows ?? []
+      expect(kq.length === 2 && kq[1].includes(15), `sheet Kết quả: ${JSON.stringify(kq).slice(0, 200)}`)
+      return `rớt mạng + sửa 2 lần ⇒ BTC 3 bóng (15 điểm), khung cũ bỏ · tải lại còn trận · Excel ${kq.length - 1} trận`
+    } finally {
+      for (const p of phones) await p.context.close()
+      btc.stop()
+    }
+  }, { width: 1440, height: 900 })
 }
 
 let code = 1

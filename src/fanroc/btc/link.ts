@@ -104,7 +104,7 @@ export function connectClient(
   url: string,
   onView: (m: BtcView) => void,
   onState: (s: 'online' | 'offline' | 'nobtc') => void,
-): { send(m: ClientMsg): void; close(): void } {
+): { send(m: ClientMsg): void; close(): void; drop(): void } {
   let ws: WebSocket | null = null
   let closed = false
   let retry: ReturnType<typeof setTimeout> | null = null
@@ -139,5 +139,7 @@ export function connectClient(
       ws?.close()
       ws = null
     },
+    /** Như rút dây mạng (e2e): đóng ống nối nhưng vẫn tự nối lại sau 2 s. */
+    drop: () => ws?.close(),
   }
 }

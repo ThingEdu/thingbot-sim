@@ -66,7 +66,7 @@ class Referee {
   private screen: Screen = 'entry'
   private entry = { field: 0, side: 'red' as Side, code: '', err: '' }
   private msg = { text: '', sub: '', back: false }
-  private link: { send(m: ClientMsg): void; close(): void } | null = null
+  private link: { send(m: ClientMsg): void; close(): void; drop(): void } | null = null
   private conn: Conn = 'connecting'
   private queue: RefQueue | null = null
   private view: RefView | null = null
@@ -143,6 +143,11 @@ class Referee {
     this.link?.close()
     this.link = null
     this.setJoinTimer(0)
+  }
+
+  /** e2e: đóng ống nối, `connectClient` tự nối lại. */
+  drop(): void {
+    this.link?.drop()
   }
 
   private back(err = ''): void {
@@ -342,4 +347,6 @@ class Referee {
 const style = document.createElement('style')
 style.textContent = CSS
 document.head.append(style)
-new Referee(document.getElementById('app')!)
+const referee = new Referee(document.getElementById('app')!)
+/** Móc cho e2e (như `__fanroc.lan.mute`): rút dây mạng giả, trang tự nối lại. */
+;(window as unknown as { __fanroc_ref: { drop(): void } }).__fanroc_ref = { drop: () => referee.drop() }
