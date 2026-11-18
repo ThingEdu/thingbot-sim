@@ -486,7 +486,7 @@ export function createTournamentScreen(root: HTMLElement, act: TourActions): Tou
       })
       const b = el('div', 'tn-box')
       b.append(el('h3', undefined, `Lịch đấu · ${s.schedule.length} trận · mỗi đội ${s.perTeam} trận`), list)
-      put('schedule', head('LỊCH ĐẤU (BỐC THĂM)', 'Mỗi vòng 8 đội đều đấu một trận, liên minh bốc thăm lại mỗi vòng. Trận đánh dấu "có em" là trận em lái robot.'), b, acts(btn('Vào Pit', act.pit, 'main'), homeBtn()))
+      put('schedule', head('LỊCH ĐẤU (BỐC THĂM)', 'Mỗi vòng 8 đội đều đấu một trận, liên minh bốc thăm lại mỗi vòng. Trận đánh dấu "có em" là trận em lái robot.'), b, acts(btn('Vào Pit', act.pit, 'main'), homeBtn()), btcBox())
     },
     pit(v) {
       const s = v.state
@@ -563,6 +563,7 @@ export function createTournamentScreen(root: HTMLElement, act: TourActions): Tou
         m.append(el('h3', undefined, 'Các trận máy đã chơi'), mres)
         nodes.push(m)
       }
+      nodes.push(btcBox())
       put('pit', ...nodes)
     },
     podium(s, rows) {
@@ -584,6 +585,7 @@ export function createTournamentScreen(root: HTMLElement, act: TourActions): Tou
         pod,
         st,
         acts(btn('Giải mới', act.newTour, 'main'), homeBtn()),
+        btcBox(),
       )
     },
     corrupt() {
@@ -591,12 +593,13 @@ export function createTournamentScreen(root: HTMLElement, act: TourActions): Tou
         'corrupt',
         head('GIẢI ĐẤU', 'Không đọc được giải đang dở — dữ liệu trong trình duyệt bị hỏng. Bắt đầu giải mới nhé.'),
         acts(btn('Giải mới', act.newTour, 'main'), homeBtn()),
+        btcBox(),
       )
     },
     old() {
       const n = el('div', 'tn-note', 'Giải này đấu theo luật cũ (trước V4).')
       n.dataset.role = 'old-rules'
-      put('old', head('GIẢI ĐẤU', 'Giải đang dở được lưu từ bản trước nên không xếp hạng được theo luật mới. Em bắt đầu giải mới nhé.'), n, acts(btn('Giải mới', act.newTour, 'main'), homeBtn()))
+      put('old', head('GIẢI ĐẤU', 'Giải đang dở được lưu từ bản trước nên không xếp hạng được theo luật mới. Em bắt đầu giải mới nhé.'), n, acts(btn('Giải mới', act.newTour, 'main'), homeBtn()), btcBox())
     },
     hide() {
       box.hidden = true

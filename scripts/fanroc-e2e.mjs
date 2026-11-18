@@ -1489,8 +1489,11 @@ async function tournamentTests() {
     const mine = await tn(page).locator('[data-role="schedule"] > div[data-mine="true"]').count()
     expect(rows === 8 && mine === 4, `lịch ${rows} trận, ${mine} trận có em`)
     expect((await recordedN(page)) === 0, 'bốc thăm xong đã có trận ghi')
+    // Giải mô phỏng đang dở vẫn vào được Ban tổ chức (giải thật) từ lịch và Pit.
+    expect((await tn(page).locator('[data-role="btc"]:visible').count()) === 1, 'màn lịch không có lối vào Ban tổ chức')
     await tn(page).locator('button', { hasText: 'Vào Pit' }).click()
     await page.waitForFunction(() => window.__fanroc.tour.view === 'pit')
+    expect((await tn(page).locator('[data-role="btc"]:visible').count()) === 1, 'Pit không có lối vào Ban tổ chức')
     const busySeen = await page.evaluate(() => window.__fanroc.tour.busy())
     await waitPlayable(page)
     const afterMachines = await recordedN(page)
