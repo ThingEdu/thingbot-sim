@@ -22,7 +22,7 @@ export default defineConfig({
     // Chỉ trang bài học ThingBot. ThingBot FanRoc Game là game độc lập, build riêng bằng vite.game.config.ts
     // (`npm run build:game` ⇒ dist-game/); `vite` dev vẫn mở được /mo-phong/fanroc.html để phát triển / e2e.
     // trong-tai.html: trang trọng tài trên điện thoại (nhẹ, không kéo game 3D), có cả ở bản game.
-    rollupOptions: { input: { main: resolve(__dirname, 'index.html'), 'trong-tai': resolve(__dirname, 'trong-tai.html') } },
+    rollupOptions: { input: { main: resolve(__dirname, 'index.html'), 'trong-tai': resolve(__dirname, 'trong-tai.html'), 'man-chieu': resolve(__dirname, 'man-chieu.html') } },
   },
   resolve: {
     alias: {
