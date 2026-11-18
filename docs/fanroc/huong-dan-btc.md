@@ -30,7 +30,7 @@ Dành cho người điều hành giải FANROC thật bằng TiFa: nhập danh s
 Mục **Vòng** ⇒ **＋ Vòng mới**:
 
 - chọn **Sơ loại** (hoặc **Chung kết**, xem mục 8), tích các đội tham gia (cần ít nhất 8 đội);
-- **Trận mỗi đội** (3–10, mặc định 5), **Số sân** chạy cùng lúc (1–4), **Phút mỗi lượt** (mặc định 7, gồm dọn sân và kiểm
+- **Số trận mỗi đội** (3–10, mặc định 5), **Số sân** chạy cùng lúc (1–4), **Phút mỗi lượt** (mặc định 7, gồm dọn sân và kiểm
   kê), **Giờ bắt đầu**;
 - bấm **Sinh lịch**. App hiện bảng trận (lượt, giờ, sân, hai đội Đỏ, hai đội Xanh) và chỉ số chất lượng. Chưa ưng thì
   **Sinh lại lịch (chưa đấu)**. Số đội ít thì app tự giảm số sân và báo «dùng N sân».
@@ -48,17 +48,23 @@ Mục **Kết nối** hiện địa chỉ máy BTC và các mã QR:
 - **Màn chiếu**: mở địa chỉ `…/chieu?san=1` (sân 1), `…?san=2`… trên TV hoặc máy chiếu bất kỳ cùng mạng; máy BTC cũng mở
   được. Mỗi sân một màn chiếu, mở nhiều cái cùng lúc được. Khi sân rảnh, màn chiếu hiện trận kế tiếp và bảng xếp hạng.
 
-Thẻ sân ở mục **Điều hành** báo «Trọng tài Đỏ: đã nối · Trọng tài Xanh: đã nối»; đủ hai bên rồi hãy bắt đầu.
+Thẻ sân ở mục **Điều hành** báo «Trọng tài Đỏ: đã nối · Trọng tài Xanh: đã nối»; đủ hai bên rồi hãy bắt đầu. Có ai nhập
+sai mã sân, thẻ sân báo «N lần nhập sai mã»; một điện thoại nhập sai 5 lần bị bỏ qua 1 phút.
+
+Rời màn Ban tổ chức (về Giải đấu, về màn chính) **không** dừng máy chủ: trận vẫn chạy, điện thoại vẫn chấm, màn chiếu vẫn
+hiện; vào lại màn là thấy đúng giải đang chạy. Muốn tắt hẳn thì bấm **Dừng máy chủ giải** ở mục **Kết nối** (đang có trận
+thì phải bấm hai lần) hoặc tắt app; **Mở lại máy chủ giải** để bật lại.
 
 ## 5. Chạy một trận
 
-1. Mục **Điều hành**, thẻ sân: **Bắt đầu trận** (10 giây xả bóng + 180 giây thi, có âm báo).
+1. Mục **Điều hành**, thẻ sân: **Bắt đầu trận** (10 giây xả bóng + 180 giây thi, có âm báo). Nếu một đội của trận này
+   đang đấu ở sân khác, thẻ sân báo «… đang đấu ở Sân N» và phải bấm lần nữa mới bắt đầu.
 2. Hai trọng tài bấm cộng điểm theo bóng thật trên sân, bấm lỗi / thẻ khi cần. **Điểm tạm** hiện trên thẻ sân và màn
    chiếu trong vòng vài giây.
 3. **Hết giờ**: còi vang, trận sang bước **kiểm kê**. Mỗi trọng tài đếm lại bóng thật trên sân, sửa số, chọn mức leo của
    robot, bấm **Gửi kiểm kê**. Gửi rồi vẫn sửa và gửi lại được cho tới khi BTC chốt.
 4. Khi cả hai bên đã gửi, trọng tài chính xem chi tiết hai nửa sân và phạt trên máy BTC, bấm **Chốt kết quả**. Kết quả vào
-   bảng xếp hạng và màn chiếu hiện điểm chính thức.
+   bảng xếp hạng và màn chiếu hiện điểm chính thức trong 45 giây, rồi về màn chờ (trận kế + bảng xếp hạng).
 5. Trận sai (robot hỏng, bóng đổ…): **Hủy trận** (bấm hai lần để chắc) thì đấu lại.
 
 Điện thoại mất Wi-Fi giữa trận: trang trọng tài giữ số đã bấm và tự gửi lại khi có mạng, không bị cộng đôi. Chữ trên đầu
@@ -75,15 +81,16 @@ Mục **Kết quả**: cạnh trận đã chốt bấm **Sửa kết quả**, s�
   vẫn diễn ra với 3 đội); đội đứng cuối bảng với nhãn «Rút lui».
 - **Đội đến muộn / đổi số trận**: mục **Vòng** ⇒ **Thêm đội muộn / đổi số trận** ⇒ tích đội ⇒ **Áp dụng và sinh lại phần
   chưa đấu**. Chỉ phần lịch chưa đấu đổi, trận đã chốt giữ nguyên.
-- **Đổi mã sân**: nút **Đổi mã** trên thẻ sân (khi nghi học sinh biết mã và vào chấm bừa). Điện thoại đang chấm cần nhập
-  lại mã mới.
+- **Đổi mã sân**: nút **Đổi mã** trên thẻ sân (khi nghi học sinh biết mã và vào chấm bừa). Cả hai ghế trọng tài của sân
+  được giải phóng ngay: điện thoại đang chấm hiện «Ghế này đã giao cho người khác», yêu cầu xin thay đang chờ bị bỏ. Báo mã
+  mới cho hai trọng tài; họ bấm quay lại, nhập mã mới và vào lại (số đã gửi lên máy BTC vẫn giữ nguyên).
 - **Thay trọng tài**: người mới nhập đúng mã và chọn cùng sân, cùng bên; thẻ sân hiện yêu cầu, BTC bấm **Cho thay** (người
   cũ bị ngắt). Mất điện thoại thì bấm **Giải phóng ghế Đỏ / Xanh** (hai lần), trọng tài mới vào được ngay.
 
 ## 8. Chung kết và vòng tiếp theo
 
-Mục **Vòng** ⇒ **＋ Vòng mới** ⇒ chọn **Chung kết**, tích các đội đi tiếp (xem bảng xếp hạng vòng Sơ loại, hoặc nhập danh sách
-bằng Excel). Mỗi vòng có lịch, kết quả và bảng xếp hạng riêng, **bắt đầu lại từ 0** (không cộng điểm vòng trước). Chọn đội
+Mục **Vòng** ⇒ **＋ Vòng mới** ⇒ chọn **Chung kết**, chọn vòng trước ở ô **Theo xếp hạng …**: danh sách đội hiện theo thứ hạng
+vòng đó (kèm tổng điểm), tích các đội đi tiếp. Mỗi vòng có lịch, kết quả và bảng xếp hạng riêng, **bắt đầu lại từ 0** (không cộng điểm vòng trước). Chọn đội
 đi tiếp là quyết định của Ban tổ chức, TiFa không tự loại.
 
 ## 9. Xuất Excel
@@ -94,12 +101,12 @@ nên xuất một lần cho chắc.
 
 ## 10. Sao lưu: đừng để mất giải
 
-- App ghi file giải mỗi khi có thay đổi và **giữ 20 bản sao lưu tự động mới nhất**; tắt máy hay app sập, mở lại sẽ hỏi
-  **Tiếp tục** giải.
+- App ghi file giải mỗi khi có thay đổi; bản sao lưu tự động ghi **tối đa mỗi phút một bản** và **giữ 20 bản mới nhất**
+  (khoảng 20 phút thay đổi gần nhất); tắt máy hay app sập, mở lại sẽ hỏi **Tiếp tục** giải.
 - Vẫn nên bấm **Sao lưu file giải (JSON)** (mục **Giải**) đều đặn, ví dụ sau mỗi vòng và cuối buổi, rồi chép file sang
   USB hoặc gửi mình qua email.
-- **Mở file giải…** nạp lại một file sao lưu (giải đang mở được sao lưu trước). **Sau khi mở file giải, trọng tài phải nhập
-  lại mã sân** trên điện thoại.
+- **Mở file giải…** nạp lại một file sao lưu (giải đang mở được sao lưu trước). Màn chiếu tự vào lại giải vừa mở; **trọng tài
+  phải nhập lại mã sân** của giải đó trên điện thoại (phiếu chưa gửi của giải trước bị bỏ, không lẫn sang giải mới).
 - Nếu app báo **file giải bị hỏng**, nó không tự ghi đè: bấm **Sao lưu file lỗi rồi tạo giải mới** để chép nguyên bản vào
   thư mục *Downloads* (tên `giai-loi-<ngày giờ>.json`), rồi mở file sao lưu gần nhất bằng **Mở file giải…**.
 - Báo «lỗi đọc» (ổ đĩa bận): bấm **Thử lại**, không cần tạo giải mới.

@@ -2437,7 +2437,7 @@ async function btcTests() {
     }
   }, { width: 1440, height: 900 })
 
-  await test('B3 BTC: điện thoại rớt mạng + sửa 2 lần ⇒ nối lại BTC khớp (không cộng đôi, khung cũ bị bỏ); tải lại trang BTC còn trận; Excel có «Kết quả»', async (page, errors) => {
+  await test('B3 BTC: điện thoại rớt mạng + sửa 2 lần ⇒ nối lại BTC khớp (không cộng đôi, khung cũ không ghi đè); tải lại trang BTC còn trận; Excel có «Kết quả»', async (page, errors) => {
     const btc = await startBtc()
     const phones = []
     try {
@@ -2493,9 +2493,51 @@ async function btcTests() {
       const sheets = await readXlsx(new Uint8Array(await readFile(out)))
       const kq = sheets.find((x) => x.name === 'Kết quả')?.rows ?? []
       expect(kq.length === 2 && kq[1].includes(15), `sheet Kết quả: ${JSON.stringify(kq).slice(0, 200)}`)
-      return `rớt mạng + sửa 2 lần ⇒ BTC 3 bóng (15 điểm), khung cũ bỏ · tải lại còn trận · Excel ${kq.length - 1} trận`
+      return `rớt mạng + sửa 2 lần ⇒ BTC 3 bóng (15 điểm), khung cũ không ghi đè · tải lại còn trận · Excel ${kq.length - 1} trận`
     } finally {
       for (const p of phones) await p.context.close()
+      btc.stop()
+    }
+  }, { width: 1440, height: 900 })
+
+  await test('B4 BTC: rời màn Ban tổ chức ⇒ máy chủ vẫn chạy (điện thoại vẫn chấm), vào lại không hỏi; Mở file giải ⇒ màn chiếu tự vào lại giải mới', async (page, errors) => {
+    const btc = await startBtc()
+    const phones = []
+    let screen
+    try {
+      await btcSetup(page, btc)
+      const code = await fieldCode(page, 0)
+      await page.click(`${fieldCard(0)} [data-role="start"]`)
+      await page.waitForSelector(`${fieldCard(0)}[data-phase="play"]`)
+      phones.push(await phoneJoin(btc, 0, 'red', code, errors))
+      const red = phones[0].page
+      screen = await browser.newContext({ viewport: { width: 1280, height: 720 } })
+      const sp = await screen.newPage()
+      sp.on('pageerror', (e) => errors.push(`màn chiếu: ${e.message}`))
+      await sp.goto(pageUrl('man-chieu.html', btc, 'san=1&'))
+      await sp.waitForSelector('#sc-clock', { timeout: 10000 })
+      // rời màn: về màn chính, đợi quá chu kỳ nối lại của điện thoại
+      await page.evaluate(() => window.__fanroc.go('home'))
+      await page.waitForTimeout(2500)
+      const st = await red.textContent('#rf-st')
+      expect(st.includes('đã nối'), `điện thoại sau khi BTC rời màn: «${st}»`)
+      await addSeed(red)
+      await page.waitForFunction(() => window.__fanroc.btc.host.state.live[0]?.sheets.red?.mtn[0][0].g === 1, null, { timeout: 5000 })
+      // vào lại: không hỏi Tiếp tục, trận vẫn đang đấu
+      await page.evaluate(() => window.__fanroc.go('btc'))
+      await page.waitForSelector(`${fieldCard(0)}[data-phase="play"]`, { timeout: 5000 })
+      expect(!(await page.$('[data-role="resume"]')), 'vào lại màn mà vẫn hỏi Tiếp tục giải')
+      // Mở file giải khác (không có trận đang đấu) ⇒ màn chiếu tự vào lại, hiện màn chờ của giải mới
+      const st0 = await page.evaluate(() => window.__fanroc.btc.host.state)
+      const file = resolve(await mkdtemp(resolve(tmpdir(), 'fanroc-btc-mo-')), 'giai-khac.json')
+      await writeFile(file, JSON.stringify({ ...st0, id: 'e2e-giai-khac', name: 'Giải mở từ file', live: {} }))
+      await page.setInputFiles('[data-role="open-file"]', file)
+      await page.waitForFunction(() => window.__fanroc.btc.host.state.id === 'e2e-giai-khac', null, { timeout: 5000 })
+      await sp.waitForSelector('.sc-wait', { timeout: 10000 })
+      return 'rời màn 2,5 s: điện thoại vẫn «đã nối», chấm vẫn lên BTC · vào lại không hỏi · Mở file ⇒ màn chiếu vào lại giải mới'
+    } finally {
+      for (const p of phones) await p.context.close()
+      await screen?.close()
       btc.stop()
     }
   }, { width: 1440, height: 900 })
